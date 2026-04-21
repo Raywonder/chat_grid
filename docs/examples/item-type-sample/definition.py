@@ -17,5 +17,9 @@ PARAM_KEYS: tuple[str, ...] = ("value",)
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
     "title": {"valueType": "text", "tooltip": "Display name.", "maxLength": 80},
-    "value": {"valueType": "number", "tooltip": "Current value.", "range": {"min": 0, "max": 9999, "step": 1}},
+    "value": {
+        "valueType": "number",
+        "tooltip": "Current value.",
+        "range": {"min": 0, "max": 9999, "step": 1},
+    },
 }

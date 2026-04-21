@@ -8,7 +8,9 @@ from ....item_types import ItemUseResult
 from ....models import WorldItem
 
 
-def use_item(item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], str]) -> ItemUseResult:
+def use_item(
+    item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], str]
+) -> ItemUseResult:
     """Increment counter and return messages plus updated params."""
 
     next_value = int(item.params.get("value", 0)) + 1

@@ -5,4 +5,3 @@ export function volumePercentToGain(value: unknown, fallbackPercent: number): nu
   // Smoothstep keeps 0->0, 50->0.5, 100->1 while easing low/high ranges.
   return normalized * normalized * (3 - 2 * normalized);
 }
-
