@@ -122,6 +122,7 @@ from .version import format_server_version
 LOGGER = logging.getLogger("chgrid.server")
 PACKET_LOGGER = logging.getLogger("chgrid.server.packet")
 CLIENT_PACKET_ADAPTER: TypeAdapter[ClientPacket] = TypeAdapter(ClientPacket)
+SYSTEM_RANDOM = random.SystemRandom()
 MAX_ACTIVE_PIANO_KEYS_PER_CLIENT = 12
 PIANO_RECORDING_MAX_MS = 30_000
 PIANO_RECORDING_MAX_EVENTS = 4096
@@ -191,7 +192,7 @@ class SignalingServer:
         ssl_cert: str | None,
         ssl_key: str | None,
         auth_db_path: Path | None = None,
-        auth_token_hash_secret: str = "dev-secret",
+        auth_token_hash_secret: str | None = None,
         password_min_length: int = 8,
         password_max_length: int = 32,
         username_min_length: int = 2,
@@ -217,9 +218,16 @@ class SignalingServer:
         self._ssl_context = self._build_ssl_context(ssl_cert, ssl_key)
         self.clients: dict[ServerConnection, ClientConnection] = {}
         resolved_auth_db_path = auth_db_path or Path.cwd() / "runtime" / "chatgrid.db"
+        auth_secret = (
+            auth_token_hash_secret.strip()
+            if auth_token_hash_secret is not None
+            else os.getenv("CHGRID_AUTH_SECRET", "").strip()
+        )
+        if not auth_secret:
+            raise ValueError("CHGRID_AUTH_SECRET is required.")
         self.auth_service = AuthService(
             db_path=resolved_auth_db_path,
-            token_hash_secret=auth_token_hash_secret,
+            token_hash_secret=auth_secret,
             password_min_length=password_min_length,
             password_max_length=password_max_length,
             username_min_length=username_min_length,
@@ -767,7 +775,9 @@ class SignalingServer:
         """Apply small randomized delay to reduce high-resolution auth timing probes."""
 
         await asyncio.sleep(
-            random.uniform(AUTH_FAILURE_JITTER_MIN_MS, AUTH_FAILURE_JITTER_MAX_MS)
+            SYSTEM_RANDOM.uniform(
+                AUTH_FAILURE_JITTER_MIN_MS, AUTH_FAILURE_JITTER_MAX_MS
+            )
         )
 
     async def _run_auth_hash_task(self, func, /, *args, **kwargs):
@@ -1953,8 +1963,8 @@ class SignalingServer:
             client.x = saved_x
             client.y = saved_y
         else:
-            client.x = random.randrange(self.grid_size)
-            client.y = random.randrange(self.grid_size)
+            client.x = random.randrange(self.grid_size)  # nosec B311
+            client.y = random.randrange(self.grid_size)  # nosec B311
         now_ms = self.item_service.now_ms()
         self._refresh_client_permissions(client)
         client.last_position_update_ms = now_ms

@@ -25,7 +25,7 @@ def use_item(
         raise ValueError(
             "wheel spaces must contain at least one comma-delimited value."
         )
-    landed = str(random.choice(spaces))
+    landed = str(random.choice(spaces))  # nosec B311
     return ItemUseResult(
         self_message=f"You spin {item.title}.",
         others_message=f"{nickname} spins {item.title}.",

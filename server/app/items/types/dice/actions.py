@@ -20,7 +20,7 @@ def use_item(
     except (TypeError, ValueError):
         sides = 6
         number = 2
-    rolls = [random.randint(1, sides) for _ in range(number)]
+    rolls = [random.randint(1, sides) for _ in range(number)]  # nosec B311
     total = sum(rolls)
     rolls_text = ", ".join(str(value) for value in rolls)
     if number == 1:
