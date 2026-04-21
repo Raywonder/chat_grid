@@ -6,6 +6,8 @@ server/runtime/
 
 # Python
 server/.venv/
+server/.coverage
+server/coverage.xml
 **/__pycache__/
 *.py[cod]
 .pytest_cache/
@@ -24,3 +26,6 @@ plans/
 
 # Host-local notes
 local/
+
+# Local Codex marker
+.codex
