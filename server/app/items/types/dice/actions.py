@@ -9,7 +9,9 @@ from ....item_types import ItemUseResult
 from ....models import WorldItem
 
 
-def use_item(item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], str]) -> ItemUseResult:
+def use_item(
+    item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], str]
+) -> ItemUseResult:
     """Roll dice and report result."""
 
     try:

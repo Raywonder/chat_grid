@@ -51,7 +51,9 @@ def test_bootstrap_admin_once(tmp_path: Path) -> None:
         service.close()
 
 
-def test_login_missing_user_runs_dummy_verify(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_login_missing_user_runs_dummy_verify(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     service = make_auth_service(tmp_path)
     try:
         calls: list[tuple[str, str]] = []

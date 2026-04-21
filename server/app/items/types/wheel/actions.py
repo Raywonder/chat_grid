@@ -9,7 +9,9 @@ from ....item_types import ItemUseResult
 from ....models import WorldItem
 
 
-def use_item(item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], str]) -> ItemUseResult:
+def use_item(
+    item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], str]
+) -> ItemUseResult:
     """Spin wheel and produce delayed landed value."""
 
     spaces_raw = item.params.get("spaces", "")
@@ -20,7 +22,9 @@ def use_item(item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], 
     else:
         spaces = []
     if not spaces:
-        raise ValueError("wheel spaces must contain at least one comma-delimited value.")
+        raise ValueError(
+            "wheel spaces must contain at least one comma-delimited value."
+        )
     landed = str(random.choice(spaces))
     return ItemUseResult(
         self_message=f"You spin {item.title}.",

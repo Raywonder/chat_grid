@@ -9,9 +9,6 @@ from websockets.http11 import Request
 
 from app.server import (
     AUTH_SESSION_COOKIE_CLIENT_HEADER,
-    AUTH_SESSION_COOKIE_CHECK_PATH,
-    AUTH_SESSION_COOKIE_CLEAR_PATH,
-    AUTH_SESSION_COOKIE_SET_PATH,
     SignalingServer,
 )
 
@@ -24,7 +21,14 @@ def _request(path: str, headers: dict[str, str] | None = None) -> Request:
 
 
 def _server() -> SignalingServer:
-    return SignalingServer("127.0.0.1", 8765, None, None, host_origin="https://example.com", base_path="/chgrid/")
+    return SignalingServer(
+        "127.0.0.1",
+        8765,
+        None,
+        None,
+        host_origin="https://example.com",
+        base_path="/chgrid/",
+    )
 
 
 @pytest.mark.asyncio
@@ -57,7 +61,10 @@ async def test_session_cookie_clear_endpoint_expires_cookie() -> None:
     server = _server()
     request = _request(
         server.auth_session_cookie_clear_path,
-        headers={AUTH_SESSION_COOKIE_CLIENT_HEADER: "1", "Origin": "https://example.com"},
+        headers={
+            AUTH_SESSION_COOKIE_CLIENT_HEADER: "1",
+            "Origin": "https://example.com",
+        },
     )
 
     response = await server._process_http_request(SimpleNamespace(), request)
@@ -95,7 +102,10 @@ async def test_session_cookie_check_endpoint_rejects_missing_cookie() -> None:
     server = _server()
     request = _request(
         server.auth_session_cookie_check_path,
-        headers={AUTH_SESSION_COOKIE_CLIENT_HEADER: "1", "Origin": "https://example.com"},
+        headers={
+            AUTH_SESSION_COOKIE_CLIENT_HEADER: "1",
+            "Origin": "https://example.com",
+        },
     )
 
     response = await server._process_http_request(SimpleNamespace(), request)
@@ -109,7 +119,10 @@ async def test_session_cookie_helpers_reject_wrong_origin() -> None:
     server = _server()
     request = _request(
         server.auth_session_cookie_clear_path,
-        headers={AUTH_SESSION_COOKIE_CLIENT_HEADER: "1", "Origin": "https://evil.example.com"},
+        headers={
+            AUTH_SESSION_COOKIE_CLIENT_HEADER: "1",
+            "Origin": "https://evil.example.com",
+        },
     )
 
     response = await server._process_http_request(SimpleNamespace(), request)
@@ -119,7 +132,9 @@ async def test_session_cookie_helpers_reject_wrong_origin() -> None:
 
 
 @pytest.mark.asyncio
-async def test_session_cookie_helpers_accept_same_origin_referer_without_origin() -> None:
+async def test_session_cookie_helpers_accept_same_origin_referer_without_origin() -> (
+    None
+):
     server = _server()
     request = _request(
         server.auth_session_cookie_clear_path,
@@ -139,7 +154,11 @@ def test_session_token_from_websocket_cookie_reads_named_cookie() -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, base_path="/chgrid/")
     websocket = SimpleNamespace(
         request=SimpleNamespace(
-            headers=Headers({"Cookie": f"foo=bar; {server.auth_session_cookie_name}=abc123; hello=world"})
+            headers=Headers(
+                {
+                    "Cookie": f"foo=bar; {server.auth_session_cookie_name}=abc123; hello=world"
+                }
+            )
         )
     )
 

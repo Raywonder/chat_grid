@@ -41,4 +41,3 @@ def enforce_max_length(value: str, *, max_length: int, field_name: str) -> str:
     if len(value) > max_length:
         raise ValueError(f"{field_name} must be {max_length} characters or less.")
     return value
-

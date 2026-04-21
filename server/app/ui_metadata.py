@@ -84,7 +84,11 @@ ITEM_MANAGEMENT_ACTION_DEFINITIONS: tuple[ItemManagementActionDefinition, ...] =
 
 MAIN_MODE_SERVER_COMMAND_DEFINITIONS: tuple[MainModeServerCommandDefinition, ...] = (
     {"id": "addItem", "label": "Add item", "tooltip": "Open the add-item menu."},
-    {"id": "useItem", "label": "Use item", "tooltip": "Use the carried item or a usable item on your current square."},
+    {
+        "id": "useItem",
+        "label": "Use item",
+        "tooltip": "Use the carried item or a usable item on your current square.",
+    },
     {
         "id": "secondaryUseItem",
         "label": "Secondary item action",

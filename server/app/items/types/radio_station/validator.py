@@ -17,7 +17,9 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
         max_length=2048,
         field_name="streamUrl",
     )
-    next_params["streamUrl"] = validate_media_reference(next_params["streamUrl"], field_name="streamUrl")
+    next_params["streamUrl"] = validate_media_reference(
+        next_params["streamUrl"], field_name="streamUrl"
+    )
 
     enabled_value = next_params.get("enabled", True)
     if isinstance(enabled_value, bool):
@@ -46,7 +48,9 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
 
     effect = str(next_params.get("mediaEffect", "off")).strip().lower()
     if effect not in EFFECT_OPTIONS:
-        raise ValueError("mediaEffect must be one of reverb, echo, flanger, high_pass, low_pass, off.")
+        raise ValueError(
+            "mediaEffect must be one of reverb, echo, flanger, high_pass, low_pass, off."
+        )
     next_params["mediaEffect"] = effect
 
     channel = str(next_params.get("mediaChannel", "stereo")).strip().lower()

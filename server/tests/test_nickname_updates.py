@@ -6,7 +6,11 @@ from typing import cast
 import pytest
 from websockets.asyncio.server import ServerConnection
 
-from app.models import BroadcastChatMessagePacket, BroadcastNicknamePacket, NicknameResultPacket
+from app.models import (
+    BroadcastChatMessagePacket,
+    BroadcastNicknamePacket,
+    NicknameResultPacket,
+)
 from app.server import ClientConnection, SignalingServer
 
 
@@ -36,24 +40,32 @@ async def test_same_nickname_same_case_is_noop(monkeypatch: pytest.MonkeyPatch) 
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
         sent_packets.append(packet)
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         broadcast_packets.append(packet)
 
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    await server._handle_message(client, json.dumps({"type": "update_nickname", "nickname": "Jage"}))
+    await server._handle_message(
+        client, json.dumps({"type": "update_nickname", "nickname": "Jage"})
+    )
 
     assert client.nickname == "Jage"
     assert broadcast_packets == []
     assert any(
-        isinstance(packet, NicknameResultPacket) and packet.accepted and packet.effectiveNickname == "Jage"
+        isinstance(packet, NicknameResultPacket)
+        and packet.accepted
+        and packet.effectiveNickname == "Jage"
         for packet in sent_packets
     )
 
 
 @pytest.mark.asyncio
-async def test_case_only_change_is_allowed_and_broadcast(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_case_only_change_is_allowed_and_broadcast(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
     client = _activate_client(ClientConnection(websocket=ws, id="1", nickname="jage"))
@@ -65,18 +77,28 @@ async def test_case_only_change_is_allowed_and_broadcast(monkeypatch: pytest.Mon
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
         sent_packets.append(packet)
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         broadcast_packets.append(packet)
 
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    await server._handle_message(client, json.dumps({"type": "update_nickname", "nickname": "Jage"}))
+    await server._handle_message(
+        client, json.dumps({"type": "update_nickname", "nickname": "Jage"})
+    )
 
     assert client.nickname == "Jage"
     assert any(
-        isinstance(packet, NicknameResultPacket) and packet.accepted and packet.effectiveNickname == "Jage"
+        isinstance(packet, NicknameResultPacket)
+        and packet.accepted
+        and packet.effectiveNickname == "Jage"
         for packet in sent_packets
     )
-    assert any(isinstance(packet, BroadcastNicknamePacket) for packet in broadcast_packets)
-    assert any(isinstance(packet, BroadcastChatMessagePacket) for packet in broadcast_packets)
+    assert any(
+        isinstance(packet, BroadcastNicknamePacket) for packet in broadcast_packets
+    )
+    assert any(
+        isinstance(packet, BroadcastChatMessagePacket) for packet in broadcast_packets
+    )

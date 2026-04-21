@@ -8,5 +8,7 @@ from . import actions, definition, validator
 ITEM_TYPE_PLUGIN = {
     "type": "wheel",
     "order": 50,
-    "module": build_item_module(definition, validate_update=validator.validate_update, use_item=actions.use_item),
+    "module": build_item_module(
+        definition, validate_update=validator.validate_update, use_item=actions.use_item
+    ),
 }

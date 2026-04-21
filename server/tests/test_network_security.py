@@ -4,7 +4,11 @@ import socket
 
 import pytest
 
-from app.network_security import normalize_origin, validate_media_reference, validate_public_media_url
+from app.network_security import (
+    normalize_origin,
+    validate_media_reference,
+    validate_public_media_url,
+)
 
 
 def test_normalize_origin_rejects_paths() -> None:
@@ -21,17 +25,24 @@ def test_validate_public_media_url_rejects_private_ip() -> None:
         validate_public_media_url("http://127.0.0.1/audio")
 
 
-def test_validate_public_media_url_resolves_hostname(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_validate_public_media_url_resolves_hostname(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def fake_getaddrinfo(host: str, port, type: int = 0):
         assert host == "radio.example.com"
         return [(socket.AF_INET, type, 6, "", ("93.184.216.34", 0))]
 
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
 
-    assert validate_public_media_url("https://Radio.Example.com/live") == "https://radio.example.com/live"
+    assert (
+        validate_public_media_url("https://Radio.Example.com/live")
+        == "https://radio.example.com/live"
+    )
 
 
-def test_validate_public_media_url_rejects_private_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_validate_public_media_url_rejects_private_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def fake_getaddrinfo(host: str, port, type: int = 0):
         assert host == "radio.example.com"
         return [(socket.AF_INET, type, 6, "", ("10.0.0.5", 0))]
@@ -43,4 +54,7 @@ def test_validate_public_media_url_rejects_private_resolution(monkeypatch: pytes
 
 
 def test_validate_media_reference_allows_site_relative_path() -> None:
-    assert validate_media_reference("/chgrid/media_proxy.php?url=test") == "/chgrid/media_proxy.php?url=test"
+    assert (
+        validate_media_reference("/chgrid/media_proxy.php?url=test")
+        == "/chgrid/media_proxy.php?url=test"
+    )

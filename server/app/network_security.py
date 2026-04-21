@@ -130,7 +130,9 @@ def validate_media_reference(value: str, *, field_name: str = "url") -> str:
     if parts.netloc:
         raise ValueError(f"{field_name} must use http or https when specifying a host.")
     if not text.startswith("/"):
-        raise ValueError(f"{field_name} must be an absolute http/https URL or site-relative path.")
+        raise ValueError(
+            f"{field_name} must be an absolute http/https URL or site-relative path."
+        )
     return text
 
 
@@ -157,7 +159,9 @@ def open_validated_public_url(
                     location = str(exc.headers.get("Location") or "").strip()
                     if not location:
                         raise ValueError("Redirect location missing or invalid.")
-                    current_url = validate_public_media_url(urljoin(current_url, location))
+                    current_url = validate_public_media_url(
+                        urljoin(current_url, location)
+                    )
                     continue
                 raise
             finally:

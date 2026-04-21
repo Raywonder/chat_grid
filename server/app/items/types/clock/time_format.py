@@ -8,7 +8,9 @@ _TWELVE_HOUR_RE = re.compile(r"^(0?[1-9]|1[0-2]):([0-5]\d)\s*([AaPp][Mm])$")
 _TWENTY_FOUR_HOUR_RE = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 
 
-def parse_alarm_time_for_mode(value: object, use_24_hour: bool) -> tuple[int, int] | None:
+def parse_alarm_time_for_mode(
+    value: object, use_24_hour: bool
+) -> tuple[int, int] | None:
     """Parse alarm time using one explicit mode and return `(hour24, minute)`."""
 
     raw = str(value or "").strip()
@@ -49,4 +51,3 @@ def format_alarm_time_for_mode(hour24: int, minute: int, use_24_hour: bool) -> s
     meridiem = "AM" if hour24 < 12 else "PM"
     hour12 = hour24 % 12 or 12
     return f"{hour12}:{minute:02d} {meridiem}"
-

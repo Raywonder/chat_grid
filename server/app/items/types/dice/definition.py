@@ -16,7 +16,11 @@ DEFAULT_PARAMS: dict = {"sides": 6, "number": 2}
 PARAM_KEYS: tuple[str, ...] = ("sides", "number")
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
-    "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item.", "maxLength": 80},
+    "title": {
+        "valueType": "text",
+        "tooltip": "Display name spoken and shown for this item.",
+        "maxLength": 80,
+    },
     "sides": {
         "valueType": "number",
         "tooltip": "Number of sides on each die.",

@@ -69,14 +69,37 @@ DEFAULT_PARAMS: dict = {
     "alarmEnabled": False,
     "alarmTime": "12:00 AM",
 }
-PARAM_KEYS: tuple[str, ...] = ("timeZone", "use24Hour", "topOfHourAnnounce", "alarmEnabled", "alarmTime")
+PARAM_KEYS: tuple[str, ...] = (
+    "timeZone",
+    "use24Hour",
+    "topOfHourAnnounce",
+    "alarmEnabled",
+    "alarmTime",
+)
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
-    "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item.", "maxLength": 80},
-    "timeZone": {"valueType": "list", "tooltip": "Timezone used when the clock speaks time.", "options": list(TIME_ZONE_OPTIONS)},
-    "use24Hour": {"valueType": "boolean", "tooltip": "Use 24 hour format instead of AM/PM."},
-    "topOfHourAnnounce": {"valueType": "boolean", "tooltip": "Automatically announce time at the top of each hour."},
-    "alarmEnabled": {"valueType": "boolean", "tooltip": "Enable one daily alarm announcement at the configured alarm time."},
+    "title": {
+        "valueType": "text",
+        "tooltip": "Display name spoken and shown for this item.",
+        "maxLength": 80,
+    },
+    "timeZone": {
+        "valueType": "list",
+        "tooltip": "Timezone used when the clock speaks time.",
+        "options": list(TIME_ZONE_OPTIONS),
+    },
+    "use24Hour": {
+        "valueType": "boolean",
+        "tooltip": "Use 24 hour format instead of AM/PM.",
+    },
+    "topOfHourAnnounce": {
+        "valueType": "boolean",
+        "tooltip": "Automatically announce time at the top of each hour.",
+    },
+    "alarmEnabled": {
+        "valueType": "boolean",
+        "tooltip": "Enable one daily alarm announcement at the configured alarm time.",
+    },
     "alarmTime": {
         "valueType": "text",
         "tooltip": "Alarm time. Uses 24-hour HH:MM when 24 hour format is on, otherwise H:MM AM/PM.",

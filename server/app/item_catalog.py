@@ -3,23 +3,51 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypeAlias, cast
+from typing import TypeAlias
 
 from .items.registry import ITEM_MODULES, ITEM_TYPE_ORDER
+from .items.types.clock.definition import (
+	DEFAULT_TIME_ZONE as CLOCK_DEFAULT_TIME_ZONE,
+	TIME_ZONE_OPTIONS as CLOCK_TIME_ZONE_OPTIONS,
+)
+from .items.types.piano.definition import (
+	INSTRUMENT_OPTIONS as PIANO_INSTRUMENT_OPTIONS,
+	VOICE_MODE_OPTIONS as PIANO_VOICE_MODE_OPTIONS,
+)
+from .items.types.radio_station.definition import (
+	CHANNEL_OPTIONS as RADIO_CHANNEL_OPTIONS,
+	EFFECT_OPTIONS as RADIO_EFFECT_OPTIONS,
+)
+
+__all__ = [
+	"CLOCK_DEFAULT_TIME_ZONE",
+	"CLOCK_TIME_ZONE_OPTIONS",
+	"GLOBAL_ITEM_PROPERTY_METADATA",
+	"ITEM_DEFINITIONS",
+	"ITEM_TYPE_EDITABLE_PROPERTIES",
+	"ITEM_TYPE_LABELS",
+	"ITEM_TYPE_PROPERTY_METADATA",
+	"ITEM_TYPE_SEQUENCE",
+	"ITEM_TYPE_TOOLTIPS",
+	"PIANO_INSTRUMENT_OPTIONS",
+	"PIANO_VOICE_MODE_OPTIONS",
+	"RADIO_CHANNEL_OPTIONS",
+	"RADIO_EFFECT_OPTIONS",
+	"get_item_definition",
+	"get_item_global_properties",
+	"get_item_use_cooldown_ms",
+	"is_known_item_type",
+]
 
 ItemType: TypeAlias = str
-ITEM_TYPE_SEQUENCE: tuple[ItemType, ...] = cast(tuple[ItemType, ...], ITEM_TYPE_ORDER)
-ITEM_TYPE_LABELS: dict[ItemType, str] = {item_type: ITEM_MODULES[item_type].LABEL for item_type in ITEM_TYPE_SEQUENCE}
-ITEM_TYPE_EDITABLE_PROPERTIES: dict[ItemType, tuple[str, ...]] = {
-    item_type: ITEM_MODULES[item_type].EDITABLE_PROPERTIES for item_type in ITEM_TYPE_SEQUENCE
+ITEM_TYPE_SEQUENCE: tuple[ItemType, ...] = ITEM_TYPE_ORDER
+ITEM_TYPE_LABELS: dict[ItemType, str] = {
+    item_type: ITEM_MODULES[item_type].LABEL for item_type in ITEM_TYPE_SEQUENCE
 }
-
-CLOCK_DEFAULT_TIME_ZONE = cast(str, ITEM_MODULES["clock"].DEFAULT_TIME_ZONE)
-CLOCK_TIME_ZONE_OPTIONS = cast(tuple[str, ...], ITEM_MODULES["clock"].TIME_ZONE_OPTIONS)
-RADIO_EFFECT_OPTIONS = cast(tuple[str, ...], ITEM_MODULES["radio_station"].EFFECT_OPTIONS)
-RADIO_CHANNEL_OPTIONS = cast(tuple[str, ...], ITEM_MODULES["radio_station"].CHANNEL_OPTIONS)
-PIANO_INSTRUMENT_OPTIONS = cast(tuple[str, ...], ITEM_MODULES["piano"].INSTRUMENT_OPTIONS)
-PIANO_VOICE_MODE_OPTIONS = cast(tuple[str, ...], ITEM_MODULES["piano"].VOICE_MODE_OPTIONS)
+ITEM_TYPE_EDITABLE_PROPERTIES: dict[ItemType, tuple[str, ...]] = {
+    item_type: ITEM_MODULES[item_type].EDITABLE_PROPERTIES
+    for item_type in ITEM_TYPE_SEQUENCE
+}
 
 
 @dataclass(frozen=True)
@@ -80,16 +108,56 @@ ITEM_TYPE_TOOLTIPS: dict[ItemType, str] = {
 }
 
 GLOBAL_ITEM_PROPERTY_METADATA: dict[str, dict[str, object]] = {
-    "type": {"valueType": "text", "tooltip": "Item type id for this object.", "label": "Type"},
-    "x": {"valueType": "number", "tooltip": "Item X coordinate on the grid.", "label": "X"},
-    "y": {"valueType": "number", "tooltip": "Item Y coordinate on the grid.", "label": "Y"},
-    "carrierId": {"valueType": "text", "tooltip": "User id currently carrying this item, or none.", "label": "Carrier"},
-    "version": {"valueType": "number", "tooltip": "Server-side item version incremented on each update.", "label": "Version"},
-    "createdBy": {"valueType": "text", "tooltip": "Display name of the user who originally created this item.", "label": "Created by"},
-    "updatedBy": {"valueType": "text", "tooltip": "Display name of the user who most recently updated this item.", "label": "Updated by"},
-    "createdAt": {"valueType": "text", "tooltip": "Creation timestamp for this item.", "label": "Created at"},
-    "updatedAt": {"valueType": "text", "tooltip": "Last update timestamp for this item.", "label": "Updated at"},
-    "capabilities": {"valueType": "text", "tooltip": "Supported actions for this item type.", "label": "Capabilities"},
+    "type": {
+        "valueType": "text",
+        "tooltip": "Item type id for this object.",
+        "label": "Type",
+    },
+    "x": {
+        "valueType": "number",
+        "tooltip": "Item X coordinate on the grid.",
+        "label": "X",
+    },
+    "y": {
+        "valueType": "number",
+        "tooltip": "Item Y coordinate on the grid.",
+        "label": "Y",
+    },
+    "carrierId": {
+        "valueType": "text",
+        "tooltip": "User id currently carrying this item, or none.",
+        "label": "Carrier",
+    },
+    "version": {
+        "valueType": "number",
+        "tooltip": "Server-side item version incremented on each update.",
+        "label": "Version",
+    },
+    "createdBy": {
+        "valueType": "text",
+        "tooltip": "Display name of the user who originally created this item.",
+        "label": "Created by",
+    },
+    "updatedBy": {
+        "valueType": "text",
+        "tooltip": "Display name of the user who most recently updated this item.",
+        "label": "Updated by",
+    },
+    "createdAt": {
+        "valueType": "text",
+        "tooltip": "Creation timestamp for this item.",
+        "label": "Created at",
+    },
+    "updatedAt": {
+        "valueType": "text",
+        "tooltip": "Last update timestamp for this item.",
+        "label": "Updated at",
+    },
+    "capabilities": {
+        "valueType": "text",
+        "tooltip": "Supported actions for this item type.",
+        "label": "Capabilities",
+    },
     "useSound": {
         "valueType": "sound",
         "tooltip": "One-shot sound played when this item is used successfully.",
@@ -100,9 +168,18 @@ GLOBAL_ITEM_PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "tooltip": "Looping sound emitted from this item on the grid.",
         "maxLength": 2048,
     },
-    "useCooldownMs": {"valueType": "number", "tooltip": "Global cooldown in milliseconds between uses for this item type."},
-    "emitRange": {"valueType": "number", "tooltip": "Maximum distance in squares where emitted audio can be heard."},
-    "directional": {"valueType": "boolean", "tooltip": "Whether emitted audio favors the item's facing direction."},
+    "useCooldownMs": {
+        "valueType": "number",
+        "tooltip": "Global cooldown in milliseconds between uses for this item type.",
+    },
+    "emitRange": {
+        "valueType": "number",
+        "tooltip": "Maximum distance in squares where emitted audio can be heard.",
+    },
+    "directional": {
+        "valueType": "boolean",
+        "tooltip": "Whether emitted audio favors the item's facing direction.",
+    },
     "emitSoundSpeed": {
         "valueType": "number",
         "tooltip": "Global emitted sound speed/pitch percent. 50 is normal.",
@@ -126,7 +203,11 @@ GLOBAL_ITEM_PROPERTY_METADATA: dict[str, dict[str, object]] = {
 }
 
 ITEM_TYPE_PROPERTY_METADATA: dict[ItemType, dict[str, dict[str, object]]] = {
-    item_type: {**GLOBAL_ITEM_PROPERTY_METADATA, **ITEM_MODULES[item_type].PROPERTY_METADATA} for item_type in ITEM_TYPE_SEQUENCE
+    item_type: {
+        **GLOBAL_ITEM_PROPERTY_METADATA,
+        **ITEM_MODULES[item_type].PROPERTY_METADATA,
+    }
+    for item_type in ITEM_TYPE_SEQUENCE
 }
 
 
@@ -160,7 +241,9 @@ def get_item_global_properties(item_type: ItemType) -> dict[str, str | int | boo
         "useSound": definition.use_sound or "none",
         "emitSound": definition.emit_sound or "none",
         "useCooldownMs": get_item_use_cooldown_ms(item_type),
-        "emitRange": definition.emit_range if isinstance(definition.emit_range, int) and definition.emit_range > 0 else 15,
+        "emitRange": definition.emit_range
+        if isinstance(definition.emit_range, int) and definition.emit_range > 0
+        else 15,
         "directional": bool(definition.directional),
         "emitSoundSpeed": 50,
         "emitSoundTempo": 50,

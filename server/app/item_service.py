@@ -22,7 +22,9 @@ class ItemService:
         """Create service and eagerly load persisted state when configured."""
 
         self.state_file = state_file
-        self.piano_songs_file = state_file.with_name("piano_songs.json") if state_file else None
+        self.piano_songs_file = (
+            state_file.with_name("piano_songs.json") if state_file else None
+        )
         self.items: dict[str, WorldItem] = {}
         self.piano_songs: dict[str, dict] = {}
         self.load_state()
@@ -83,9 +85,15 @@ class ItemService:
     def items_on_square(self, x: int, y: int) -> list[WorldItem]:
         """Return non-carried items occupying a specific world coordinate."""
 
-        return [item for item in self.items.values() if item.carrierId is None and item.x == x and item.y == y]
+        return [
+            item
+            for item in self.items.values()
+            if item.carrierId is None and item.x == x and item.y == y
+        ]
 
-    def drop_carried_items_for_disconnect(self, client: ClientConnection) -> list[WorldItem]:
+    def drop_carried_items_for_disconnect(
+        self, client: ClientConnection
+    ) -> list[WorldItem]:
         """Drop all items carried by a disconnected client onto their last tile."""
 
         changed: list[WorldItem] = []
@@ -124,7 +132,9 @@ class ItemService:
                     createdBy=persisted.createdBy,
                     createdByName=persisted.createdByName or persisted.createdBy,
                     updatedBy=persisted.updatedBy or persisted.createdBy,
-                    updatedByName=persisted.updatedByName or persisted.updatedBy or persisted.createdBy,
+                    updatedByName=persisted.updatedByName
+                    or persisted.updatedBy
+                    or persisted.createdBy,
                     createdAt=persisted.createdAt,
                     updatedAt=persisted.updatedAt,
                     version=persisted.version,
@@ -136,9 +146,13 @@ class ItemService:
                 )
                 loaded[item.id] = item
             self.items = loaded
-            LOGGER.info("loaded %d persisted items from %s", len(self.items), self.state_file)
+            LOGGER.info(
+                "loaded %d persisted items from %s", len(self.items), self.state_file
+            )
         except Exception as exc:
-            LOGGER.warning("failed to load persisted item state from %s: %s", self.state_file, exc)
+            LOGGER.warning(
+                "failed to load persisted item state from %s: %s", self.state_file, exc
+            )
 
     def load_piano_songs(self) -> None:
         """Load persisted piano song registry used by piano items."""
@@ -159,9 +173,15 @@ class ItemService:
                     continue
                 loaded[song_id] = payload
             self.piano_songs = loaded
-            LOGGER.info("loaded %d persisted piano songs from %s", len(self.piano_songs), self.piano_songs_file)
+            LOGGER.info(
+                "loaded %d persisted piano songs from %s",
+                len(self.piano_songs),
+                self.piano_songs_file,
+            )
         except Exception as exc:
-            LOGGER.warning("failed to load piano songs from %s: %s", self.piano_songs_file, exc)
+            LOGGER.warning(
+                "failed to load piano songs from %s: %s", self.piano_songs_file, exc
+            )
 
     def save_state(self) -> None:
         """Persist instance-only item data to configured state file."""
@@ -189,9 +209,14 @@ class ItemService:
                 ).model_dump(exclude_none=True)
                 for item in self.items.values()
             ]
-            self.state_file.write_text(json.dumps(payload, ensure_ascii=True, separators=(",", ":")), encoding="utf-8")
+            self.state_file.write_text(
+                json.dumps(payload, ensure_ascii=True, separators=(",", ":")),
+                encoding="utf-8",
+            )
         except Exception as exc:
-            LOGGER.warning("failed to persist item state to %s: %s", self.state_file, exc)
+            LOGGER.warning(
+                "failed to persist item state to %s: %s", self.state_file, exc
+            )
 
     def save_piano_songs(self) -> None:
         """Persist compact piano song registry payload to configured storage file."""
@@ -205,4 +230,6 @@ class ItemService:
                 encoding="utf-8",
             )
         except Exception as exc:
-            LOGGER.warning("failed to persist piano songs to %s: %s", self.piano_songs_file, exc)
+            LOGGER.warning(
+                "failed to persist piano songs to %s: %s", self.piano_songs_file, exc
+            )

@@ -19,7 +19,7 @@ import ssl
 import time
 import uuid
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypeAlias, TypedDict
 from urllib.error import URLError
 from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
@@ -28,6 +28,7 @@ from pydantic import ValidationError, TypeAdapter
 from websockets.asyncio.server import ServerConnection, serve
 from websockets.datastructures import Headers
 from websockets.http11 import Request as HttpRequest, Response as HttpResponse
+from websockets.typing import Origin
 
 from .auth_service import AuthError, AuthService
 from .client import ClientConnection
@@ -59,6 +60,7 @@ from .models import (
     AdminActionResultPacket,
     AdminRoleCreatePacket,
     AdminRoleDeletePacket,
+    AdminRoleSummary,
     AdminRoleUpdatePermissionsPacket,
     AdminRolesListPacket,
     AdminRolesListResultPacket,
@@ -66,6 +68,7 @@ from .models import (
     AdminUserDeletePacket,
     AdminUserSetRolePacket,
     AdminUserUnbanPacket,
+    AdminUserSummary,
     AdminUsersListPacket,
     AdminUsersListResultPacket,
     BroadcastChatMessagePacket,
@@ -88,6 +91,7 @@ from .models import (
     ItemRemovePacket,
     ItemSecondaryUsePacket,
     ItemTransferPacket,
+    ItemTransferTargetSummary,
     ItemTransferTargetsPacket,
     ItemTransferTargetsResultPacket,
     ItemUpdatePacket,
@@ -98,6 +102,7 @@ from .models import (
     PingPacket,
     PongPacket,
     RemoteUser,
+    SignalPacket,
     TeleportCompletePacket,
     UpdateNicknamePacket,
     UpdatePositionPacket,
@@ -116,7 +121,7 @@ from .version import format_server_version
 
 LOGGER = logging.getLogger("chgrid.server")
 PACKET_LOGGER = logging.getLogger("chgrid.server.packet")
-CLIENT_PACKET_ADAPTER = TypeAdapter(ClientPacket)
+CLIENT_PACKET_ADAPTER: TypeAdapter[ClientPacket] = TypeAdapter(ClientPacket)
 MAX_ACTIVE_PIANO_KEYS_PER_CLIENT = 12
 PIANO_RECORDING_MAX_MS = 30_000
 PIANO_RECORDING_MAX_EVENTS = 4096
@@ -141,6 +146,39 @@ WEBSOCKET_PATH = "ws"
 AUTH_SESSION_COOKIE_CLIENT_HEADER = "X-Chgrid-Auth-Client"
 AUTH_LOGIN_FAILURE_MESSAGE = "We couldn't log you in. Check your details and try again."
 AUTH_RESUME_FAILURE_MESSAGE = "We couldn't restore your session. Please log in again."
+
+AdminActionName: TypeAlias = Literal[
+    "role_create",
+    "role_update_permissions",
+    "role_delete",
+    "user_set_role",
+    "user_ban",
+    "user_unban",
+    "user_delete",
+]
+
+
+class PianoRecordingEvent(TypedDict):
+    t: int
+    keyId: str
+    midi: int
+    on: bool
+    instrument: str
+    voiceMode: str
+    attack: int
+    decay: int
+    release: int
+    brightness: int
+    emitRange: int
+
+
+class PianoRecordingSession(TypedDict, total=False):
+    ownerClientId: str
+    elapsedMs: int
+    paused: bool
+    lastResumeMonotonic: float
+    events: list[PianoRecordingEvent]
+    autoStopTask: asyncio.Task[None]
 
 
 class SignalingServer:
@@ -190,28 +228,44 @@ class SignalingServer:
         self.item_service = ItemService(state_file=state_file)
         self.item_last_use_ms: dict[str, int] = {}
         self.active_piano_keys_by_client: dict[str, set[str]] = {}
-        self.piano_recording_state_by_item: dict[str, dict] = {}
+        self.piano_recording_state_by_item: dict[str, PianoRecordingSession] = {}
         self.piano_playback_tasks_by_item: dict[str, asyncio.Task[None]] = {}
         self.grid_size = max(1, grid_size)
         self.movement_tick_ms = MOVEMENT_TICK_MS
         self.movement_max_steps_per_tick = MOVEMENT_MAX_STEPS_PER_TICK
         self.instance_id = str(uuid.uuid4())
-        self.release_version, self.expected_client_revision = self._resolve_client_version_metadata()
+        self.release_version, self.expected_client_revision = (
+            self._resolve_client_version_metadata()
+        )
         self.server_version = self._resolve_server_version(self.release_version)
-        self.host_origin = normalize_origin(host_origin, field_name="host origin") if host_origin else None
+        self.host_origin = (
+            normalize_origin(host_origin, field_name="host origin")
+            if host_origin
+            else None
+        )
         self.base_path = self._normalize_base_path(base_path)
         self.grid_name = str(grid_name).strip() or "Chat Grid"
         self.welcome_message = (
             str(welcome_message).strip()
             or "Welcome to the Chat Grid, your immersive audio playground. Configure your audio, then Log in or register to join the grid."
         )
-        self.auth_session_cookie_name = self._session_cookie_name_for_base_path(self.base_path)
+        self.auth_session_cookie_name = self._session_cookie_name_for_base_path(
+            self.base_path
+        )
         self.websocket_path = self._base_path_join(WEBSOCKET_PATH)
-        self.auth_session_cookie_set_path = self._base_path_join(AUTH_SESSION_COOKIE_SET_PATH)
-        self.auth_session_cookie_clear_path = self._base_path_join(AUTH_SESSION_COOKIE_CLEAR_PATH)
-        self.auth_session_cookie_check_path = self._base_path_join(AUTH_SESSION_COOKIE_CHECK_PATH)
+        self.auth_session_cookie_set_path = self._base_path_join(
+            AUTH_SESSION_COOKIE_SET_PATH
+        )
+        self.auth_session_cookie_clear_path = self._base_path_join(
+            AUTH_SESSION_COOKIE_CLEAR_PATH
+        )
+        self.auth_session_cookie_check_path = self._base_path_join(
+            AUTH_SESSION_COOKIE_CHECK_PATH
+        )
         self.state_save_debounce_ms = max(1, int(state_save_debounce_ms))
-        self.state_save_max_delay_ms = max(self.state_save_debounce_ms, int(state_save_max_delay_ms))
+        self.state_save_max_delay_ms = max(
+            self.state_save_debounce_ms, int(state_save_max_delay_ms)
+        )
         self._pending_state_save_handle: asyncio.TimerHandle | None = None
         self._pending_state_save_started_at: float | None = None
         self._last_position_persist_ms_by_user: dict[str, int] = {}
@@ -240,7 +294,9 @@ class SignalingServer:
         """Resolve shared release version and expected client revision from version.js."""
 
         try:
-            version_file = Path(__file__).resolve().parents[2] / "client" / "public" / "version.js"
+            version_file = (
+                Path(__file__).resolve().parents[2] / "client" / "public" / "version.js"
+            )
             text = version_file.read_text(encoding="utf-8")
             return SignalingServer._client_version_metadata_from_web_version_text(text)
         except OSError:
@@ -268,14 +324,18 @@ class SignalingServer:
 
         return nickname.casefold()
 
-    def _persist_client_position(self, client: ClientConnection, *, force: bool = False) -> None:
+    def _persist_client_position(
+        self, client: ClientConnection, *, force: bool = False
+    ) -> None:
         """Persist one authenticated client's last known position with debounce."""
 
         if not client.user_id:
             return
         now_ms = self.item_service.now_ms()
         if not force:
-            last_saved_ms = self._last_position_persist_ms_by_user.get(client.user_id, 0)
+            last_saved_ms = self._last_position_persist_ms_by_user.get(
+                client.user_id, 0
+            )
             if now_ms - last_saved_ms < POSITION_PERSIST_DEBOUNCE_MS:
                 return
         self.auth_service.set_last_position(client.user_id, client.x, client.y)
@@ -326,10 +386,17 @@ class SignalingServer:
             return True
         if request is None:
             return False
-        forwarded = str(request.headers.get("X-Forwarded-Proto", "")).split(",", 1)[0].strip().lower()
+        forwarded = (
+            str(request.headers.get("X-Forwarded-Proto", ""))
+            .split(",", 1)[0]
+            .strip()
+            .lower()
+        )
         return forwarded == "https"
 
-    def _session_cookie_header(self, token: str, *, request: HttpRequest | None = None) -> str:
+    def _session_cookie_header(
+        self, token: str, *, request: HttpRequest | None = None
+    ) -> str:
         """Build Set-Cookie header value for a valid session token."""
 
         secure = "; Secure" if self._session_cookie_secure(request) else ""
@@ -338,7 +405,9 @@ class SignalingServer:
             f"Max-Age={AUTH_SESSION_COOKIE_MAX_AGE_SECONDS}{secure}"
         )
 
-    def _clear_session_cookie_header(self, *, request: HttpRequest | None = None) -> str:
+    def _clear_session_cookie_header(
+        self, *, request: HttpRequest | None = None
+    ) -> str:
         """Build Set-Cookie header value that expires the session cookie."""
 
         secure = "; Secure" if self._session_cookie_secure(request) else ""
@@ -367,7 +436,10 @@ class SignalingServer:
         try:
             parts = urlsplit(raw_referer)
             referer_origin = urlunsplit((parts.scheme, parts.netloc, "", "", ""))
-            return normalize_origin(referer_origin, field_name="referer") == self.host_origin
+            return (
+                normalize_origin(referer_origin, field_name="referer")
+                == self.host_origin
+            )
         except ValueError:
             return False
 
@@ -381,7 +453,9 @@ class SignalingServer:
                 return raw_value.strip()
         return ""
 
-    async def _process_http_request(self, _connection: ServerConnection, request: HttpRequest) -> HttpResponse | None:
+    async def _process_http_request(
+        self, _connection: object, request: HttpRequest
+    ) -> HttpResponse | None:
         """Handle lightweight same-origin auth cookie set/clear HTTP endpoints."""
 
         path = request.path.split("?", 1)[0]
@@ -401,7 +475,9 @@ class SignalingServer:
         headers = Headers()
         headers["Content-Type"] = "text/plain; charset=utf-8"
         headers["Cache-Control"] = "no-store"
-        client_header = str(request.headers.get(AUTH_SESSION_COOKIE_CLIENT_HEADER, "")).strip()
+        client_header = str(
+            request.headers.get(AUTH_SESSION_COOKIE_CLIENT_HEADER, "")
+        ).strip()
         if client_header != "1":
             return HttpResponse(400, "Bad Request", headers, b"missing client header")
         if not self._origin_allowed(request):
@@ -432,10 +508,12 @@ class SignalingServer:
             session = self.auth_service.resume(token)
         except AuthError:
             return HttpResponse(401, "Unauthorized", headers, b"invalid session")
-        headers["Set-Cookie"] = self._session_cookie_header(session.token, request=request)
+        headers["Set-Cookie"] = self._session_cookie_header(
+            session.token, request=request
+        )
         return HttpResponse(200, "OK", headers, b"ok")
 
-    def _session_token_from_websocket_cookie(self, websocket: ServerConnection) -> str:
+    def _session_token_from_websocket_cookie(self, websocket: object) -> str:
         """Read session token from websocket handshake Cookie header."""
 
         request = getattr(websocket, "request", None)
@@ -447,7 +525,9 @@ class SignalingServer:
             return ""
         return self._cookie_value(cookie_header, self.auth_session_cookie_name)
 
-    def _build_admin_menu_actions_for_client(self, client: ClientConnection | None) -> list[dict[str, str]]:
+    def _build_admin_menu_actions_for_client(
+        self, client: ClientConnection | None
+    ) -> list[dict[str, str]]:
         """Build server-authored admin menu actions allowed for one client."""
 
         if client is None:
@@ -539,9 +619,13 @@ class SignalingServer:
             self._pending_state_save_handle.cancel()
         remaining_ms = max(0, self.state_save_max_delay_ms - elapsed_ms)
         delay_ms = min(self.state_save_debounce_ms, remaining_ms)
-        self._pending_state_save_handle = loop.call_later(delay_ms / 1000, self._flush_state_save)
+        self._pending_state_save_handle = loop.call_later(
+            delay_ms / 1000, self._flush_state_save
+        )
 
-    def _is_nickname_taken(self, nickname: str, exclude_client_id: str | None = None) -> bool:
+    def _is_nickname_taken(
+        self, nickname: str, exclude_client_id: str | None = None
+    ) -> bool:
         """Check whether nickname is already used by another active client."""
 
         wanted = self._nickname_key(nickname)
@@ -634,7 +718,9 @@ class SignalingServer:
             username = "unknown"
         return f"{self._client_ip(client)}::{username}"
 
-    def _is_auth_rate_limited(self, client: ClientConnection, packet: ClientPacket) -> bool:
+    def _is_auth_rate_limited(
+        self, client: ClientConnection, packet: ClientPacket
+    ) -> bool:
         """Return True when recent auth failures exceed IP or identity thresholds."""
 
         now_s = time.monotonic()
@@ -642,13 +728,20 @@ class SignalingServer:
         identity_key = self._auth_identity_key(client, packet)
 
         ip_bucket = self._auth_failures_by_ip.setdefault(ip_key, deque())
-        identity_bucket = self._auth_failures_by_identity.setdefault(identity_key, deque())
+        identity_bucket = self._auth_failures_by_identity.setdefault(
+            identity_key, deque()
+        )
         self._prune_failure_window(ip_bucket, now_s)
         self._prune_failure_window(identity_bucket, now_s)
 
-        return len(ip_bucket) >= AUTH_RATE_LIMIT_PER_IP or len(identity_bucket) >= AUTH_RATE_LIMIT_PER_IDENTITY
+        return (
+            len(ip_bucket) >= AUTH_RATE_LIMIT_PER_IP
+            or len(identity_bucket) >= AUTH_RATE_LIMIT_PER_IDENTITY
+        )
 
-    def _record_auth_failure(self, client: ClientConnection, packet: ClientPacket) -> None:
+    def _record_auth_failure(
+        self, client: ClientConnection, packet: ClientPacket
+    ) -> None:
         """Record a failed auth attempt for IP and identity-scoped throttling."""
 
         now_s = time.monotonic()
@@ -657,7 +750,9 @@ class SignalingServer:
         self._auth_failures_by_ip.setdefault(ip_key, deque()).append(now_s)
         self._auth_failures_by_identity.setdefault(identity_key, deque()).append(now_s)
 
-    def _clear_auth_failures(self, client: ClientConnection, packet: ClientPacket) -> None:
+    def _clear_auth_failures(
+        self, client: ClientConnection, packet: ClientPacket
+    ) -> None:
         """Clear identity-scoped auth failures after a successful authentication."""
 
         now_s = time.monotonic()
@@ -671,7 +766,9 @@ class SignalingServer:
     async def _sleep_auth_failure_jitter(self) -> None:
         """Apply small randomized delay to reduce high-resolution auth timing probes."""
 
-        await asyncio.sleep(random.uniform(AUTH_FAILURE_JITTER_MIN_MS, AUTH_FAILURE_JITTER_MAX_MS))
+        await asyncio.sleep(
+            random.uniform(AUTH_FAILURE_JITTER_MIN_MS, AUTH_FAILURE_JITTER_MAX_MS)
+        )
 
     async def _run_auth_hash_task(self, func, /, *args, **kwargs):
         """Run auth service call in a worker thread behind bounded hash concurrency."""
@@ -730,15 +827,23 @@ class SignalingServer:
             "updatedBy": item.updatedByName or item.updatedBy,
             "createdAt": self._format_display_timestamp_ms(item.createdAt),
             "updatedAt": self._format_display_timestamp_ms(item.updatedAt),
-            "capabilities": ", ".join(item.capabilities) if item.capabilities else "none",
-            "useSound": self._format_display_sound_name(item.params.get("useSound", item.useSound)),
-            "emitSound": self._format_display_sound_name(item.params.get("emitSound", item.emitSound)),
+            "capabilities": ", ".join(item.capabilities)
+            if item.capabilities
+            else "none",
+            "useSound": self._format_display_sound_name(
+                item.params.get("useSound", item.useSound)
+            ),
+            "emitSound": self._format_display_sound_name(
+                item.params.get("emitSound", item.emitSound)
+            ),
         }
 
     def _outbound_item(self, item: WorldItem) -> WorldItem:
         """Return one outbound item snapshot enriched with server-owned display values."""
 
-        return item.model_copy(update={"display": self._build_item_display_values(item)})
+        return item.model_copy(
+            update={"display": self._build_item_display_values(item)}
+        )
 
     @staticmethod
     def _item_updated_actor(client: ClientConnection) -> tuple[str, str]:
@@ -790,7 +895,11 @@ class SignalingServer:
                 headers={"Icy-MetaData": "1", "User-Agent": "ChatGrid"},
                 timeout=RADIO_METADATA_TIMEOUT_S,
             ) as response:
-                station = str(response.headers.get("icy-name") or response.headers.get("ice-name") or "").strip()
+                station = str(
+                    response.headers.get("icy-name")
+                    or response.headers.get("ice-name")
+                    or ""
+                ).strip()
                 title = ""
                 metaint_raw = response.headers.get("icy-metaint")
                 if metaint_raw:
@@ -801,7 +910,9 @@ class SignalingServer:
                         if meta_len_byte:
                             meta_length = meta_len_byte[0] * 16
                             if meta_length > 0:
-                                meta = response.read(meta_length).decode(errors="ignore")
+                                meta = response.read(meta_length).decode(
+                                    errors="ignore"
+                                )
                                 match = re.search(r"StreamTitle='(.*?)';", meta)
                                 if match:
                                     title = match.group(1).strip()
@@ -823,7 +934,9 @@ class SignalingServer:
         ]
         for item in radios:
             stream_url = str(item.params.get("streamUrl", "")).strip()
-            station_name, now_playing = await asyncio.to_thread(self._fetch_stream_metadata, stream_url)
+            station_name, now_playing = await asyncio.to_thread(
+                self._fetch_stream_metadata, stream_url
+            )
             current_station = str(item.params.get("stationName", "")).strip()
             current_playing = str(item.params.get("nowPlaying", "")).strip()
             if station_name == current_station and now_playing == current_playing:
@@ -890,7 +1003,9 @@ class SignalingServer:
         return sounds
 
     @classmethod
-    def _build_clock_announcement_sounds(cls, params: dict, *, top_of_hour: bool, alarm: bool) -> list[str]:
+    def _build_clock_announcement_sounds(
+        cls, params: dict, *, top_of_hour: bool, alarm: bool
+    ) -> list[str]:
         """Build ordered EL640 sample URLs for one clock announcement variant."""
 
         sounds: list[str] = []
@@ -905,12 +1020,16 @@ class SignalingServer:
             sounds.append("/sounds/clock/el640/hour2.ogg")
         return sounds
 
-    async def _broadcast_clock_announcement(self, item: WorldItem, *, top_of_hour: bool, alarm: bool) -> None:
+    async def _broadcast_clock_announcement(
+        self, item: WorldItem, *, top_of_hour: bool, alarm: bool
+    ) -> None:
         """Broadcast one server-authoritative clock speech sequence from item position."""
 
         sound_x, sound_y = self._get_item_sound_source_position(item)
         sound_range = self._get_item_emit_range(item)
-        sounds = self._build_clock_announcement_sounds(item.params, top_of_hour=top_of_hour, alarm=alarm)
+        sounds = self._build_clock_announcement_sounds(
+            item.params, top_of_hour=top_of_hour, alarm=alarm
+        )
         if not sounds:
             return
         await self._broadcast(
@@ -929,7 +1048,9 @@ class SignalingServer:
 
         try:
             while True:
-                valid_clock_ids = {item.id for item in self.items.values() if item.type == "clock"}
+                valid_clock_ids = {
+                    item.id for item in self.items.values() if item.type == "clock"
+                }
                 for stale_id in list(self._clock_top_of_hour_markers.keys()):
                     if stale_id not in valid_clock_ids:
                         self._clock_top_of_hour_markers.pop(stale_id, None)
@@ -939,24 +1060,38 @@ class SignalingServer:
                 for item in self.items.values():
                     if item.type != "clock":
                         continue
-                    tz_name = self._normalize_clock_timezone(item.params.get("timeZone"))
+                    tz_name = self._normalize_clock_timezone(
+                        item.params.get("timeZone")
+                    )
                     now = datetime.now(ZoneInfo(tz_name))
-                    top_of_hour_enabled = item.params.get("topOfHourAnnounce", True) is True
+                    top_of_hour_enabled = (
+                        item.params.get("topOfHourAnnounce", True) is True
+                    )
                     if top_of_hour_enabled and now.minute == 0 and now.second <= 1:
                         marker = now.strftime("%Y-%m-%d-%H")
                         if self._clock_top_of_hour_markers.get(item.id) != marker:
                             self._clock_top_of_hour_markers[item.id] = marker
-                            await self._broadcast_clock_announcement(item, top_of_hour=True, alarm=False)
+                            await self._broadcast_clock_announcement(
+                                item, top_of_hour=True, alarm=False
+                            )
 
                     alarm_enabled = item.params.get("alarmEnabled", False) is True
-                    alarm_time = parse_alarm_time_flexible(item.params.get("alarmTime", ""))
+                    alarm_time = parse_alarm_time_flexible(
+                        item.params.get("alarmTime", "")
+                    )
                     if alarm_enabled and alarm_time is not None:
                         alarm_hour, alarm_minute = alarm_time
-                        if now.hour == alarm_hour and now.minute == alarm_minute and now.second <= 1:
+                        if (
+                            now.hour == alarm_hour
+                            and now.minute == alarm_minute
+                            and now.second <= 1
+                        ):
                             marker = now.strftime("%Y-%m-%d-%H-%M")
                             if self._clock_alarm_markers.get(item.id) != marker:
                                 self._clock_alarm_markers[item.id] = marker
-                                await self._broadcast_clock_announcement(item, top_of_hour=False, alarm=True)
+                                await self._broadcast_clock_announcement(
+                                    item, top_of_hour=False, alarm=True
+                                )
                 await asyncio.sleep(CLOCK_ANNOUNCE_POLL_INTERVAL_S)
         except asyncio.CancelledError:
             return
@@ -1006,11 +1141,31 @@ class SignalingServer:
     ) -> None:
         """Broadcast one piano note event using current item synth settings."""
 
-        instrument = (instrument_override if isinstance(instrument_override, str) else str(item.params.get("instrument", "piano"))).strip().lower()
-        voice_mode = (voice_mode_override if isinstance(voice_mode_override, str) else str(item.params.get("voiceMode", "poly"))).strip().lower()
+        instrument = (
+            (
+                instrument_override
+                if isinstance(instrument_override, str)
+                else str(item.params.get("instrument", "piano"))
+            )
+            .strip()
+            .lower()
+        )
+        voice_mode = (
+            (
+                voice_mode_override
+                if isinstance(voice_mode_override, str)
+                else str(item.params.get("voiceMode", "poly"))
+            )
+            .strip()
+            .lower()
+        )
         if voice_mode not in {"poly", "mono"}:
             voice_mode = "poly"
-        octave = int(item.params.get("octave", 0)) if isinstance(item.params.get("octave", 0), (int, float)) else 0
+        octave = (
+            int(item.params.get("octave", 0))
+            if isinstance(item.params.get("octave", 0), (int, float))
+            else 0
+        )
         attack = (
             int(attack_override)
             if isinstance(attack_override, int)
@@ -1077,20 +1232,32 @@ class SignalingServer:
             task.cancel()
 
     @staticmethod
-    def _recording_elapsed_ms(session: dict, now_monotonic: float | None = None) -> int:
+    def _recording_elapsed_ms(
+        session: PianoRecordingSession, now_monotonic: float | None = None
+    ) -> int:
         """Compute effective recorded duration, including currently active segment."""
 
-        elapsed_ms = int(session.get("elapsedMs", 0)) if isinstance(session.get("elapsedMs"), (int, float)) else 0
+        elapsed_ms = (
+            int(session.get("elapsedMs", 0))
+            if isinstance(session.get("elapsedMs"), (int, float))
+            else 0
+        )
         paused = session.get("paused") is True
         if paused:
             return max(0, elapsed_ms)
         last_resume = session.get("lastResumeMonotonic")
         if isinstance(last_resume, (int, float)):
-            now_value = now_monotonic if isinstance(now_monotonic, (int, float)) else time.monotonic()
+            now_value = (
+                now_monotonic
+                if isinstance(now_monotonic, (int, float))
+                else time.monotonic()
+            )
             elapsed_ms += max(0, int((now_value - float(last_resume)) * 1000))
         return max(0, elapsed_ms)
 
-    async def _finalize_piano_recording(self, item_id: str, *, notify_owner: bool = False) -> None:
+    async def _finalize_piano_recording(
+        self, item_id: str, *, notify_owner: bool = False
+    ) -> None:
         """Persist and broadcast one active recording session, then clear runtime state."""
 
         session = self.piano_recording_state_by_item.pop(item_id, None)
@@ -1102,9 +1269,10 @@ class SignalingServer:
         item = self.items.get(item_id)
         if not item or item.type != "piano":
             return
-        elapsed_ms = max(0, min(PIANO_RECORDING_MAX_MS, self._recording_elapsed_ms(session)))
-        recorded_events = session.get("events")
-        events = list(recorded_events) if isinstance(recorded_events, list) else []
+        elapsed_ms = max(
+            0, min(PIANO_RECORDING_MAX_MS, self._recording_elapsed_ms(session))
+        )
+        events = list(session.get("events", []))
         song_id = f"item:{item.id}:recording"
         keys: list[str] = []
         key_to_index: dict[str, int] = {}
@@ -1114,19 +1282,49 @@ class SignalingServer:
         for event in events:
             if not isinstance(event, dict):
                 continue
-            t = int(event.get("t", 0)) if isinstance(event.get("t"), (int, float)) else 0
+            t = (
+                int(event.get("t", 0))
+                if isinstance(event.get("t"), (int, float))
+                else 0
+            )
             key_id = str(event.get("keyId", "")).strip()
-            midi = int(event.get("midi", 0)) if isinstance(event.get("midi"), (int, float)) else 0
+            midi = (
+                int(event.get("midi", 0))
+                if isinstance(event.get("midi"), (int, float))
+                else 0
+            )
             on = 1 if event.get("on") is True else 0
-            instrument = str(event.get("instrument", "piano")).strip().lower() or "piano"
+            instrument = (
+                str(event.get("instrument", "piano")).strip().lower() or "piano"
+            )
             voice_mode = str(event.get("voiceMode", "poly")).strip().lower()
             if voice_mode not in {"mono", "poly"}:
                 voice_mode = "poly"
-            attack = int(event.get("attack", 15)) if isinstance(event.get("attack"), (int, float)) else 15
-            decay = int(event.get("decay", 45)) if isinstance(event.get("decay"), (int, float)) else 45
-            release = int(event.get("release", 35)) if isinstance(event.get("release"), (int, float)) else 35
-            brightness = int(event.get("brightness", 55)) if isinstance(event.get("brightness"), (int, float)) else 55
-            emit_range = int(event.get("emitRange", 15)) if isinstance(event.get("emitRange"), (int, float)) else 15
+            attack = (
+                int(event.get("attack", 15))
+                if isinstance(event.get("attack"), (int, float))
+                else 15
+            )
+            decay = (
+                int(event.get("decay", 45))
+                if isinstance(event.get("decay"), (int, float))
+                else 45
+            )
+            release = (
+                int(event.get("release", 35))
+                if isinstance(event.get("release"), (int, float))
+                else 35
+            )
+            brightness = (
+                int(event.get("brightness", 55))
+                if isinstance(event.get("brightness"), (int, float))
+                else 55
+            )
+            emit_range = (
+                int(event.get("emitRange", 15))
+                if isinstance(event.get("emitRange"), (int, float))
+                else 15
+            )
             state_key = (
                 instrument,
                 voice_mode,
@@ -1148,7 +1346,15 @@ class SignalingServer:
                 state_index = len(states)
                 states.append(list(state_key))
                 state_to_index[state_key] = state_index
-            compact_events.append([max(0, min(PIANO_RECORDING_MAX_MS, t)), index, max(0, min(127, midi)), on, state_index])
+            compact_events.append(
+                [
+                    max(0, min(PIANO_RECORDING_MAX_MS, t)),
+                    index,
+                    max(0, min(127, midi)),
+                    on,
+                    state_index,
+                ]
+            )
         compact_events.sort(key=lambda row: row[0])
         first_state = states[0] if states else ["piano", "poly", 15, 45, 35, 55, 15]
         self.item_service.piano_songs[song_id] = {
@@ -1185,7 +1391,9 @@ class SignalingServer:
                 event="record_stopped",
                 recording_state="idle",
             )
-            await self._send_item_result(owner, True, "use", "Recording stopped.", item.id)
+            await self._send_item_result(
+                owner, True, "use", "Recording stopped.", item.id
+            )
 
     async def _auto_stop_piano_recording(self, item_id: str) -> None:
         """Stop a recording automatically at the max recording duration."""
@@ -1193,7 +1401,7 @@ class SignalingServer:
         try:
             while True:
                 session = self.piano_recording_state_by_item.get(item_id)
-                if not isinstance(session, dict):
+                if session is None:
                     return
                 if self._recording_elapsed_ms(session) >= PIANO_RECORDING_MAX_MS:
                     await self._finalize_piano_recording(item_id, notify_owner=True)
@@ -1206,7 +1414,7 @@ class SignalingServer:
         """Run one piano recording playback task and broadcast note events."""
 
         sender_id = f"item:{item.id}:playback"
-        events: list[dict[str, object]] = []
+        events: list[PianoRecordingEvent] = []
         song_id = str(item.params.get("songId", "")).strip()
         song_payload = self.item_service.piano_songs.get(song_id) if song_id else None
         if isinstance(song_payload, dict):
@@ -1217,14 +1425,38 @@ class SignalingServer:
             if isinstance(keys, list) and isinstance(compact_events, list):
                 base_state = None
                 if isinstance(meta, dict):
-                    instrument = str(meta.get("instrument", "")).strip().lower() or "piano"
+                    instrument = (
+                        str(meta.get("instrument", "")).strip().lower() or "piano"
+                    )
                     raw_voice_mode = str(meta.get("voiceMode", "")).strip().lower()
-                    voice_mode = raw_voice_mode if raw_voice_mode in {"mono", "poly"} else "poly"
-                    attack = int(meta.get("attack", 15)) if isinstance(meta.get("attack"), (int, float)) else 15
-                    decay = int(meta.get("decay", 45)) if isinstance(meta.get("decay"), (int, float)) else 45
-                    release = int(meta.get("release", 35)) if isinstance(meta.get("release"), (int, float)) else 35
-                    brightness = int(meta.get("brightness", 55)) if isinstance(meta.get("brightness"), (int, float)) else 55
-                    emit_range = int(meta.get("emitRange", 15)) if isinstance(meta.get("emitRange"), (int, float)) else 15
+                    voice_mode = (
+                        raw_voice_mode if raw_voice_mode in {"mono", "poly"} else "poly"
+                    )
+                    attack = (
+                        int(meta.get("attack", 15))
+                        if isinstance(meta.get("attack"), (int, float))
+                        else 15
+                    )
+                    decay = (
+                        int(meta.get("decay", 45))
+                        if isinstance(meta.get("decay"), (int, float))
+                        else 45
+                    )
+                    release = (
+                        int(meta.get("release", 35))
+                        if isinstance(meta.get("release"), (int, float))
+                        else 35
+                    )
+                    brightness = (
+                        int(meta.get("brightness", 55))
+                        if isinstance(meta.get("brightness"), (int, float))
+                        else 55
+                    )
+                    emit_range = (
+                        int(meta.get("emitRange", 15))
+                        if isinstance(meta.get("emitRange"), (int, float))
+                        else 15
+                    )
                     base_state = (
                         instrument,
                         voice_mode,
@@ -1238,7 +1470,11 @@ class SignalingServer:
                     if not isinstance(row, list) or len(row) < 4:
                         continue
                     raw_time, raw_key_idx, raw_midi, raw_on = row[:4]
-                    if not isinstance(raw_time, (int, float)) or not isinstance(raw_key_idx, (int, float)) or not isinstance(raw_midi, (int, float)):
+                    if (
+                        not isinstance(raw_time, (int, float))
+                        or not isinstance(raw_key_idx, (int, float))
+                        or not isinstance(raw_midi, (int, float))
+                    ):
                         continue
                     key_idx = int(raw_key_idx)
                     if key_idx < 0 or key_idx >= len(keys):
@@ -1247,21 +1483,69 @@ class SignalingServer:
                     if not isinstance(raw_key, str) or not raw_key.strip():
                         continue
                     state = base_state
-                    if len(row) >= 5 and isinstance(states, list) and isinstance(row[4], (int, float)):
+                    if (
+                        len(row) >= 5
+                        and isinstance(states, list)
+                        and isinstance(row[4], (int, float))
+                    ):
                         state_idx = int(row[4])
                         if 0 <= state_idx < len(states):
                             state_row = states[state_idx]
                             if isinstance(state_row, list) and len(state_row) >= 7:
-                                candidate_instrument = str(state_row[0]).strip().lower() or "piano"
+                                candidate_instrument = (
+                                    str(state_row[0]).strip().lower() or "piano"
+                                )
                                 candidate_voice_mode = str(state_row[1]).strip().lower()
                                 state = (
                                     candidate_instrument,
-                                    candidate_voice_mode if candidate_voice_mode in {"mono", "poly"} else "poly",
-                                    max(0, min(100, int(state_row[2]) if isinstance(state_row[2], (int, float)) else 15)),
-                                    max(0, min(100, int(state_row[3]) if isinstance(state_row[3], (int, float)) else 45)),
-                                    max(0, min(100, int(state_row[4]) if isinstance(state_row[4], (int, float)) else 35)),
-                                    max(0, min(100, int(state_row[5]) if isinstance(state_row[5], (int, float)) else 55)),
-                                    max(5, min(20, int(state_row[6]) if isinstance(state_row[6], (int, float)) else 15)),
+                                    candidate_voice_mode
+                                    if candidate_voice_mode in {"mono", "poly"}
+                                    else "poly",
+                                    max(
+                                        0,
+                                        min(
+                                            100,
+                                            int(state_row[2])
+                                            if isinstance(state_row[2], (int, float))
+                                            else 15,
+                                        ),
+                                    ),
+                                    max(
+                                        0,
+                                        min(
+                                            100,
+                                            int(state_row[3])
+                                            if isinstance(state_row[3], (int, float))
+                                            else 45,
+                                        ),
+                                    ),
+                                    max(
+                                        0,
+                                        min(
+                                            100,
+                                            int(state_row[4])
+                                            if isinstance(state_row[4], (int, float))
+                                            else 35,
+                                        ),
+                                    ),
+                                    max(
+                                        0,
+                                        min(
+                                            100,
+                                            int(state_row[5])
+                                            if isinstance(state_row[5], (int, float))
+                                            else 55,
+                                        ),
+                                    ),
+                                    max(
+                                        5,
+                                        min(
+                                            20,
+                                            int(state_row[6])
+                                            if isinstance(state_row[6], (int, float))
+                                            else 15,
+                                        ),
+                                    ),
                                 )
                     if state is None:
                         continue
@@ -1308,13 +1592,27 @@ class SignalingServer:
                     key_id=key_id,
                     midi=midi,
                     on=on,
-                    instrument_override=event.get("instrument") if isinstance(event.get("instrument"), str) else None,
-                    voice_mode_override=event.get("voiceMode") if isinstance(event.get("voiceMode"), str) else None,
-                    attack_override=event.get("attack") if isinstance(event.get("attack"), int) else None,
-                    decay_override=event.get("decay") if isinstance(event.get("decay"), int) else None,
-                    release_override=event.get("release") if isinstance(event.get("release"), int) else None,
-                    brightness_override=event.get("brightness") if isinstance(event.get("brightness"), int) else None,
-                    emit_range_override=event.get("emitRange") if isinstance(event.get("emitRange"), int) else None,
+                    instrument_override=event.get("instrument")
+                    if isinstance(event.get("instrument"), str)
+                    else None,
+                    voice_mode_override=event.get("voiceMode")
+                    if isinstance(event.get("voiceMode"), str)
+                    else None,
+                    attack_override=event.get("attack")
+                    if isinstance(event.get("attack"), int)
+                    else None,
+                    decay_override=event.get("decay")
+                    if isinstance(event.get("decay"), int)
+                    else None,
+                    release_override=event.get("release")
+                    if isinstance(event.get("release"), int)
+                    else None,
+                    brightness_override=event.get("brightness")
+                    if isinstance(event.get("brightness"), int)
+                    else None,
+                    emit_range_override=event.get("emitRange")
+                    if isinstance(event.get("emitRange"), int)
+                    else None,
                 )
                 previous_at_ms = current_at_ms
         except asyncio.CancelledError:
@@ -1344,14 +1642,18 @@ class SignalingServer:
 
         return max(0, now_ms // self.movement_tick_ms)
 
-    def _consume_movement_budget(self, client: ClientConnection, now_ms: int, requested_delta: int) -> bool:
+    def _consume_movement_budget(
+        self, client: ClientConnection, now_ms: int, requested_delta: int
+    ) -> bool:
         """Consume per-window movement budget; return whether the move is allowed."""
 
         window_index = self._movement_window_index(now_ms)
         if client.movement_window_index != window_index:
             client.movement_window_index = window_index
             client.movement_window_steps_used = 0
-        remaining = max(0, self.movement_max_steps_per_tick - client.movement_window_steps_used)
+        remaining = max(
+            0, self.movement_max_steps_per_tick - client.movement_window_steps_used
+        )
         if requested_delta > remaining:
             return False
         client.movement_window_steps_used += requested_delta
@@ -1400,7 +1702,16 @@ class SignalingServer:
         self,
         client: ClientConnection,
         ok: bool,
-        action: Literal["add", "pickup", "drop", "delete", "transfer", "use", "secondary_use", "update"],
+        action: Literal[
+            "add",
+            "pickup",
+            "drop",
+            "delete",
+            "transfer",
+            "use",
+            "secondary_use",
+            "update",
+        ],
         message: str,
         item_id: str | None = None,
     ) -> None:
@@ -1431,7 +1742,8 @@ class SignalingServer:
             "playback_started",
             "playback_stopped",
         ],
-        recording_state: Literal["idle", "recording", "paused", "playback"] | None = None,
+        recording_state: Literal["idle", "recording", "paused", "playback"]
+        | None = None,
     ) -> None:
         """Send structured piano state transitions without relying on status-message text."""
 
@@ -1448,15 +1760,21 @@ class SignalingServer:
     async def _broadcast_item(self, item: WorldItem) -> None:
         """Broadcast a full item snapshot update to all connected clients."""
 
-        await self._broadcast(ItemUpsertPacket(type="item_upsert", item=self._outbound_item(item)))
+        await self._broadcast(
+            ItemUpsertPacket(type="item_upsert", item=self._outbound_item(item))
+        )
 
     async def start(self) -> None:
         """Start websocket serving and run until cancelled."""
 
         protocol = "wss" if self._ssl_context else "ws"
-        LOGGER.info("starting signaling server on %s://%s:%d", protocol, self.host, self.port)
+        LOGGER.info(
+            "starting signaling server on %s://%s:%d", protocol, self.host, self.port
+        )
         self._radio_metadata_task = asyncio.create_task(self._run_radio_metadata_loop())
-        self._clock_announce_task = asyncio.create_task(self._run_clock_top_of_hour_loop())
+        self._clock_announce_task = asyncio.create_task(
+            self._run_clock_top_of_hour_loop()
+        )
         try:
             async with serve(
                 self._handle_client,
@@ -1464,7 +1782,7 @@ class SignalingServer:
                 self.port,
                 ssl=self._ssl_context,
                 max_size=self.max_message_size,
-                origins=[self.host_origin] if self.host_origin else None,
+                origins=[Origin(self.host_origin)] if self.host_origin else None,
                 process_request=self._process_http_request,
             ):
                 await asyncio.Future()
@@ -1520,21 +1838,33 @@ class SignalingServer:
                     ),
                 )
             async for raw_message in websocket:
+                if isinstance(raw_message, bytes):
+                    raw_message = raw_message.decode("utf-8", errors="replace")
                 await self._handle_message(client, raw_message)
         except Exception:
-            LOGGER.exception("client message loop error id=%s ip=%s", client.id, self._client_ip(client))
+            LOGGER.exception(
+                "client message loop error id=%s ip=%s",
+                client.id,
+                self._client_ip(client),
+            )
         finally:
             if websocket in self.clients:
                 disconnected = self.clients.pop(websocket)
                 self.active_piano_keys_by_client.pop(disconnected.id, None)
                 self._persist_client_position(disconnected, force=True)
                 if disconnected.user_id:
-                    self._last_position_persist_ms_by_user.pop(disconnected.user_id, None)
-                for item_id, session in list(self.piano_recording_state_by_item.items()):
+                    self._last_position_persist_ms_by_user.pop(
+                        disconnected.user_id, None
+                    )
+                for item_id, session in list(
+                    self.piano_recording_state_by_item.items()
+                ):
                     if session.get("ownerClientId") != disconnected.id:
                         continue
                     await self._finalize_piano_recording(item_id)
-                for item in self.item_service.drop_carried_items_for_disconnect(disconnected):
+                for item in self.item_service.drop_carried_items_for_disconnect(
+                    disconnected
+                ):
                     await self._broadcast_item(item)
                 self._request_state_save()
                 LOGGER.info(
@@ -1543,7 +1873,10 @@ class SignalingServer:
                     disconnected.nickname,
                     len(self.clients),
                 )
-                await self._broadcast(UserLeftPacket(type="user_left", id=disconnected.id), exclude=websocket)
+                await self._broadcast(
+                    UserLeftPacket(type="user_left", id=disconnected.id),
+                    exclude=websocket,
+                )
                 await self._broadcast(
                     BroadcastChatMessagePacket(
                         type="chat_message",
@@ -1557,16 +1890,31 @@ class SignalingServer:
         """Send initial world snapshot to a newly connected client."""
 
         users = [
-            RemoteUser(id=other.id, userId=other.user_id, nickname=other.nickname, x=other.x, y=other.y)
+            RemoteUser(
+                id=other.id,
+                userId=other.user_id,
+                nickname=other.nickname,
+                x=other.x,
+                y=other.y,
+            )
             for ws, other in self.clients.items()
             if ws is not client.websocket
         ]
         packet = WelcomePacket(
             type="welcome",
             id=client.id,
-            player=RemoteUser(id=client.id, userId=client.user_id, nickname=client.nickname, x=client.x, y=client.y),
+            player=RemoteUser(
+                id=client.id,
+                userId=client.user_id,
+                nickname=client.nickname,
+                x=client.x,
+                y=client.y,
+            ),
             users=users,
-            items=[self._outbound_item(item).model_dump(exclude_none=True) for item in self.items.values()],
+            items=[
+                self._outbound_item(item).model_dump(exclude_none=True)
+                for item in self.items.values()
+            ],
             worldConfig={
                 "gridSize": self.grid_size,
                 "movementTickMs": self.movement_tick_ms,
@@ -1597,7 +1945,11 @@ class SignalingServer:
 
         saved_x = getattr(client, "saved_x", None)
         saved_y = getattr(client, "saved_y", None)
-        if isinstance(saved_x, int) and isinstance(saved_y, int) and self._is_in_bounds(saved_x, saved_y):
+        if (
+            isinstance(saved_x, int)
+            and isinstance(saved_y, int)
+            and self._is_in_bounds(saved_x, saved_y)
+        ):
             client.x = saved_x
             client.y = saved_y
         else:
@@ -1635,10 +1987,14 @@ class SignalingServer:
             exclude=client.websocket,
         )
 
-    async def _handle_auth_packet(self, client: ClientConnection, packet: ClientPacket) -> bool:
+    async def _handle_auth_packet(
+        self, client: ClientConnection, packet: ClientPacket
+    ) -> bool:
         """Handle pre-auth packets; returns True when packet was an auth command."""
 
-        if client.authenticated and isinstance(packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket)):
+        if client.authenticated and isinstance(
+            packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket)
+        ):
             await self._send(
                 client.websocket,
                 AuthResultPacket(
@@ -1650,9 +2006,9 @@ class SignalingServer:
             )
             return True
 
-        if isinstance(packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket)) and self._is_auth_rate_limited(
-            client, packet
-        ):
+        if isinstance(
+            packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket)
+        ) and self._is_auth_rate_limited(client, packet):
             LOGGER.warning(
                 "auth rate limited id=%s ip=%s packet=%s",
                 client.id,
@@ -1687,7 +2043,9 @@ class SignalingServer:
                     session.user.id,
                 )
             elif isinstance(packet, AuthLoginPacket):
-                session = await self._run_auth_hash_task(self.auth_service.login, packet.username, packet.password)
+                session = await self._run_auth_hash_task(
+                    self.auth_service.login, packet.username, packet.password
+                )
                 LOGGER.info(
                     "auth login success id=%s ip=%s username=%s user_id=%s",
                     client.id,
@@ -1709,7 +2067,12 @@ class SignalingServer:
                     self.auth_service.revoke(client.session_token)
                     client.session_token = None
                 client.permissions = set()
-                LOGGER.info("auth logout id=%s ip=%s username=%s", client.id, self._client_ip(client), client.username)
+                LOGGER.info(
+                    "auth logout id=%s ip=%s username=%s",
+                    client.id,
+                    self._client_ip(client),
+                    client.username,
+                )
                 await self._send(
                     client.websocket,
                     AuthResultPacket(
@@ -1724,7 +2087,9 @@ class SignalingServer:
             else:
                 return False
         except AuthError as exc:
-            if isinstance(packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket)):
+            if isinstance(
+                packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket)
+            ):
                 self._record_auth_failure(client, packet)
                 await self._sleep_auth_failure_jitter()
             response_message = str(exc)
@@ -1750,7 +2115,9 @@ class SignalingServer:
             )
             return True
         except Exception:
-            if isinstance(packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket)):
+            if isinstance(
+                packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket)
+            ):
                 self._record_auth_failure(client, packet)
                 await self._sleep_auth_failure_jitter()
             LOGGER.exception(
@@ -1820,7 +2187,9 @@ class SignalingServer:
         return {
             "itemTypeOrder": list(ITEM_TYPE_SEQUENCE),
             "itemTypes": item_types,
-            "commandMetadata": {"mainModeActions": list(MAIN_MODE_SERVER_COMMAND_DEFINITIONS)},
+            "commandMetadata": {
+                "mainModeActions": list(MAIN_MODE_SERVER_COMMAND_DEFINITIONS)
+            },
             "itemManagement": {"actions": list(ITEM_MANAGEMENT_ACTION_DEFINITIONS)},
             "adminMenu": {"actions": self._build_admin_menu_actions_for_client(client)},
         }
@@ -1836,13 +2205,17 @@ class SignalingServer:
 
         await asyncio.sleep(delay_seconds)
         await self._broadcast(
-            BroadcastChatMessagePacket(type="chat_message", message=others_message, system=True),
+            BroadcastChatMessagePacket(
+                type="chat_message", message=others_message, system=True
+            ),
             exclude=client.websocket,
         )
         if client.websocket in self.clients:
             await self._send(
                 client.websocket,
-                BroadcastChatMessagePacket(type="chat_message", message=self_message, system=True),
+                BroadcastChatMessagePacket(
+                    type="chat_message", message=self_message, system=True
+                ),
             )
 
     async def _send_admin_action_result(
@@ -1850,22 +2223,16 @@ class SignalingServer:
         client: ClientConnection,
         *,
         ok: bool,
-        action: Literal[
-            "role_create",
-            "role_update_permissions",
-            "role_delete",
-            "user_set_role",
-            "user_ban",
-            "user_unban",
-            "user_delete",
-        ],
+        action: AdminActionName,
         message: str,
     ) -> None:
         """Send one structured admin action result packet to caller."""
 
         await self._send(
             client.websocket,
-            AdminActionResultPacket(type="admin_action_result", ok=ok, action=action, message=message),
+            AdminActionResultPacket(
+                type="admin_action_result", ok=ok, action=action, message=message
+            ),
         )
 
     @staticmethod
@@ -1900,18 +2267,27 @@ class SignalingServer:
             await asyncio.sleep(5)
         except asyncio.CancelledError:
             return
-        LOGGER.warning("server reboot requested by=%s message=%s", requested_by, message)
+        LOGGER.warning(
+            "server reboot requested by=%s message=%s", requested_by, message
+        )
         os.kill(os.getpid(), signal.SIGTERM)
 
     def _schedule_reboot(self, requested_by: str, message: str) -> bool:
         """Schedule one delayed reboot; return False when one is already pending."""
 
-        if self._pending_reboot_task is not None and not self._pending_reboot_task.done():
+        if (
+            self._pending_reboot_task is not None
+            and not self._pending_reboot_task.done()
+        ):
             return False
-        self._pending_reboot_task = asyncio.create_task(self._run_delayed_reboot(requested_by, message))
+        self._pending_reboot_task = asyncio.create_task(
+            self._run_delayed_reboot(requested_by, message)
+        )
         return True
 
-    async def _handle_chat_command(self, client: ClientConnection, message: str) -> bool:
+    async def _handle_chat_command(
+        self, client: ClientConnection, message: str
+    ) -> bool:
         """Handle slash commands in chat input; return True when handled."""
 
         if not message.startswith("/"):
@@ -1973,7 +2349,9 @@ class SignalingServer:
                 )
                 return True
             reboot_message = remainder if separator else ""
-            if not self._schedule_reboot(client.username or client.nickname, reboot_message):
+            if not self._schedule_reboot(
+                client.username or client.nickname, reboot_message
+            ):
                 await self._send(
                     client.websocket,
                     BroadcastChatMessagePacket(
@@ -2004,7 +2382,9 @@ class SignalingServer:
         )
         return True
 
-    async def _handle_admin_packet(self, client: ClientConnection, packet: ClientPacket) -> bool:
+    async def _handle_admin_packet(
+        self, client: ClientConnection, packet: ClientPacket
+    ) -> bool:
         """Handle role/user administration packets with permission checks."""
 
         if not isinstance(
@@ -2023,8 +2403,10 @@ class SignalingServer:
         ):
             return False
 
-        async def deny(action: str, message: str) -> None:
-            await self._send_admin_action_result(client, ok=False, action=action, message=message)
+        async def deny(action: AdminActionName, message: str) -> None:
+            await self._send_admin_action_result(
+                client, ok=False, action=action, message=message
+            )
 
         if isinstance(packet, AdminRolesListPacket):
             if not (
@@ -2033,7 +2415,10 @@ class SignalingServer:
             ):
                 await deny("role_update_permissions", "Not authorized.")
                 return True
-            roles = self.auth_service.list_roles_with_counts()
+            roles = [
+                AdminRoleSummary.model_validate(role)
+                for role in self.auth_service.list_roles_with_counts()
+            ]
             await self._send(
                 client.websocket,
                 AdminRolesListResultPacket(
@@ -2055,10 +2440,20 @@ class SignalingServer:
                 return True
             users = self.auth_service.list_users_for_admin()
             if packet.action == "ban":
-                users = [entry for entry in users if str(entry.get("status")) == "active"]
+                users = [
+                    entry for entry in users if str(entry.get("status")) == "active"
+                ]
             elif packet.action == "unban":
-                users = [entry for entry in users if str(entry.get("status")) == "disabled"]
-            await self._send(client.websocket, AdminUsersListResultPacket(type="admin_users_list", users=users))
+                users = [
+                    entry for entry in users if str(entry.get("status")) == "disabled"
+                ]
+            user_summaries = [AdminUserSummary.model_validate(entry) for entry in users]
+            await self._send(
+                client.websocket,
+                AdminUsersListResultPacket(
+                    type="admin_users_list", users=user_summaries
+                ),
+            )
             return True
 
         if isinstance(packet, AdminRoleCreatePacket):
@@ -2070,17 +2465,28 @@ class SignalingServer:
             except AuthError as exc:
                 await deny("role_create", str(exc))
                 return True
-            LOGGER.info("role created actor=%s role=%s", client.user_id, created["name"])
-            await self._send_admin_action_result(client, ok=True, action="role_create", message=f"Created role {created['name']}.")
+            LOGGER.info(
+                "role created actor=%s role=%s", client.user_id, created["name"]
+            )
+            await self._send_admin_action_result(
+                client,
+                ok=True,
+                action="role_create",
+                message=f"Created role {created['name']}.",
+            )
             return True
 
         if isinstance(packet, AdminRoleUpdatePermissionsPacket):
             if not self._client_has_permission(client, "role.manage"):
                 await deny("role_update_permissions", "Not authorized.")
                 return True
-            affected_user_ids = self.auth_service.list_connected_user_ids_for_role(packet.role)
+            affected_user_ids = self.auth_service.list_connected_user_ids_for_role(
+                packet.role
+            )
             try:
-                assigned = self.auth_service.update_role_permissions(packet.role, packet.permissions)
+                assigned = self.auth_service.update_role_permissions(
+                    packet.role, packet.permissions
+                )
             except AuthError as exc:
                 await deny("role_update_permissions", str(exc))
                 return True
@@ -2104,7 +2510,9 @@ class SignalingServer:
                 await deny("role_delete", "Not authorized.")
                 return True
             try:
-                affected_usernames, replacement = self.auth_service.delete_role(packet.role, packet.replacementRole)
+                affected_usernames, replacement = self.auth_service.delete_role(
+                    packet.role, packet.replacementRole
+                )
             except AuthError as exc:
                 await deny("role_delete", str(exc))
                 return True
@@ -2136,13 +2544,20 @@ class SignalingServer:
                 return True
             target_id = self.auth_service.get_user_id_by_username(packet.username)
             try:
-                username = self.auth_service.set_user_role(packet.username, packet.role, actor_user_id=client.user_id)
+                username = self.auth_service.set_user_role(
+                    packet.username, packet.role, actor_user_id=client.user_id
+                )
             except AuthError as exc:
                 await deny("user_set_role", str(exc))
                 return True
             if target_id:
                 await self._sync_permissions_for_user_ids([target_id])
-            LOGGER.info("user role changed actor=%s target=%s role=%s", client.user_id, username, packet.role)
+            LOGGER.info(
+                "user role changed actor=%s target=%s role=%s",
+                client.user_id,
+                username,
+                packet.role,
+            )
             await self._send_admin_action_result(
                 client,
                 ok=True,
@@ -2157,7 +2572,9 @@ class SignalingServer:
                 return True
             target_id = self.auth_service.get_user_id_by_username(packet.username)
             try:
-                username = self.auth_service.set_user_status(packet.username, "disabled")
+                username = self.auth_service.set_user_status(
+                    packet.username, "disabled"
+                )
             except AuthError as exc:
                 await deny("user_ban", str(exc))
                 return True
@@ -2168,7 +2585,9 @@ class SignalingServer:
                         continue
                     await self._send(
                         active.websocket,
-                        AuthResultPacket(type="auth_result", ok=False, message="Account is disabled."),
+                        AuthResultPacket(
+                            type="auth_result", ok=False, message="Account is disabled."
+                        ),
                     )
                     await active.websocket.close()
             LOGGER.info("user banned actor=%s target=%s", client.user_id, username)
@@ -2207,7 +2626,9 @@ class SignalingServer:
                 return True
             target_id = self.auth_service.get_user_id_by_username(packet.username)
             try:
-                username = self.auth_service.delete_user(packet.username, actor_user_id=client.user_id)
+                username = self.auth_service.delete_user(
+                    packet.username, actor_user_id=client.user_id
+                )
             except AuthError as exc:
                 await deny("user_delete", str(exc))
                 return True
@@ -2217,7 +2638,9 @@ class SignalingServer:
                         continue
                     await self._send(
                         active.websocket,
-                        AuthResultPacket(type="auth_result", ok=False, message="Account deleted."),
+                        AuthResultPacket(
+                            type="auth_result", ok=False, message="Account deleted."
+                        ),
                     )
                     await active.websocket.close()
             LOGGER.info("user deleted actor=%s target=%s", client.user_id, username)
@@ -2260,7 +2683,11 @@ class SignalingServer:
         if not client.authenticated:
             await self._send(
                 client.websocket,
-                AuthResultPacket(type="auth_result", ok=False, message="Authenticate before sending gameplay actions."),
+                AuthResultPacket(
+                    type="auth_result",
+                    ok=False,
+                    message="Authenticate before sending gameplay actions.",
+                ),
             )
             return
 
@@ -2276,7 +2703,9 @@ class SignalingServer:
             return
 
         if not client.world_ready:
-            PACKET_LOGGER.info("ignoring pre-ready packet id=%s type=%s", client.id, packet.type)
+            PACKET_LOGGER.info(
+                "ignoring pre-ready packet id=%s type=%s", client.id, packet.type
+            )
             return
 
         if await self._handle_admin_packet(client, packet):
@@ -2293,13 +2722,19 @@ class SignalingServer:
                 )
                 await self._send(
                     client.websocket,
-                    BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),
+                    BroadcastPositionPacket(
+                        type="update_position", id=client.id, x=client.x, y=client.y
+                    ),
                 )
                 return
             now_ms = self.item_service.now_ms()
             requested_delta = max(abs(packet.x - client.x), abs(packet.y - client.y))
             if not self._consume_movement_budget(client, now_ms, requested_delta):
-                remaining = max(0, self.movement_max_steps_per_tick - client.movement_window_steps_used)
+                remaining = max(
+                    0,
+                    self.movement_max_steps_per_tick
+                    - client.movement_window_steps_used,
+                )
                 PACKET_LOGGER.warning(
                     "position rate limit ignored id=%s from=%d,%d to=%d,%d requested_delta=%d remaining_budget=%d window=%d",
                     client.id,
@@ -2313,7 +2748,9 @@ class SignalingServer:
                 )
                 await self._send(
                     client.websocket,
-                    BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),
+                    BroadcastPositionPacket(
+                        type="update_position", id=client.id, x=client.x, y=client.y
+                    ),
                 )
                 return
             client.x = packet.x
@@ -2322,10 +2759,14 @@ class SignalingServer:
             self._persist_client_position(client)
             await self._send(
                 client.websocket,
-                BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),
+                BroadcastPositionPacket(
+                    type="update_position", id=client.id, x=client.x, y=client.y
+                ),
             )
             await self._broadcast(
-                BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),
+                BroadcastPositionPacket(
+                    type="update_position", id=client.id, x=client.x, y=client.y
+                ),
                 exclude=client.websocket,
             )
             carried = self.item_service.find_carried_item(client.id)
@@ -2350,7 +2791,9 @@ class SignalingServer:
                 )
                 await self._send(
                     client.websocket,
-                    BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),
+                    BroadcastPositionPacket(
+                        type="update_position", id=client.id, x=client.x, y=client.y
+                    ),
                 )
                 return
 
@@ -2360,10 +2803,14 @@ class SignalingServer:
             self._persist_client_position(client, force=True)
             await self._send(
                 client.websocket,
-                BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),
+                BroadcastPositionPacket(
+                    type="update_position", id=client.id, x=client.x, y=client.y
+                ),
             )
             await self._broadcast(
-                BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),
+                BroadcastPositionPacket(
+                    type="update_position", id=client.id, x=client.x, y=client.y
+                ),
                 exclude=client.websocket,
             )
             carried = self.item_service.find_carried_item(client.id)
@@ -2442,7 +2889,12 @@ class SignalingServer:
             if old_nickname == "user...":
                 LOGGER.info("user login id=%s nickname=%s", client.id, client.nickname)
             else:
-                LOGGER.info("nickname change id=%s old=%s new=%s", client.id, old_nickname, client.nickname)
+                LOGGER.info(
+                    "nickname change id=%s old=%s new=%s",
+                    client.id,
+                    old_nickname,
+                    client.nickname,
+                )
             await self._send(
                 client.websocket,
                 NicknameResultPacket(
@@ -2453,7 +2905,9 @@ class SignalingServer:
                 ),
             )
             await self._broadcast(
-                BroadcastNicknamePacket(type="update_nickname", id=client.id, nickname=client.nickname),
+                BroadcastNicknamePacket(
+                    type="update_nickname", id=client.id, nickname=client.nickname
+                ),
                 exclude=client.websocket,
             )
             if old_nickname == "user...":
@@ -2515,7 +2969,9 @@ class SignalingServer:
 
         if isinstance(packet, ItemAddPacket):
             if not self._client_has_permission(client, "item.create"):
-                await self._send_item_result(client, False, "add", "Not authorized to create items.")
+                await self._send_item_result(
+                    client, False, "add", "Not authorized to create items."
+                )
                 return
             if not is_known_item_type(packet.itemType):
                 await self._send_item_result(client, False, "add", "Unknown item type.")
@@ -2552,35 +3008,63 @@ class SignalingServer:
             return
 
         if isinstance(packet, ItemPickupPacket):
-            item = self.items.get(packet.itemId)
-            if not item:
+            pickup_item = self.items.get(packet.itemId)
+            if not pickup_item:
                 await self._send_item_result(client, False, "pickup", "Item not found.")
                 return
-            if item.carrierId and item.carrierId != client.id:
-                await self._send_item_result(client, False, "pickup", "Item is already being carried.", item.id)
+            if pickup_item.carrierId and pickup_item.carrierId != client.id:
+                await self._send_item_result(
+                    client,
+                    False,
+                    "pickup",
+                    "Item is already being carried.",
+                    pickup_item.id,
+                )
                 return
             carried = self.item_service.find_carried_item(client.id)
-            if carried and carried.id != item.id:
-                await self._send_item_result(client, False, "pickup", "You are already carrying an item.", item.id)
+            if carried and carried.id != pickup_item.id:
+                await self._send_item_result(
+                    client,
+                    False,
+                    "pickup",
+                    "You are already carrying an item.",
+                    pickup_item.id,
+                )
                 return
-            if item.carrierId is None and (item.x != client.x or item.y != client.y):
-                await self._send_item_result(client, False, "pickup", "Item is not on your square.", item.id)
+            if pickup_item.carrierId is None and (
+                pickup_item.x != client.x or pickup_item.y != client.y
+            ):
+                await self._send_item_result(
+                    client,
+                    False,
+                    "pickup",
+                    "Item is not on your square.",
+                    pickup_item.id,
+                )
                 return
             can_pickup_any = self._client_has_permission(client, "item.pickup_drop.any")
-            can_pickup_own = self._client_has_permission(client, "item.pickup_drop.own") and self._owns_item(client, item)
+            can_pickup_own = self._client_has_permission(
+                client, "item.pickup_drop.own"
+            ) and self._owns_item(client, pickup_item)
             if not can_pickup_any and not can_pickup_own:
-                await self._send_item_result(client, False, "pickup", "Not authorized to pick up this item.", item.id)
+                await self._send_item_result(
+                    client,
+                    False,
+                    "pickup",
+                    "Not authorized to pick up this item.",
+                    pickup_item.id,
+                )
                 return
-            item.carrierId = client.id
-            item.x = client.x
-            item.y = client.y
-            item.updatedAt = self.item_service.now_ms()
+            pickup_item.carrierId = client.id
+            pickup_item.x = client.x
+            pickup_item.y = client.y
+            pickup_item.updatedAt = self.item_service.now_ms()
             actor_id, actor_name = self._item_updated_actor(client)
-            item.updatedBy = actor_id
-            item.updatedByName = actor_name
-            await self._broadcast_item(item)
+            pickup_item.updatedBy = actor_id
+            pickup_item.updatedByName = actor_name
+            await self._broadcast_item(pickup_item)
             self._request_state_save()
-            item_text = f"{item.title} ({self._item_type_label(item)})"
+            item_text = f"{pickup_item.title} ({self._item_type_label(pickup_item)})"
             await self._broadcast(
                 BroadcastChatMessagePacket(
                     type="chat_message",
@@ -2589,84 +3073,145 @@ class SignalingServer:
                 ),
                 exclude=client.websocket,
             )
-            await self._send_item_result(client, True, "pickup", f"Picked up {item.title}.", item.id)
+            await self._send_item_result(
+                client,
+                True,
+                "pickup",
+                f"Picked up {pickup_item.title}.",
+                pickup_item.id,
+            )
             return
 
         if isinstance(packet, ItemDropPacket):
-            item = self.items.get(packet.itemId)
-            if not item:
+            drop_item = self.items.get(packet.itemId)
+            if not drop_item:
                 await self._send_item_result(client, False, "drop", "Item not found.")
                 return
-            if item.carrierId != client.id:
-                await self._send_item_result(client, False, "drop", "You are not carrying that item.", item.id)
+            if drop_item.carrierId != client.id:
+                await self._send_item_result(
+                    client,
+                    False,
+                    "drop",
+                    "You are not carrying that item.",
+                    drop_item.id,
+                )
                 return
             if not self._is_in_bounds(packet.x, packet.y):
-                await self._send_item_result(client, False, "drop", "Drop position is out of bounds.", item.id)
+                await self._send_item_result(
+                    client,
+                    False,
+                    "drop",
+                    "Drop position is out of bounds.",
+                    drop_item.id,
+                )
                 return
             can_drop_any = self._client_has_permission(client, "item.pickup_drop.any")
-            can_drop_own = self._client_has_permission(client, "item.pickup_drop.own") and self._owns_item(client, item)
+            can_drop_own = self._client_has_permission(
+                client, "item.pickup_drop.own"
+            ) and self._owns_item(client, drop_item)
             if not can_drop_any and not can_drop_own:
-                await self._send_item_result(client, False, "drop", "Not authorized to drop this item.", item.id)
+                await self._send_item_result(
+                    client,
+                    False,
+                    "drop",
+                    "Not authorized to drop this item.",
+                    drop_item.id,
+                )
                 return
-            item.carrierId = None
-            item.x = packet.x
-            item.y = packet.y
-            item.updatedAt = self.item_service.now_ms()
+            drop_item.carrierId = None
+            drop_item.x = packet.x
+            drop_item.y = packet.y
+            drop_item.updatedAt = self.item_service.now_ms()
             actor_id, actor_name = self._item_updated_actor(client)
-            item.updatedBy = actor_id
-            item.updatedByName = actor_name
-            await self._broadcast_item(item)
+            drop_item.updatedBy = actor_id
+            drop_item.updatedByName = actor_name
+            await self._broadcast_item(drop_item)
             self._request_state_save()
-            item_text = f"{item.title} ({self._item_type_label(item)})"
+            item_text = f"{drop_item.title} ({self._item_type_label(drop_item)})"
             await self._broadcast(
                 BroadcastChatMessagePacket(
                     type="chat_message",
-                    message=f"{client.nickname} dropped {item_text} at {item.x}, {item.y}.",
+                    message=f"{client.nickname} dropped {item_text} at {drop_item.x}, {drop_item.y}.",
                     system=True,
                 ),
                 exclude=client.websocket,
             )
-            await self._send_item_result(client, True, "drop", f"Dropped {item.title} at {item.x}, {item.y}.", item.id)
+            await self._send_item_result(
+                client,
+                True,
+                "drop",
+                f"Dropped {drop_item.title} at {drop_item.x}, {drop_item.y}.",
+                drop_item.id,
+            )
             return
 
         if isinstance(packet, ItemDeletePacket):
-            item = self.items.get(packet.itemId)
-            if not item:
+            delete_item = self.items.get(packet.itemId)
+            if not delete_item:
                 await self._send_item_result(client, False, "delete", "Item not found.")
                 return
-            if item.carrierId and item.carrierId != client.id:
-                await self._send_item_result(client, False, "delete", "Item is being carried by another user.", item.id)
+            if delete_item.carrierId and delete_item.carrierId != client.id:
+                await self._send_item_result(
+                    client,
+                    False,
+                    "delete",
+                    "Item is being carried by another user.",
+                    delete_item.id,
+                )
                 return
-            if item.carrierId is None and (item.x != client.x or item.y != client.y):
-                await self._send_item_result(client, False, "delete", "Item is not on your square.", item.id)
+            if delete_item.carrierId is None and (
+                delete_item.x != client.x or delete_item.y != client.y
+            ):
+                await self._send_item_result(
+                    client,
+                    False,
+                    "delete",
+                    "Item is not on your square.",
+                    delete_item.id,
+                )
                 return
             can_delete_any = self._client_has_permission(client, "item.delete.any")
-            can_delete_own = self._client_has_permission(client, "item.delete.own") and self._owns_item(client, item)
+            can_delete_own = self._client_has_permission(
+                client, "item.delete.own"
+            ) and self._owns_item(client, delete_item)
             if not can_delete_any and not can_delete_own:
-                await self._send_item_result(client, False, "delete", "Not authorized to delete this item.", item.id)
+                await self._send_item_result(
+                    client,
+                    False,
+                    "delete",
+                    "Not authorized to delete this item.",
+                    delete_item.id,
+                )
                 return
             LOGGER.info(
                 "item deleted by=%s item_id=%s type=%s title=%s",
                 client.nickname,
-                item.id,
-                item.type,
-                item.title,
+                delete_item.id,
+                delete_item.type,
+                delete_item.title,
             )
-            self._cancel_piano_playback(item.id)
-            recording_state = self.piano_recording_state_by_item.pop(item.id, None)
+            self._cancel_piano_playback(delete_item.id)
+            recording_state = self.piano_recording_state_by_item.pop(
+                delete_item.id, None
+            )
             if recording_state is not None:
                 auto_stop_task = recording_state.get("autoStopTask")
-                if isinstance(auto_stop_task, asyncio.Task) and not auto_stop_task.done():
+                if (
+                    isinstance(auto_stop_task, asyncio.Task)
+                    and not auto_stop_task.done()
+                ):
                     auto_stop_task.cancel()
-            song_id = str(item.params.get("songId", "")).strip()
+            song_id = str(delete_item.params.get("songId", "")).strip()
             if song_id and song_id in self.item_service.piano_songs:
                 self.item_service.piano_songs.pop(song_id, None)
                 self.item_service.save_piano_songs()
-            self.item_service.remove_item(item.id)
-            self.item_last_use_ms.pop(item.id, None)
-            await self._broadcast(ItemRemovePacket(type="item_remove", itemId=item.id))
+            self.item_service.remove_item(delete_item.id)
+            self.item_last_use_ms.pop(delete_item.id, None)
+            await self._broadcast(
+                ItemRemovePacket(type="item_remove", itemId=delete_item.id)
+            )
             self._request_state_save()
-            item_text = f"{item.title} ({self._item_type_label(item)})"
+            item_text = f"{delete_item.title} ({self._item_type_label(delete_item)})"
             await self._broadcast(
                 BroadcastChatMessagePacket(
                     type="chat_message",
@@ -2675,24 +3220,51 @@ class SignalingServer:
                 ),
                 exclude=client.websocket,
             )
-            await self._send_item_result(client, True, "delete", f"You deleted {item_text}.", item.id)
+            await self._send_item_result(
+                client, True, "delete", f"You deleted {item_text}.", delete_item.id
+            )
             return
 
         if isinstance(packet, ItemTransferTargetsPacket):
-            item = self.items.get(packet.itemId)
-            if not item:
-                await self._send_item_result(client, False, "transfer", "Item not found.")
+            transfer_targets_item = self.items.get(packet.itemId)
+            if not transfer_targets_item:
+                await self._send_item_result(
+                    client, False, "transfer", "Item not found."
+                )
                 return
-            if item.carrierId:
-                await self._send_item_result(client, False, "transfer", "Item cannot be transferred while carried.", item.id)
+            if transfer_targets_item.carrierId:
+                await self._send_item_result(
+                    client,
+                    False,
+                    "transfer",
+                    "Item cannot be transferred while carried.",
+                    transfer_targets_item.id,
+                )
                 return
-            if item.x != client.x or item.y != client.y:
-                await self._send_item_result(client, False, "transfer", "Item is not on your square.", item.id)
+            if (
+                transfer_targets_item.x != client.x
+                or transfer_targets_item.y != client.y
+            ):
+                await self._send_item_result(
+                    client,
+                    False,
+                    "transfer",
+                    "Item is not on your square.",
+                    transfer_targets_item.id,
+                )
                 return
             can_transfer_any = self._client_has_permission(client, "item.transfer.any")
-            can_transfer_own = self._client_has_permission(client, "item.transfer.own") and self._owns_item(client, item)
+            can_transfer_own = self._client_has_permission(
+                client, "item.transfer.own"
+            ) and self._owns_item(client, transfer_targets_item)
             if not can_transfer_any and not can_transfer_own:
-                await self._send_item_result(client, False, "transfer", "Not authorized to transfer this item.", item.id)
+                await self._send_item_result(
+                    client,
+                    False,
+                    "transfer",
+                    "Not authorized to transfer this item.",
+                    transfer_targets_item.id,
+                )
                 return
             users = self.auth_service.list_users_for_admin()
             connected_user_ids = {
@@ -2701,46 +3273,81 @@ class SignalingServer:
                 if other.authenticated and other.user_id
             }
             targets = [
-                {
-                    "userId": str(entry["id"]),
-                    "username": str(entry["username"]),
-                    "online": str(entry.get("id")) in connected_user_ids,
-                }
+                ItemTransferTargetSummary(
+                    userId=str(entry["id"]),
+                    username=str(entry["username"]),
+                    online=str(entry.get("id")) in connected_user_ids,
+                )
                 for entry in users
-                if str(entry.get("status")) == "active" and str(entry["id"]) != item.createdBy
+                if str(entry.get("status")) == "active"
+                and str(entry["id"]) != transfer_targets_item.createdBy
             ]
             await self._send(
                 client.websocket,
                 ItemTransferTargetsResultPacket(
                     type="item_transfer_targets",
-                    itemId=item.id,
+                    itemId=transfer_targets_item.id,
                     targets=targets,
                 ),
             )
             return
 
         if isinstance(packet, ItemTransferPacket):
-            item = self.items.get(packet.itemId)
-            if not item:
-                await self._send_item_result(client, False, "transfer", "Item not found.")
+            transfer_item = self.items.get(packet.itemId)
+            if not transfer_item:
+                await self._send_item_result(
+                    client, False, "transfer", "Item not found."
+                )
                 return
-            if item.carrierId:
-                await self._send_item_result(client, False, "transfer", "Item cannot be transferred while carried.", item.id)
+            if transfer_item.carrierId:
+                await self._send_item_result(
+                    client,
+                    False,
+                    "transfer",
+                    "Item cannot be transferred while carried.",
+                    transfer_item.id,
+                )
                 return
-            if item.x != client.x or item.y != client.y:
-                await self._send_item_result(client, False, "transfer", "Item is not on your square.", item.id)
+            if transfer_item.x != client.x or transfer_item.y != client.y:
+                await self._send_item_result(
+                    client,
+                    False,
+                    "transfer",
+                    "Item is not on your square.",
+                    transfer_item.id,
+                )
                 return
             can_transfer_any = self._client_has_permission(client, "item.transfer.any")
-            can_transfer_own = self._client_has_permission(client, "item.transfer.own") and self._owns_item(client, item)
+            can_transfer_own = self._client_has_permission(
+                client, "item.transfer.own"
+            ) and self._owns_item(client, transfer_item)
             if not can_transfer_any and not can_transfer_own:
-                await self._send_item_result(client, False, "transfer", "Not authorized to transfer this item.", item.id)
+                await self._send_item_result(
+                    client,
+                    False,
+                    "transfer",
+                    "Not authorized to transfer this item.",
+                    transfer_item.id,
+                )
                 return
             target_user_id = str(packet.targetUserId).strip()
             if not target_user_id:
-                await self._send_item_result(client, False, "transfer", "Target user is not available.", item.id)
+                await self._send_item_result(
+                    client,
+                    False,
+                    "transfer",
+                    "Target user is not available.",
+                    transfer_item.id,
+                )
                 return
-            if item.createdBy == target_user_id:
-                await self._send_item_result(client, False, "transfer", "Item already belongs to that user.", item.id)
+            if transfer_item.createdBy == target_user_id:
+                await self._send_item_result(
+                    client,
+                    False,
+                    "transfer",
+                    "Item already belongs to that user.",
+                    transfer_item.id,
+                )
                 return
             target = next(
                 (
@@ -2755,18 +3362,21 @@ class SignalingServer:
                 if target and target.username
                 else target.nickname
                 if target
-                else self.auth_service.get_username_by_id(target_user_id) or target_user_id
+                else self.auth_service.get_username_by_id(target_user_id)
+                or target_user_id
             )
-            item.createdBy = target_user_id
-            item.createdByName = target_username
-            item.updatedAt = self.item_service.now_ms()
+            transfer_item.createdBy = target_user_id
+            transfer_item.createdByName = target_username
+            transfer_item.updatedAt = self.item_service.now_ms()
             actor_id, actor_name = self._item_updated_actor(client)
-            item.updatedBy = actor_id
-            item.updatedByName = actor_name
-            item.version += 1
-            await self._broadcast_item(item)
+            transfer_item.updatedBy = actor_id
+            transfer_item.updatedByName = actor_name
+            transfer_item.version += 1
+            await self._broadcast_item(transfer_item)
             self._request_state_save()
-            item_text = f"{item.title} ({self._item_type_label(item)})"
+            item_text = (
+                f"{transfer_item.title} ({self._item_type_label(transfer_item)})"
+            )
             await self._broadcast(
                 BroadcastChatMessagePacket(
                     type="chat_message",
@@ -2780,28 +3390,36 @@ class SignalingServer:
                 True,
                 "transfer",
                 f"You transferred {item_text} to {target_username}.",
-                item.id,
+                transfer_item.id,
             )
             return
 
         if isinstance(packet, ItemUsePacket):
             if not self._client_has_permission(client, "item.use"):
-                await self._send_item_result(client, False, "use", "Not authorized to use items.")
+                await self._send_item_result(
+                    client, False, "use", "Not authorized to use items."
+                )
                 return
-            item = self.items.get(packet.itemId)
-            if not item:
+            use_item = self.items.get(packet.itemId)
+            if not use_item:
                 await self._send_item_result(client, False, "use", "Item not found.")
                 return
-            if item.carrierId not in (None, client.id):
-                await self._send_item_result(client, False, "use", "Item is not available.", item.id)
+            if use_item.carrierId not in (None, client.id):
+                await self._send_item_result(
+                    client, False, "use", "Item is not available.", use_item.id
+                )
                 return
-            if item.carrierId is None and (item.x != client.x or item.y != client.y):
-                await self._send_item_result(client, False, "use", "Item is not on your square.", item.id)
+            if use_item.carrierId is None and (
+                use_item.x != client.x or use_item.y != client.y
+            ):
+                await self._send_item_result(
+                    client, False, "use", "Item is not on your square.", use_item.id
+                )
                 return
-            handler = get_item_type_handler(item.type)
+            handler = get_item_type_handler(use_item.type)
             now_ms = self.item_service.now_ms()
-            cooldown_ms = get_item_use_cooldown_ms(item.type)
-            last_use_ms = self.item_last_use_ms.get(item.id)
+            cooldown_ms = get_item_use_cooldown_ms(use_item.type)
+            last_use_ms = self.item_last_use_ms.get(use_item.id)
             if last_use_ms is not None and now_ms - last_use_ms < cooldown_ms:
                 remaining_ms = cooldown_ms - (now_ms - last_use_ms)
                 remaining_seconds = max(0.1, round(remaining_ms / 1000, 1))
@@ -2809,60 +3427,79 @@ class SignalingServer:
                     client,
                     False,
                     "use",
-                    f"{item.title} is on cooldown for {remaining_seconds:.1f} s.",
-                    item.id,
+                    f"{use_item.title} is on cooldown for {remaining_seconds:.1f} s.",
+                    use_item.id,
                 )
                 return
             try:
-                use_result = handler.use(item, client.nickname, self._format_clock_display_time)
+                use_result = handler.use(
+                    use_item, client.nickname, self._format_clock_display_time
+                )
             except ValueError as exc:
-                await self._send_item_result(client, False, "use", str(exc), item.id)
+                await self._send_item_result(
+                    client, False, "use", str(exc), use_item.id
+                )
                 return
 
             if use_result.updated_params is not None:
                 try:
-                    item.params = handler.validate_update(item, {**item.params, **use_result.updated_params})
+                    use_item.params = handler.validate_update(
+                        use_item, {**use_item.params, **use_result.updated_params}
+                    )
                 except ValueError as exc:
-                    await self._send_item_result(client, False, "use", str(exc), item.id)
+                    await self._send_item_result(
+                        client, False, "use", str(exc), use_item.id
+                    )
                     return
-                item.updatedAt = now_ms
+                use_item.updatedAt = now_ms
                 actor_id, actor_name = self._item_updated_actor(client)
-                item.updatedBy = actor_id
-                item.updatedByName = actor_name
+                use_item.updatedBy = actor_id
+                use_item.updatedByName = actor_name
                 self._request_state_save()
-                await self._broadcast_item(item)
+                await self._broadcast_item(use_item)
 
-            self.item_last_use_ms[item.id] = now_ms
+            self.item_last_use_ms[use_item.id] = now_ms
             if use_result.others_message:
                 await self._broadcast(
-                    BroadcastChatMessagePacket(type="chat_message", message=use_result.others_message, system=True),
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message=use_result.others_message,
+                        system=True,
+                    ),
                     exclude=client.websocket,
                 )
-            use_sound = self._resolve_item_use_sound(item)
+            use_sound = self._resolve_item_use_sound(use_item)
             if use_sound:
-                sound_x, sound_y = self._get_item_sound_source_position(item)
-                sound_range = self._get_item_emit_range(item)
+                sound_x, sound_y = self._get_item_sound_source_position(use_item)
+                sound_range = self._get_item_emit_range(use_item)
                 await self._broadcast(
                     ItemUseSoundPacket(
                         type="item_use_sound",
-                        itemId=item.id,
+                        itemId=use_item.id,
                         sound=use_sound,
                         x=sound_x,
                         y=sound_y,
                         range=sound_range,
                     )
                 )
-            if item.type == "clock":
-                await self._broadcast_clock_announcement(item, top_of_hour=False, alarm=False)
-            if item.type == "piano":
+            if use_item.type == "clock":
+                await self._broadcast_clock_announcement(
+                    use_item, top_of_hour=False, alarm=False
+                )
+            if use_item.type == "piano":
                 await self._send_piano_status(
                     client,
-                    item_id=item.id,
+                    item_id=use_item.id,
                     event="use_mode_entered",
                     recording_state="idle",
                 )
-            await self._send_item_result(client, True, "use", use_result.self_message, item.id)
-            if use_result.delayed_self_message is not None and use_result.delayed_others_message is not None:
+            await self._send_item_result(
+                client, True, "use", use_result.self_message, use_item.id
+            )
+            if (
+                use_result.delayed_self_message is not None
+                and use_result.delayed_others_message is not None
+            ):
                 asyncio.create_task(
                     self._broadcast_wheel_result_after_delay(
                         client=client,
@@ -2874,85 +3511,172 @@ class SignalingServer:
 
         if isinstance(packet, ItemSecondaryUsePacket):
             if not self._client_has_permission(client, "item.use"):
-                await self._send_item_result(client, False, "secondary_use", "Not authorized to use items.")
+                await self._send_item_result(
+                    client, False, "secondary_use", "Not authorized to use items."
+                )
                 return
-            item = self.items.get(packet.itemId)
-            if not item:
-                await self._send_item_result(client, False, "secondary_use", "Item not found.")
+            secondary_item = self.items.get(packet.itemId)
+            if not secondary_item:
+                await self._send_item_result(
+                    client, False, "secondary_use", "Item not found."
+                )
                 return
-            if item.carrierId not in (None, client.id):
-                await self._send_item_result(client, False, "secondary_use", "Item is not available.", item.id)
+            if secondary_item.carrierId not in (None, client.id):
+                await self._send_item_result(
+                    client,
+                    False,
+                    "secondary_use",
+                    "Item is not available.",
+                    secondary_item.id,
+                )
                 return
-            if item.carrierId is None and (item.x != client.x or item.y != client.y):
-                await self._send_item_result(client, False, "secondary_use", "Item is not on your square.", item.id)
+            if secondary_item.carrierId is None and (
+                secondary_item.x != client.x or secondary_item.y != client.y
+            ):
+                await self._send_item_result(
+                    client,
+                    False,
+                    "secondary_use",
+                    "Item is not on your square.",
+                    secondary_item.id,
+                )
                 return
-            handler = get_item_type_handler(item.type)
+            handler = get_item_type_handler(secondary_item.type)
             if handler.secondary_use is None:
                 await self._send_item_result(
                     client,
                     False,
                     "secondary_use",
-                    f"No secondary action for {item.title}.",
-                    item.id,
+                    f"No secondary action for {secondary_item.title}.",
+                    secondary_item.id,
                 )
                 return
             try:
-                secondary_result = handler.secondary_use(item, client.nickname, self._format_clock_display_time)
+                secondary_result = handler.secondary_use(
+                    secondary_item, client.nickname, self._format_clock_display_time
+                )
             except ValueError as exc:
-                await self._send_item_result(client, False, "secondary_use", str(exc), item.id)
+                await self._send_item_result(
+                    client, False, "secondary_use", str(exc), secondary_item.id
+                )
                 return
             if secondary_result.updated_params is not None:
                 try:
-                    item.params = handler.validate_update(item, {**item.params, **secondary_result.updated_params})
+                    secondary_item.params = handler.validate_update(
+                        secondary_item,
+                        {**secondary_item.params, **secondary_result.updated_params},
+                    )
                 except ValueError as exc:
-                    await self._send_item_result(client, False, "secondary_use", str(exc), item.id)
+                    await self._send_item_result(
+                        client, False, "secondary_use", str(exc), secondary_item.id
+                    )
                     return
-                item.updatedAt = self.item_service.now_ms()
+                secondary_item.updatedAt = self.item_service.now_ms()
                 actor_id, actor_name = self._item_updated_actor(client)
-                item.updatedBy = actor_id
-                item.updatedByName = actor_name
-                item.version += 1
+                secondary_item.updatedBy = actor_id
+                secondary_item.updatedByName = actor_name
+                secondary_item.version += 1
                 self._request_state_save()
-                await self._broadcast_item(item)
+                await self._broadcast_item(secondary_item)
             if secondary_result.others_message.strip():
                 await self._broadcast(
-                    BroadcastChatMessagePacket(type="chat_message", message=secondary_result.others_message, system=True),
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message=secondary_result.others_message,
+                        system=True,
+                    ),
                     exclude=client.websocket,
                 )
-            await self._send_item_result(client, True, "secondary_use", secondary_result.self_message, item.id)
+            await self._send_item_result(
+                client,
+                True,
+                "secondary_use",
+                secondary_result.self_message,
+                secondary_item.id,
+            )
             return
 
         if isinstance(packet, ItemPianoNotePacket):
             if not self._client_has_permission(client, "item.use"):
                 return
-            item = self.items.get(packet.itemId)
-            if not item or item.type != "piano":
+            piano_item = self.items.get(packet.itemId)
+            if not piano_item or piano_item.type != "piano":
                 return
-            if item.carrierId not in (None, client.id):
+            if piano_item.carrierId not in (None, client.id):
                 return
-            if item.carrierId is None and (item.x != client.x or item.y != client.y):
+            if piano_item.carrierId is None and (
+                piano_item.x != client.x or piano_item.y != client.y
+            ):
                 return
             active_keys = self.active_piano_keys_by_client.setdefault(client.id, set())
             if packet.on:
-                if packet.keyId not in active_keys and len(active_keys) >= MAX_ACTIVE_PIANO_KEYS_PER_CLIENT:
+                if (
+                    packet.keyId not in active_keys
+                    and len(active_keys) >= MAX_ACTIVE_PIANO_KEYS_PER_CLIENT
+                ):
                     return
                 active_keys.add(packet.keyId)
             else:
                 active_keys.discard(packet.keyId)
-            recording_state = self.piano_recording_state_by_item.get(item.id)
-            if recording_state and recording_state.get("ownerClientId") == client.id and recording_state.get("paused") is not True:
-                elapsed_ms = max(0, min(PIANO_RECORDING_MAX_MS, self._recording_elapsed_ms(recording_state)))
+            recording_state = self.piano_recording_state_by_item.get(piano_item.id)
+            if (
+                recording_state
+                and recording_state.get("ownerClientId") == client.id
+                and recording_state.get("paused") is not True
+            ):
+                elapsed_ms = max(
+                    0,
+                    min(
+                        PIANO_RECORDING_MAX_MS,
+                        self._recording_elapsed_ms(recording_state),
+                    ),
+                )
                 events = recording_state.get("events")
-                if isinstance(events, list) and len(events) < PIANO_RECORDING_MAX_EVENTS:
-                    instrument = str(item.params.get("instrument", "piano")).strip().lower()
-                    voice_mode = str(item.params.get("voiceMode", "poly")).strip().lower()
+                if (
+                    isinstance(events, list)
+                    and len(events) < PIANO_RECORDING_MAX_EVENTS
+                ):
+                    instrument = (
+                        str(piano_item.params.get("instrument", "piano"))
+                        .strip()
+                        .lower()
+                    )
+                    voice_mode = (
+                        str(piano_item.params.get("voiceMode", "poly")).strip().lower()
+                    )
                     if voice_mode not in {"poly", "mono"}:
                         voice_mode = "poly"
-                    attack = int(item.params.get("attack", 15)) if isinstance(item.params.get("attack", 15), (int, float)) else 15
-                    decay = int(item.params.get("decay", 45)) if isinstance(item.params.get("decay", 45), (int, float)) else 45
-                    release = int(item.params.get("release", 35)) if isinstance(item.params.get("release", 35), (int, float)) else 35
-                    brightness = int(item.params.get("brightness", 55)) if isinstance(item.params.get("brightness", 55), (int, float)) else 55
-                    emit_range = int(item.params.get("emitRange", 15)) if isinstance(item.params.get("emitRange", 15), (int, float)) else 15
+                    attack = (
+                        int(piano_item.params.get("attack", 15))
+                        if isinstance(piano_item.params.get("attack", 15), (int, float))
+                        else 15
+                    )
+                    decay = (
+                        int(piano_item.params.get("decay", 45))
+                        if isinstance(piano_item.params.get("decay", 45), (int, float))
+                        else 45
+                    )
+                    release = (
+                        int(piano_item.params.get("release", 35))
+                        if isinstance(
+                            piano_item.params.get("release", 35), (int, float)
+                        )
+                        else 35
+                    )
+                    brightness = (
+                        int(piano_item.params.get("brightness", 55))
+                        if isinstance(
+                            piano_item.params.get("brightness", 55), (int, float)
+                        )
+                        else 55
+                    )
+                    emit_range = (
+                        int(piano_item.params.get("emitRange", 15))
+                        if isinstance(
+                            piano_item.params.get("emitRange", 15), (int, float)
+                        )
+                        else 15
+                    )
                     events.append(
                         {
                             "t": elapsed_ms,
@@ -2969,9 +3693,11 @@ class SignalingServer:
                         }
                     )
                 if elapsed_ms >= PIANO_RECORDING_MAX_MS:
-                    await self._finalize_piano_recording(item.id, notify_owner=True)
+                    await self._finalize_piano_recording(
+                        piano_item.id, notify_owner=True
+                    )
             await self._broadcast_item_piano_note(
-                item,
+                piano_item,
                 sender_id=client.id,
                 key_id=packet.keyId,
                 midi=packet.midi,
@@ -2982,133 +3708,261 @@ class SignalingServer:
 
         if isinstance(packet, ItemPianoRecordingPacket):
             if not self._client_has_permission(client, "item.use"):
-                await self._send_item_result(client, False, "use", "Not authorized to use items.")
+                await self._send_item_result(
+                    client, False, "use", "Not authorized to use items."
+                )
                 return
-            item = self.items.get(packet.itemId)
-            if not item or item.type != "piano":
+            recording_item = self.items.get(packet.itemId)
+            if not recording_item or recording_item.type != "piano":
                 await self._send_item_result(client, False, "use", "Piano not found.")
                 return
-            if item.carrierId not in (None, client.id):
-                await self._send_item_result(client, False, "use", "Piano is not available.", item.id)
+            if recording_item.carrierId not in (None, client.id):
+                await self._send_item_result(
+                    client, False, "use", "Piano is not available.", recording_item.id
+                )
                 return
-            if item.carrierId is None and (item.x != client.x or item.y != client.y):
-                await self._send_item_result(client, False, "use", "Piano is not on your square.", item.id)
+            if recording_item.carrierId is None and (
+                recording_item.x != client.x or recording_item.y != client.y
+            ):
+                await self._send_item_result(
+                    client,
+                    False,
+                    "use",
+                    "Piano is not on your square.",
+                    recording_item.id,
+                )
                 return
 
             if packet.action == "toggle_record":
-                existing = self.piano_recording_state_by_item.get(item.id)
+                existing = self.piano_recording_state_by_item.get(recording_item.id)
                 if existing and existing.get("ownerClientId") != client.id:
-                    await self._send_item_result(client, False, "use", "This piano is already recording.", item.id)
+                    await self._send_item_result(
+                        client,
+                        False,
+                        "use",
+                        "This piano is already recording.",
+                        recording_item.id,
+                    )
                     return
                 if existing and existing.get("ownerClientId") == client.id:
                     if existing.get("paused") is True:
                         existing["paused"] = False
                         existing["lastResumeMonotonic"] = time.monotonic()
-                        await self._send_piano_status(client, item_id=item.id, event="record_resumed", recording_state="recording")
-                        await self._send_item_result(client, True, "use", "Recording resumed.", item.id)
+                        await self._send_piano_status(
+                            client,
+                            item_id=recording_item.id,
+                            event="record_resumed",
+                            recording_state="recording",
+                        )
+                        await self._send_item_result(
+                            client, True, "use", "Recording resumed.", recording_item.id
+                        )
                     else:
                         existing["elapsedMs"] = self._recording_elapsed_ms(existing)
                         existing["paused"] = True
                         existing.pop("lastResumeMonotonic", None)
-                        await self._send_piano_status(client, item_id=item.id, event="record_paused", recording_state="paused")
-                        await self._send_item_result(client, True, "use", "Recording paused.", item.id)
+                        await self._send_piano_status(
+                            client,
+                            item_id=recording_item.id,
+                            event="record_paused",
+                            recording_state="paused",
+                        )
+                        await self._send_item_result(
+                            client, True, "use", "Recording paused.", recording_item.id
+                        )
                     return
-                self._cancel_piano_playback(item.id)
-                recording_state = {
+                self._cancel_piano_playback(recording_item.id)
+                new_recording_state: PianoRecordingSession = {
                     "ownerClientId": client.id,
                     "elapsedMs": 0,
                     "paused": False,
                     "lastResumeMonotonic": time.monotonic(),
                     "events": [],
                 }
-                self.piano_recording_state_by_item[item.id] = recording_state
-                auto_stop_task = asyncio.create_task(self._auto_stop_piano_recording(item.id))
-                recording_state["autoStopTask"] = auto_stop_task
-                await self._send_piano_status(client, item_id=item.id, event="record_started", recording_state="recording")
-                await self._send_item_result(client, True, "use", "Recording started.", item.id)
+                self.piano_recording_state_by_item[recording_item.id] = (
+                    new_recording_state
+                )
+                auto_stop_task = asyncio.create_task(
+                    self._auto_stop_piano_recording(recording_item.id)
+                )
+                new_recording_state["autoStopTask"] = auto_stop_task
+                await self._send_piano_status(
+                    client,
+                    item_id=recording_item.id,
+                    event="record_started",
+                    recording_state="recording",
+                )
+                await self._send_item_result(
+                    client, True, "use", "Recording started.", recording_item.id
+                )
                 return
 
             if packet.action == "stop_record":
-                existing = self.piano_recording_state_by_item.get(item.id)
+                existing = self.piano_recording_state_by_item.get(recording_item.id)
                 if existing and existing.get("ownerClientId") != client.id:
-                    await self._send_item_result(client, False, "use", "This piano is already recording.", item.id)
+                    await self._send_item_result(
+                        client,
+                        False,
+                        "use",
+                        "This piano is already recording.",
+                        recording_item.id,
+                    )
                     return
                 if existing and existing.get("ownerClientId") == client.id:
-                    await self._finalize_piano_recording(item.id, notify_owner=True)
+                    await self._finalize_piano_recording(
+                        recording_item.id, notify_owner=True
+                    )
                     return
-                await self._send_piano_status(client, item_id=item.id, event="record_stopped", recording_state="idle")
-                await self._send_item_result(client, True, "use", "Recording stopped.", item.id)
+                await self._send_piano_status(
+                    client,
+                    item_id=recording_item.id,
+                    event="record_stopped",
+                    recording_state="idle",
+                )
+                await self._send_item_result(
+                    client, True, "use", "Recording stopped.", recording_item.id
+                )
                 return
 
             if packet.action == "playback":
-                if item.id in self.piano_recording_state_by_item:
-                    await self._send_item_result(client, False, "use", "Stop recording before playback.", item.id)
+                if recording_item.id in self.piano_recording_state_by_item:
+                    await self._send_item_result(
+                        client,
+                        False,
+                        "use",
+                        "Stop recording before playback.",
+                        recording_item.id,
+                    )
                     return
-                song_id = str(item.params.get("songId", "")).strip()
-                has_song = isinstance(self.item_service.piano_songs.get(song_id), dict) if song_id else False
+                song_id = str(recording_item.params.get("songId", "")).strip()
+                has_song = (
+                    isinstance(self.item_service.piano_songs.get(song_id), dict)
+                    if song_id
+                    else False
+                )
                 if not has_song:
-                    await self._send_item_result(client, False, "use", "No recording saved on this piano.", item.id)
+                    await self._send_item_result(
+                        client,
+                        False,
+                        "use",
+                        "No recording saved on this piano.",
+                        recording_item.id,
+                    )
                     return
-                self._cancel_piano_playback(item.id)
-                playback_task = asyncio.create_task(self._start_piano_playback(item))
-                self.piano_playback_tasks_by_item[item.id] = playback_task
-                await self._send_piano_status(client, item_id=item.id, event="playback_started", recording_state="playback")
-                await self._send_item_result(client, True, "use", "Playback started.", item.id)
+                self._cancel_piano_playback(recording_item.id)
+                playback_task = asyncio.create_task(
+                    self._start_piano_playback(recording_item)
+                )
+                self.piano_playback_tasks_by_item[recording_item.id] = playback_task
+                await self._send_piano_status(
+                    client,
+                    item_id=recording_item.id,
+                    event="playback_started",
+                    recording_state="playback",
+                )
+                await self._send_item_result(
+                    client, True, "use", "Playback started.", recording_item.id
+                )
                 return
 
             if packet.action == "stop_playback":
-                self._cancel_piano_playback(item.id)
-                await self._send_piano_status(client, item_id=item.id, event="playback_stopped", recording_state="idle")
-                await self._send_item_result(client, True, "use", "Playback stopped.", item.id)
+                self._cancel_piano_playback(recording_item.id)
+                await self._send_piano_status(
+                    client,
+                    item_id=recording_item.id,
+                    event="playback_stopped",
+                    recording_state="idle",
+                )
+                await self._send_item_result(
+                    client, True, "use", "Playback stopped.", recording_item.id
+                )
                 return
             return
 
         if isinstance(packet, ItemUpdatePacket):
-            item = self.items.get(packet.itemId)
-            if not item:
+            update_item = self.items.get(packet.itemId)
+            if not update_item:
                 await self._send_item_result(client, False, "update", "Item not found.")
                 return
-            if item.carrierId not in (None, client.id):
-                await self._send_item_result(client, False, "update", "Item is not available for editing.", item.id)
+            if update_item.carrierId not in (None, client.id):
+                await self._send_item_result(
+                    client,
+                    False,
+                    "update",
+                    "Item is not available for editing.",
+                    update_item.id,
+                )
                 return
-            if item.carrierId is None and (item.x != client.x or item.y != client.y):
-                await self._send_item_result(client, False, "update", "Item is not on your square.", item.id)
+            if update_item.carrierId is None and (
+                update_item.x != client.x or update_item.y != client.y
+            ):
+                await self._send_item_result(
+                    client,
+                    False,
+                    "update",
+                    "Item is not on your square.",
+                    update_item.id,
+                )
                 return
             can_edit_any = self._client_has_permission(client, "item.edit.any")
-            can_edit_own = self._client_has_permission(client, "item.edit.own") and self._owns_item(client, item)
+            can_edit_own = self._client_has_permission(
+                client, "item.edit.own"
+            ) and self._owns_item(client, update_item)
             if not can_edit_any and not can_edit_own:
-                await self._send_item_result(client, False, "update", "Not authorized to edit this item.", item.id)
+                await self._send_item_result(
+                    client,
+                    False,
+                    "update",
+                    "Not authorized to edit this item.",
+                    update_item.id,
+                )
                 return
             if packet.title is not None:
                 title = packet.title.strip()
                 if not title:
-                    await self._send_item_result(client, False, "update", "Title cannot be empty.", item.id)
+                    await self._send_item_result(
+                        client,
+                        False,
+                        "update",
+                        "Title cannot be empty.",
+                        update_item.id,
+                    )
                     return
-                item.title = title[:80]
+                update_item.title = title[:80]
             if packet.params:
-                next_params = {**item.params, **packet.params}
-                handler = get_item_type_handler(item.type)
+                next_params = {**update_item.params, **packet.params}
+                handler = get_item_type_handler(update_item.type)
                 try:
-                    next_params = handler.validate_update(item, next_params)
+                    next_params = handler.validate_update(update_item, next_params)
                 except ValueError as exc:
-                    await self._send_item_result(client, False, "update", str(exc), item.id)
+                    await self._send_item_result(
+                        client, False, "update", str(exc), update_item.id
+                    )
                     return
-                item.params = next_params
-            item.updatedAt = self.item_service.now_ms()
+                update_item.params = next_params
+            update_item.updatedAt = self.item_service.now_ms()
             actor_id, actor_name = self._item_updated_actor(client)
-            item.updatedBy = actor_id
-            item.updatedByName = actor_name
-            item.version += 1
-            await self._broadcast_item(item)
+            update_item.updatedBy = actor_id
+            update_item.updatedByName = actor_name
+            update_item.version += 1
+            await self._broadcast_item(update_item)
             self._request_state_save()
-            await self._send_item_result(client, True, "update", f"Updated {item.title}.", item.id)
+            await self._send_item_result(
+                client, True, "update", f"Updated {update_item.title}.", update_item.id
+            )
             return
 
         if not self._client_has_permission(client, "voice.send"):
             return
+        if not isinstance(packet, SignalPacket):
+            return
         target = self._find_by_id(packet.targetId)
         if not target:
-            PACKET_LOGGER.info("signal target not found sender=%s target=%s", client.id, packet.targetId)
+            PACKET_LOGGER.info(
+                "signal target not found sender=%s target=%s",
+                client.id,
+                packet.targetId,
+            )
             return
 
         await self._send(
@@ -3124,13 +3978,19 @@ class SignalingServer:
             ),
         )
 
-    async def _broadcast(self, packet: object, exclude: ServerConnection | None = None) -> None:
+    async def _broadcast(
+        self, packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         """Broadcast one packet to all clients except an optional websocket."""
 
-        recipients = [websocket for websocket in self.clients if websocket is not exclude]
+        recipients = [
+            websocket for websocket in self.clients if websocket is not exclude
+        ]
         if not recipients:
             return
-        await asyncio.gather(*(self._send(websocket, packet) for websocket in recipients))
+        await asyncio.gather(
+            *(self._send(websocket, packet) for websocket in recipients)
+        )
 
     async def _send(self, websocket: ServerConnection, packet: object) -> None:
         """Send one packet to one websocket, swallowing per-client send failures."""
@@ -3141,7 +4001,9 @@ class SignalingServer:
             else:
                 data = packet
             await websocket.send(json.dumps(data))
-        except Exception as exc:  # intentionally broad to keep server alive per client error
+        except (
+            Exception
+        ) as exc:  # intentionally broad to keep server alive per client error
             LOGGER.debug("send failure: %s", exc)
 
     def _find_by_id(self, client_id: str) -> ClientConnection | None:
@@ -3187,7 +4049,9 @@ def run() -> None:
     if args.allow_insecure_ws is True:
         allow_insecure_ws = True
 
-    ssl_cert = args.ssl_cert if args.ssl_cert is not None else config.tls.cert_file or None
+    ssl_cert = (
+        args.ssl_cert if args.ssl_cert is not None else config.tls.cert_file or None
+    )
     ssl_key = args.ssl_key if args.ssl_key is not None else config.tls.key_file or None
     state_file_value = config.storage.state_file.strip()
     state_file: Path | None = None
@@ -3272,7 +4136,9 @@ def run() -> None:
 
                     email = input("Admin email (optional): ").strip() or None
                     try:
-                        created = auth_service.bootstrap_admin(normalized_username, password, email=email)
+                        created = auth_service.bootstrap_admin(
+                            normalized_username, password, email=email
+                        )
                         print(f"Admin created: {created.username}")
                         return True
                     except AuthError as exc:

@@ -28,7 +28,9 @@ class ItemModule(Protocol):
     PROPERTY_METADATA: dict[str, dict[str, object]]
     validate_update: Callable[[WorldItem, dict], dict]
     use_item: Callable[[WorldItem, str, Callable[[dict], str]], ItemUseResult]
-    secondary_use_item: Callable[[WorldItem, str, Callable[[dict], str]], ItemUseResult] | None
+    secondary_use_item: (
+        Callable[[WorldItem, str, Callable[[dict], str]], ItemUseResult] | None
+    )
 
 
 @dataclass(frozen=True)
@@ -87,4 +89,6 @@ def _load_item_type_plugins() -> list[ItemTypePlugin]:
 
 ITEM_PLUGINS: tuple[ItemTypePlugin, ...] = tuple(_load_item_type_plugins())
 ITEM_TYPE_ORDER: tuple[str, ...] = tuple(plugin.type for plugin in ITEM_PLUGINS)
-ITEM_MODULES: dict[str, ItemModule] = {plugin.type: plugin.module for plugin in ITEM_PLUGINS}
+ITEM_MODULES: dict[str, ItemModule] = {
+    plugin.type: plugin.module for plugin in ITEM_PLUGINS
+}

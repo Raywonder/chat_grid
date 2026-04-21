@@ -29,7 +29,9 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     if previous_use_24_hour is None:
         previous_use_24_hour = False
 
-    should_validate_alarm_time = alarm_time_raw != previous_alarm_time_raw or use_24_hour != previous_use_24_hour
+    should_validate_alarm_time = (
+        alarm_time_raw != previous_alarm_time_raw or use_24_hour != previous_use_24_hour
+    )
     parsed_alarm = parse_alarm_time_flexible(alarm_time_raw) if alarm_time_raw else None
     if should_validate_alarm_time and alarm_time_raw and parsed_alarm is None:
         raise ValueError("alarmTime must be a valid time (HH:MM or H:MM AM/PM).")
@@ -39,7 +41,9 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     next_params["topOfHourAnnounce"] = top_of_hour_announce
     next_params["alarmEnabled"] = alarm_enabled
     if parsed_alarm is not None:
-        next_params["alarmTime"] = format_alarm_time_for_mode(parsed_alarm[0], parsed_alarm[1], use_24_hour)
+        next_params["alarmTime"] = format_alarm_time_for_mode(
+            parsed_alarm[0], parsed_alarm[1], use_24_hour
+        )
     else:
         next_params["alarmTime"] = alarm_time_raw
     return keep_only_known_params(next_params, PARAM_KEYS)

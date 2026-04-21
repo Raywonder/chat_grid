@@ -48,27 +48,59 @@ PARAM_KEYS: tuple[str, ...] = (
 )
 
 CHANNEL_OPTIONS: tuple[str, ...] = ("stereo", "mono", "left", "right")
-EFFECT_OPTIONS: tuple[str, ...] = ("reverb", "echo", "flanger", "high_pass", "low_pass", "off")
+EFFECT_OPTIONS: tuple[str, ...] = (
+    "reverb",
+    "echo",
+    "flanger",
+    "high_pass",
+    "low_pass",
+    "off",
+)
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
-    "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item.", "maxLength": 80},
-    "streamUrl": {"valueType": "text", "tooltip": "Audio stream URL used by this radio.", "maxLength": 2048},
-    "enabled": {"valueType": "boolean", "tooltip": "Turns playback on or off for this radio."},
+    "title": {
+        "valueType": "text",
+        "tooltip": "Display name spoken and shown for this item.",
+        "maxLength": 80,
+    },
+    "streamUrl": {
+        "valueType": "text",
+        "tooltip": "Audio stream URL used by this radio.",
+        "maxLength": 2048,
+    },
+    "enabled": {
+        "valueType": "boolean",
+        "tooltip": "Turns playback on or off for this radio.",
+    },
     "mediaVolume": {
         "valueType": "number",
         "tooltip": "Playback media volume percent for this radio.",
         "range": {"min": 0, "max": 100, "step": 1},
     },
-    "mediaChannel": {"valueType": "list", "tooltip": "Select how the station audio channels are rendered.", "options": list(CHANNEL_OPTIONS)},
-    "mediaEffect": {"valueType": "list", "tooltip": "Select the active radio effect.", "options": list(EFFECT_OPTIONS)},
+    "mediaChannel": {
+        "valueType": "list",
+        "tooltip": "Select how the station audio channels are rendered.",
+        "options": list(CHANNEL_OPTIONS),
+    },
+    "mediaEffect": {
+        "valueType": "list",
+        "tooltip": "Select the active radio effect.",
+        "options": list(EFFECT_OPTIONS),
+    },
     "mediaEffectValue": {
         "valueType": "number",
         "tooltip": "Amount for the selected effect.",
         "range": {"min": 0, "max": 100, "step": 0.1},
         "visibleWhen": {"mediaEffect": "!off"},
     },
-    "stationName": {"valueType": "text", "tooltip": "Detected station name from stream metadata."},
-    "nowPlaying": {"valueType": "text", "tooltip": "Detected current track/title from stream metadata."},
+    "stationName": {
+        "valueType": "text",
+        "tooltip": "Detected station name from stream metadata.",
+    },
+    "nowPlaying": {
+        "valueType": "text",
+        "tooltip": "Detected current track/title from stream metadata.",
+    },
     "facing": {
         "valueType": "number",
         "tooltip": "Facing direction in degrees used for directional emit.",

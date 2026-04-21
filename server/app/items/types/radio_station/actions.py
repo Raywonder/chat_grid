@@ -9,7 +9,9 @@ from ....models import WorldItem
 from ...helpers import toggle_bool_param
 
 
-def use_item(item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], str]) -> ItemUseResult:
+def use_item(
+    item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], str]
+) -> ItemUseResult:
     """Toggle radio on/off when used."""
 
     next_enabled = toggle_bool_param(item.params, "enabled", default=True)
@@ -21,7 +23,9 @@ def use_item(item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], 
     )
 
 
-def secondary_use_item(item: WorldItem, _nickname: str, _clock_formatter: Callable[[dict], str]) -> ItemUseResult:
+def secondary_use_item(
+    item: WorldItem, _nickname: str, _clock_formatter: Callable[[dict], str]
+) -> ItemUseResult:
     """Speak now-playing metadata for this radio."""
 
     if item.params.get("enabled") is False:

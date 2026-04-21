@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from ....models import WorldItem
 from ...helpers import keep_only_known_params
-from .definition import DEFAULT_ENVELOPE_BY_INSTRUMENT, INSTRUMENT_OPTIONS, PARAM_KEYS, VOICE_MODE_OPTIONS
+from .definition import (
+    DEFAULT_ENVELOPE_BY_INSTRUMENT,
+    INSTRUMENT_OPTIONS,
+    PARAM_KEYS,
+    VOICE_MODE_OPTIONS,
+)
 
 
 def validate_update(item: WorldItem, next_params: dict) -> dict:
@@ -20,7 +25,11 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     previous_instrument = str(item.params.get("instrument", "piano")).strip().lower()
     next_params["instrument"] = instrument
 
-    voice_mode = str(next_params.get("voiceMode", item.params.get("voiceMode", "poly"))).strip().lower()
+    voice_mode = (
+        str(next_params.get("voiceMode", item.params.get("voiceMode", "poly")))
+        .strip()
+        .lower()
+    )
     if voice_mode not in VOICE_MODE_OPTIONS:
         raise ValueError("voiceMode must be one of: poly, mono.")
     next_params["voiceMode"] = voice_mode
@@ -62,8 +71,8 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
 
     # When instrument changes, reset envelope to instrument-appropriate defaults.
     if instrument != previous_instrument:
-        attack, decay, release, brightness, voice_mode, octave = DEFAULT_ENVELOPE_BY_INSTRUMENT.get(
-            instrument, (15, 45, 35, 55, "poly", 0)
+        attack, decay, release, brightness, voice_mode, octave = (
+            DEFAULT_ENVELOPE_BY_INSTRUMENT.get(instrument, (15, 45, 35, 55, "poly", 0))
         )
         next_params["voiceMode"] = voice_mode
         next_params["octave"] = octave

@@ -70,7 +70,9 @@ def test_ui_definitions_are_complete_for_all_item_types() -> None:
 
 
 @pytest.mark.asyncio
-async def test_state_save_requests_are_debounced(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_state_save_requests_are_debounced(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     save_calls: list[str] = []
 

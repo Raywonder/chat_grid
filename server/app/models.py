@@ -378,7 +378,9 @@ class ItemRemovePacket(BasePacket):
 class ItemActionResultPacket(BasePacket):
     type: Literal["item_action_result"]
     ok: bool
-    action: Literal["add", "pickup", "drop", "delete", "transfer", "use", "secondary_use", "update"]
+    action: Literal[
+        "add", "pickup", "drop", "delete", "transfer", "use", "secondary_use", "update"
+    ]
     message: str
     itemId: str | None = None
 

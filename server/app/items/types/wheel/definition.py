@@ -16,7 +16,11 @@ DEFAULT_PARAMS: dict = {"spaces": "yes, no"}
 PARAM_KEYS: tuple[str, ...] = ("spaces",)
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
-    "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item.", "maxLength": 80},
+    "title": {
+        "valueType": "text",
+        "tooltip": "Display name spoken and shown for this item.",
+        "maxLength": 80,
+    },
     "spaces": {
         "valueType": "text",
         "tooltip": "Comma-delimited list of wheel spaces. Example: yes, no, maybe.",

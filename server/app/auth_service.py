@@ -160,9 +160,13 @@ class AuthService:
         self.db_path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.password_min_length = max(1, int(password_min_length))
-        self.password_max_length = max(self.password_min_length, int(password_max_length))
+        self.password_max_length = max(
+            self.password_min_length, int(password_max_length)
+        )
         self.username_min_length = max(1, int(username_min_length))
-        self.username_max_length = max(self.username_min_length, int(username_max_length))
+        self.username_max_length = max(
+            self.username_min_length, int(username_max_length)
+        )
         secret = token_hash_secret.strip()
         if not secret:
             raise AuthError("CHGRID_AUTH_SECRET is required when auth is enabled.")
@@ -186,7 +190,9 @@ class AuthService:
         with self._conn_lock:
             self._conn.close()
 
-    def bootstrap_admin(self, username: str, password: str, email: str | None = None) -> AuthUser:
+    def bootstrap_admin(
+        self, username: str, password: str, email: str | None = None
+    ) -> AuthUser:
         """Create the first admin account, or fail if one already exists."""
 
         if self.has_admin():
@@ -248,7 +254,9 @@ class AuthService:
             user_id_value = int(user_id)
         except (TypeError, ValueError):
             return None
-        row = self._db_fetchone("SELECT username FROM users WHERE id = ?", (user_id_value,))
+        row = self._db_fetchone(
+            "SELECT username FROM users WHERE id = ?", (user_id_value,)
+        )
         if row is None:
             return None
         return str(row["username"])
@@ -276,7 +284,9 @@ class AuthService:
                 "name": str(row["name"]),
                 "isSystem": bool(int(row["is_system"])),
                 "userCount": int(row["user_count"]),
-                "permissions": sorted(list(permissions_by_role.get(int(row["id"]), set()))),
+                "permissions": sorted(
+                    list(permissions_by_role.get(int(row["id"]), set()))
+                ),
             }
             for row in rows
         ]
@@ -304,7 +314,9 @@ class AuthService:
         """Return one role metadata row by normalized role name."""
 
         normalized = self._normalize_role_name(role_name)
-        row = self._db_fetchone("SELECT id, name, is_system FROM roles WHERE name = ?", (normalized,))
+        row = self._db_fetchone(
+            "SELECT id, name, is_system FROM roles WHERE name = ?", (normalized,)
+        )
         if row is None:
             return None
         permissions = self._permissions_by_role_id().get(int(row["id"]), set())
@@ -315,13 +327,17 @@ class AuthService:
             "permissions": sorted(list(permissions)),
         }
 
-    def update_role_permissions(self, role_name: str, permission_keys: list[str]) -> set[str]:
+    def update_role_permissions(
+        self, role_name: str, permission_keys: list[str]
+    ) -> set[str]:
         """Replace one role's permission assignment with validated keys."""
 
         normalized_role = self._normalize_role_name(role_name)
         if normalized_role == "admin":
             raise AuthError("Admin role permissions are locked on.")
-        role_row = self._db_fetchone("SELECT id, name FROM roles WHERE name = ?", (normalized_role,))
+        role_row = self._db_fetchone(
+            "SELECT id, name FROM roles WHERE name = ?", (normalized_role,)
+        )
         if role_row is None:
             raise AuthError("Role not found.")
 
@@ -335,11 +351,15 @@ class AuthService:
                 "INSERT INTO role_permissions (role_id, permission_key) VALUES (?, ?)",
                 (role_id, key),
             )
-        self._db_execute("UPDATE roles SET updated_at_ms = ? WHERE id = ?", (now_ms, role_id))
+        self._db_execute(
+            "UPDATE roles SET updated_at_ms = ? WHERE id = ?", (now_ms, role_id)
+        )
         self._db_commit()
         return validated
 
-    def delete_role(self, role_name: str, replacement_role_name: str) -> tuple[list[str], str]:
+    def delete_role(
+        self, role_name: str, replacement_role_name: str
+    ) -> tuple[list[str], str]:
         """Delete one role, reassigning users to a replacement role."""
 
         normalized_role = self._normalize_role_name(role_name)
@@ -349,8 +369,12 @@ class AuthService:
         if normalized_role == normalized_replacement:
             raise AuthError("Replacement role must differ from deleted role.")
 
-        role_row = self._db_fetchone("SELECT id FROM roles WHERE name = ?", (normalized_role,))
-        replacement_row = self._db_fetchone("SELECT id FROM roles WHERE name = ?", (normalized_replacement,))
+        role_row = self._db_fetchone(
+            "SELECT id FROM roles WHERE name = ?", (normalized_role,)
+        )
+        replacement_row = self._db_fetchone(
+            "SELECT id FROM roles WHERE name = ?", (normalized_replacement,)
+        )
         if role_row is None:
             raise AuthError("Role not found.")
         if replacement_row is None:
@@ -358,10 +382,15 @@ class AuthService:
 
         role_id = int(role_row["id"])
         replacement_id = int(replacement_row["id"])
-        affected_rows = self._db_fetchall("SELECT username FROM users WHERE role_id = ?", (role_id,))
+        affected_rows = self._db_fetchall(
+            "SELECT username FROM users WHERE role_id = ?", (role_id,)
+        )
         affected_usernames = [str(row["username"]) for row in affected_rows]
 
-        self._db_execute("UPDATE users SET role_id = ?, updated_at_ms = ? WHERE role_id = ?", (replacement_id, self.now_ms(), role_id))
+        self._db_execute(
+            "UPDATE users SET role_id = ?, updated_at_ms = ? WHERE role_id = ?",
+            (replacement_id, self.now_ms(), role_id),
+        )
         self._db_execute("DELETE FROM roles WHERE id = ?", (role_id,))
         self._db_commit()
         return affected_usernames, normalized_replacement
@@ -387,12 +416,16 @@ class AuthService:
             for row in rows
         ]
 
-    def set_user_role(self, target_username: str, role_name: str, *, actor_user_id: str | None = None) -> str:
+    def set_user_role(
+        self, target_username: str, role_name: str, *, actor_user_id: str | None = None
+    ) -> str:
         """Assign one user's role by normalized role name."""
 
         normalized_username = self._normalize_username(target_username)
         normalized_role = self._normalize_role_name(role_name)
-        role_row = self._db_fetchone("SELECT id FROM roles WHERE name = ?", (normalized_role,))
+        role_row = self._db_fetchone(
+            "SELECT id FROM roles WHERE name = ?", (normalized_role,)
+        )
         if role_row is None:
             raise AuthError("Role not found.")
         user_row = self._db_fetchone(
@@ -408,10 +441,18 @@ class AuthService:
             raise AuthError("User not found.")
 
         current_role = str(user_row["role_name"])
-        if current_role == "admin" and normalized_role != "admin" and self._active_admin_count() <= 1:
+        if (
+            current_role == "admin"
+            and normalized_role != "admin"
+            and self._active_admin_count() <= 1
+        ):
             raise AuthError("Cannot change role for the last active admin.")
         if actor_user_id is not None and str(user_row["id"]) == str(actor_user_id):
-            if current_role == "admin" and normalized_role != "admin" and self._active_admin_count() <= 1:
+            if (
+                current_role == "admin"
+                and normalized_role != "admin"
+                and self._active_admin_count() <= 1
+            ):
                 raise AuthError("Cannot self-demote the last active admin.")
 
         self._db_execute(
@@ -441,7 +482,12 @@ class AuthService:
             raise AuthError("User not found.")
         current_status = str(user_row["status"])
         current_role = str(user_row["role_name"])
-        if current_role == "admin" and current_status == "active" and normalized_status != "active" and self._active_admin_count() <= 1:
+        if (
+            current_role == "admin"
+            and current_status == "active"
+            and normalized_status != "active"
+            and self._active_admin_count() <= 1
+        ):
             raise AuthError("Cannot disable the last active admin.")
         self._db_execute(
             "UPDATE users SET status = ?, updated_at_ms = ? WHERE id = ?",
@@ -450,7 +496,9 @@ class AuthService:
         self._db_commit()
         return normalized_username
 
-    def delete_user(self, target_username: str, *, actor_user_id: str | None = None) -> str:
+    def delete_user(
+        self, target_username: str, *, actor_user_id: str | None = None
+    ) -> str:
         """Delete one account and related session/state rows."""
 
         normalized_username = self._normalize_username(target_username)
@@ -468,11 +516,21 @@ class AuthService:
         user_id = int(user_row["id"])
         current_status = str(user_row["status"])
         current_role = str(user_row["role_name"])
-        if current_role == "admin" and current_status == "active" and self._active_admin_count() <= 1:
+        if (
+            current_role == "admin"
+            and current_status == "active"
+            and self._active_admin_count() <= 1
+        ):
             raise AuthError("Cannot delete the last active admin.")
         if actor_user_id is not None and str(user_id) == str(actor_user_id):
-            if current_role == "admin" and current_status == "active" and self._active_admin_count() <= 1:
-                raise AuthError("Cannot delete your own account while you are the last active admin.")
+            if (
+                current_role == "admin"
+                and current_status == "active"
+                and self._active_admin_count() <= 1
+            ):
+                raise AuthError(
+                    "Cannot delete your own account while you are the last active admin."
+                )
         self._db_execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
         self._db_execute("DELETE FROM user_state WHERE user_id = ?", (user_id,))
         self._db_execute("DELETE FROM users WHERE id = ?", (user_id,))
@@ -527,7 +585,9 @@ class AuthService:
         """Return user id for one username, or None when missing."""
 
         normalized = self._normalize_username(username)
-        row = self._db_fetchone("SELECT id FROM users WHERE username = ?", (normalized,))
+        row = self._db_fetchone(
+            "SELECT id FROM users WHERE username = ?", (normalized,)
+        )
         if row is None:
             return None
         return str(row["id"])
@@ -549,7 +609,9 @@ class AuthService:
             self._validate_password(password)
             self._validate_role_name(normalized_role)
             normalized_email = self._normalize_email(email)
-            role_row = self._db_fetchone("SELECT id FROM roles WHERE name = ?", (normalized_role,))
+            role_row = self._db_fetchone(
+                "SELECT id FROM roles WHERE name = ?", (normalized_role,)
+            )
             if role_row is None:
                 raise AuthError("Role not found.")
             now_ms = self.now_ms()
@@ -560,29 +622,51 @@ class AuthService:
                     username, password_hash, email, role_id, status, created_at_ms, updated_at_ms, last_login_at_ms
                 ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?)
                 """,
-                (normalized_username, password_hash, normalized_email, int(role_row["id"]), now_ms, now_ms, now_ms),
+                (
+                    normalized_username,
+                    password_hash,
+                    normalized_email,
+                    int(role_row["id"]),
+                    now_ms,
+                    now_ms,
+                    now_ms,
+                ),
             )
             self._db_commit()
         except sqlite3.IntegrityError as exc:
             message = str(exc).lower()
             if "users.username" in message:
-                LOGGER.warning("register rejected username_taken username=%s", normalized_username)
+                LOGGER.warning(
+                    "register rejected username_taken username=%s", normalized_username
+                )
                 raise AuthError("Username is already taken.") from exc
             if "users.email" in message:
-                LOGGER.warning("register rejected email_taken username=%s", normalized_username)
+                LOGGER.warning(
+                    "register rejected email_taken username=%s", normalized_username
+                )
                 raise AuthError("Email is already in use.") from exc
-            LOGGER.exception("register sqlite integrity failure username=%s", normalized_username)
-            raise AuthError("Registration failed due to a database constraint.") from exc
+            LOGGER.exception(
+                "register sqlite integrity failure username=%s", normalized_username
+            )
+            raise AuthError(
+                "Registration failed due to a database constraint."
+            ) from exc
         except AuthError as exc:
-            LOGGER.warning("register rejected username=%s reason=%s", normalized_username, str(exc))
+            LOGGER.warning(
+                "register rejected username=%s reason=%s", normalized_username, str(exc)
+            )
             raise
         except Exception as exc:
-            LOGGER.exception("register unexpected failure username=%s", normalized_username)
+            LOGGER.exception(
+                "register unexpected failure username=%s", normalized_username
+            )
             raise AuthError("Registration failed due to a server error.") from exc
 
         user = self._get_user_by_username(normalized_username)
         if user is None:
-            LOGGER.error("register created user missing username=%s", normalized_username)
+            LOGGER.error(
+                "register created user missing username=%s", normalized_username
+            )
             raise AuthError("Failed to load newly created user.")
         self._db_execute(
             """
@@ -687,7 +771,10 @@ class AuthService:
             raise AuthError("Session has been revoked.")
         now_ms = self.now_ms()
         if int(row["expires_at_ms"]) <= now_ms:
-            self._db_execute("UPDATE sessions SET revoked_at_ms = ? WHERE id = ?", (now_ms, row["session_id"]))
+            self._db_execute(
+                "UPDATE sessions SET revoked_at_ms = ? WHERE id = ?",
+                (now_ms, row["session_id"]),
+            )
             self._db_commit()
             raise AuthError("Session has expired.")
         if row["status"] != "active":
@@ -844,16 +931,24 @@ class AuthService:
             """
         )
 
-        user_cols = {str(row["name"]) for row in self._db_fetchall("PRAGMA table_info(users)")}
+        user_cols = {
+            str(row["name"]) for row in self._db_fetchall("PRAGMA table_info(users)")
+        }
         if "role_id" not in user_cols:
             self._db_execute("ALTER TABLE users ADD COLUMN role_id INTEGER")
             user_cols.add("role_id")
         if "status" not in user_cols:
-            self._db_execute("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+            self._db_execute(
+                "ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"
+            )
         if "created_at_ms" not in user_cols:
-            self._db_execute("ALTER TABLE users ADD COLUMN created_at_ms INTEGER NOT NULL DEFAULT 0")
+            self._db_execute(
+                "ALTER TABLE users ADD COLUMN created_at_ms INTEGER NOT NULL DEFAULT 0"
+            )
         if "updated_at_ms" not in user_cols:
-            self._db_execute("ALTER TABLE users ADD COLUMN updated_at_ms INTEGER NOT NULL DEFAULT 0")
+            self._db_execute(
+                "ALTER TABLE users ADD COLUMN updated_at_ms INTEGER NOT NULL DEFAULT 0"
+            )
         if "last_login_at_ms" not in user_cols:
             self._db_execute("ALTER TABLE users ADD COLUMN last_login_at_ms INTEGER")
         if "email" not in user_cols:
@@ -891,13 +986,27 @@ class AuthService:
         self._seed_permissions_and_roles()
         self._backfill_user_roles()
 
-        self._db_execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)")
-        self._db_execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL")
-        self._db_execute("CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id)")
-        self._db_execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)")
-        self._db_execute("CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at_ms)")
-        self._db_execute("CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash)")
-        self._db_execute("CREATE INDEX IF NOT EXISTS idx_user_state_updated ON user_state(updated_at_ms)")
+        self._db_execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)"
+        )
+        self._db_execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL"
+        )
+        self._db_execute(
+            "CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id)"
+        )
+        self._db_execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)"
+        )
+        self._db_execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at_ms)"
+        )
+        self._db_execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash)"
+        )
+        self._db_execute(
+            "CREATE INDEX IF NOT EXISTS idx_user_state_updated ON user_state(updated_at_ms)"
+        )
         self._db_commit()
 
     def _seed_permissions_and_roles(self) -> None:
@@ -927,10 +1036,15 @@ class AuthService:
                 continue
             if role_name == "admin":
                 # Keep admin as superuser role: always full permission set.
-                self._db_execute("DELETE FROM role_permissions WHERE role_id = ?", (role_id,))
+                self._db_execute(
+                    "DELETE FROM role_permissions WHERE role_id = ?", (role_id,)
+                )
                 allowed = set(PERMISSIONS)
             else:
-                existing = self._db_fetchall("SELECT permission_key FROM role_permissions WHERE role_id = ?", (role_id,))
+                existing = self._db_fetchall(
+                    "SELECT permission_key FROM role_permissions WHERE role_id = ?",
+                    (role_id,),
+                )
                 if existing:
                     # Preserve existing customizations for non-admin defaults.
                     continue
@@ -966,7 +1080,9 @@ class AuthService:
         permissions_by_role: dict[int, set[str]] = {}
         for row in rows:
             role_id = int(row["role_id"])
-            permissions_by_role.setdefault(role_id, set()).add(str(row["permission_key"]))
+            permissions_by_role.setdefault(role_id, set()).add(
+                str(row["permission_key"])
+            )
         return permissions_by_role
 
     def _active_admin_count(self) -> int:
@@ -1069,7 +1185,9 @@ class AuthService:
             permissions=tuple(sorted(self.get_user_permissions(user_id))),
             status=str(row["status"]),
             email=row["email"],
-            last_nickname=row["last_nickname"] if "last_nickname" in row.keys() else None,
+            last_nickname=row["last_nickname"]
+            if "last_nickname" in row.keys()
+            else None,
             last_x=row["last_x"] if "last_x" in row.keys() else None,
             last_y=row["last_y"] if "last_y" in row.keys() else None,
         )
@@ -1103,7 +1221,9 @@ class AuthService:
                 f"Username must be between {self.username_min_length} and {self.username_max_length} characters."
             )
         if USERNAME_PATTERN.fullmatch(username) is None:
-            raise AuthError("Username may include lowercase letters, numbers, underscores, and dashes only.")
+            raise AuthError(
+                "Username may include lowercase letters, numbers, underscores, and dashes only."
+            )
 
     @staticmethod
     def _validate_role_name(role_name: str) -> None:
@@ -1114,7 +1234,9 @@ class AuthService:
         if len(role_name) > 32:
             raise AuthError("Role name must be 32 characters or fewer.")
         if ROLE_NAME_PATTERN.fullmatch(role_name) is None:
-            raise AuthError("Role name may include lowercase letters, numbers, underscores, and dashes only.")
+            raise AuthError(
+                "Role name may include lowercase letters, numbers, underscores, and dashes only."
+            )
 
     @staticmethod
     def _validate_permission_keys(permission_keys: list[str]) -> set[str]:
@@ -1154,4 +1276,6 @@ class AuthService:
     def _hash_token(self, token: str) -> str:
         """Hash a session token with server secret before persistence."""
 
-        return hmac.new(self._token_secret, token.encode("utf-8"), hashlib.sha256).hexdigest()
+        return hmac.new(
+            self._token_secret, token.encode("utf-8"), hashlib.sha256
+        ).hexdigest()

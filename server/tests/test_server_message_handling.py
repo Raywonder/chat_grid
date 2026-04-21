@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 from time import monotonic
-from typing import cast
+from typing import Sequence, TypeVar, cast
 import uuid
 
 import pytest
@@ -13,7 +13,24 @@ from websockets.asyncio.server import ServerConnection
 
 from app.client import ClientConnection
 from app.auth_service import AuthError
-from app.server import AUTH_LOGIN_FAILURE_MESSAGE, AUTH_RESUME_FAILURE_MESSAGE, SignalingServer
+from app.models import (
+    BasePacket,
+    BroadcastChatMessagePacket,
+    BroadcastPositionPacket,
+    BroadcastTeleportCompletePacket,
+    AdminActionResultPacket,
+    AuthResultPacket,
+    ItemActionResultPacket,
+    ItemTransferTargetsResultPacket,
+    PongPacket,
+)
+from app.server import (
+    AUTH_LOGIN_FAILURE_MESSAGE,
+    AUTH_RESUME_FAILURE_MESSAGE,
+    SignalingServer,
+)
+
+PacketT = TypeVar("PacketT", bound=BasePacket)
 
 
 def _fake_ws() -> ServerConnection:
@@ -22,6 +39,20 @@ def _fake_ws() -> ServerConnection:
 
 def _packet_types(payloads: list[object]) -> list[str]:
     return [getattr(packet, "type", "") for packet in payloads]
+
+
+def _packets_of_type(
+    payloads: Sequence[object], packet_type: type[PacketT]
+) -> list[PacketT]:
+    return [packet for packet in payloads if isinstance(packet, packet_type)]
+
+
+def _last_packet_of_type(
+    payloads: Sequence[object], packet_type: type[PacketT]
+) -> PacketT:
+    packets = _packets_of_type(payloads, packet_type)
+    assert packets
+    return packets[-1]
 
 
 def _activate_client(
@@ -45,7 +76,9 @@ def test_client_ip_prefers_forwarded_for_from_loopback_proxy() -> None:
         ServerConnection,
         SimpleNamespace(
             remote_address=("127.0.0.1", 12345),
-            request=SimpleNamespace(headers={"X-Forwarded-For": "203.0.113.10, 198.51.100.25"}),
+            request=SimpleNamespace(
+                headers={"X-Forwarded-For": "203.0.113.10, 198.51.100.25"}
+            ),
         ),
     )
     client = ClientConnection(websocket=ws, id="u1", nickname="tester")
@@ -65,18 +98,24 @@ def test_client_ip_ignores_forwarded_for_from_non_loopback_peer() -> None:
     assert server._client_ip(client) == "203.0.113.20"
 
 
-def test_resolve_client_version_metadata_reads_release_and_revision(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_client_version_metadata_reads_release_and_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     version_text = """
 window.CHGRID_RELEASE_VERSION = "0.1.1";
 window.CHGRID_CLIENT_REVISION = "R350";
 """.strip()
-    resolved = SignalingServer._client_version_metadata_from_web_version_text(version_text)
+    resolved = SignalingServer._client_version_metadata_from_web_version_text(
+        version_text
+    )
 
     assert resolved == ("0.1.1", "R350")
 
 
 @pytest.mark.asyncio
-async def test_update_position_rejects_out_of_bounds(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_update_position_rejects_out_of_bounds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     ws = _fake_ws()
     client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
@@ -84,12 +123,16 @@ async def test_update_position_rejects_out_of_bounds(monkeypatch: pytest.MonkeyP
 
     broadcast_payloads: list[object] = []
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         broadcast_payloads.append(packet)
 
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    await server._handle_message(client, json.dumps({"type": "update_position", "x": 200, "y": -5}))
+    await server._handle_message(
+        client, json.dumps({"type": "update_position", "x": 200, "y": -5})
+    )
 
     assert client.x == 5
     assert client.y == 6
@@ -97,7 +140,9 @@ async def test_update_position_rejects_out_of_bounds(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
-async def test_radio_metadata_refresh_updates_station_and_title(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_radio_metadata_refresh_updates_station_and_title(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     ws = _fake_ws()
     client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=10, y=10)
@@ -128,7 +173,9 @@ async def test_radio_metadata_refresh_updates_station_and_title(monkeypatch: pyt
 
 
 @pytest.mark.asyncio
-async def test_radio_metadata_refresh_skips_when_no_listener_in_range(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_radio_metadata_refresh_skips_when_no_listener_in_range(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     ws = _fake_ws()
     client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=0, y=0)
@@ -157,7 +204,9 @@ async def test_radio_metadata_refresh_skips_when_no_listener_in_range(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_item_secondary_use_radio_reports_now_playing(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_item_secondary_use_radio_reports_now_playing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     ws = _fake_ws()
     client = _activate_client(
@@ -180,15 +229,19 @@ async def test_item_secondary_use_radio_reports_now_playing(monkeypatch: pytest.
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
         send_payloads.append(packet)
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         broadcast_payloads.append(packet)
 
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    await server._handle_message(client, json.dumps({"type": "item_secondary_use", "itemId": radio.id}))
+    await server._handle_message(
+        client, json.dumps({"type": "item_secondary_use", "itemId": radio.id})
+    )
 
-    results = [packet for packet in send_payloads if getattr(packet, "type", "") == "item_action_result"]
+    results = _packets_of_type(send_payloads, ItemActionResultPacket)
     assert results
     assert results[-1].ok is True
     assert results[-1].action == "secondary_use"
@@ -197,7 +250,9 @@ async def test_item_secondary_use_radio_reports_now_playing(monkeypatch: pytest.
 
 
 @pytest.mark.asyncio
-async def test_item_secondary_use_missing_handler_returns_message(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_item_secondary_use_missing_handler_returns_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     ws = _fake_ws()
     client = _activate_client(
@@ -218,9 +273,11 @@ async def test_item_secondary_use_missing_handler_returns_message(monkeypatch: p
 
     monkeypatch.setattr(server, "_send", fake_send)
 
-    await server._handle_message(client, json.dumps({"type": "item_secondary_use", "itemId": dice.id}))
+    await server._handle_message(
+        client, json.dumps({"type": "item_secondary_use", "itemId": dice.id})
+    )
 
-    results = [packet for packet in send_payloads if getattr(packet, "type", "") == "item_action_result"]
+    results = _packets_of_type(send_payloads, ItemActionResultPacket)
     assert results
     assert results[-1].ok is False
     assert results[-1].action == "secondary_use"
@@ -231,12 +288,16 @@ def test_clock_alarm_announcement_sequence_shape() -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     params = {"timeZone": "America/Detroit", "use24Hour": False}
 
-    alarm_sounds = server._build_clock_announcement_sounds(params, top_of_hour=False, alarm=True)
+    alarm_sounds = server._build_clock_announcement_sounds(
+        params, top_of_hour=False, alarm=True
+    )
     assert alarm_sounds
     assert alarm_sounds[0] == "/sounds/clock/el640/announcement.ogg"
     assert alarm_sounds[-1] == "/sounds/clock/el640/alarm.ogg"
 
-    top_of_hour_sounds = server._build_clock_announcement_sounds(params, top_of_hour=True, alarm=False)
+    top_of_hour_sounds = server._build_clock_announcement_sounds(
+        params, top_of_hour=True, alarm=False
+    )
     assert top_of_hour_sounds
     assert top_of_hour_sounds[0] == "/sounds/clock/el640/hour1.ogg"
     assert top_of_hour_sounds[-1] == "/sounds/clock/el640/hour2.ogg"
@@ -256,7 +317,9 @@ async def test_auth_login_uses_hash_offload(monkeypatch: pytest.MonkeyPatch) -> 
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
         send_payloads.append(packet)
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         return None
 
     async def fake_run_auth_hash_task(func, /, *args, **kwargs):
@@ -269,17 +332,21 @@ async def test_auth_login_uses_hash_offload(monkeypatch: pytest.MonkeyPatch) -> 
 
     await server._handle_message(
         client,
-        json.dumps({"type": "auth_login", "username": username, "password": "password99"}),
+        json.dumps(
+            {"type": "auth_login", "username": username, "password": "password99"}
+        ),
     )
 
     assert "login" in offload_calls
-    auth_results = [packet for packet in send_payloads if getattr(packet, "type", "") == "auth_result"]
+    auth_results = _packets_of_type(send_payloads, AuthResultPacket)
     assert auth_results
     assert auth_results[-1].ok is True
 
 
 @pytest.mark.asyncio
-async def test_auth_rate_limit_blocks_before_hash(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_auth_rate_limit_blocks_before_hash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
     client = ClientConnection(websocket=ws, id="u1", nickname="tester")
@@ -300,16 +367,24 @@ async def test_auth_rate_limit_blocks_before_hash(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(server.auth_service, "login", fake_login)
     monkeypatch.setattr(server, "_is_auth_rate_limited", lambda _client, _packet: True)
 
-    await server._handle_message(client, json.dumps({"type": "auth_login", "username": "alpha", "password": "wrongpass"}))
+    await server._handle_message(
+        client,
+        json.dumps(
+            {"type": "auth_login", "username": "alpha", "password": "wrongpass"}
+        ),
+    )
 
     assert called_login is False
     assert send_payloads
-    assert send_payloads[-1].ok is False
-    assert "too many" in send_payloads[-1].message.lower()
+    auth_result = _last_packet_of_type(send_payloads, AuthResultPacket)
+    assert auth_result.ok is False
+    assert "too many" in auth_result.message.lower()
 
 
 @pytest.mark.asyncio
-async def test_auth_login_failure_message_is_generic(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_auth_login_failure_message_is_generic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
     client = ClientConnection(websocket=ws, id="u1", nickname="tester")
@@ -326,16 +401,23 @@ async def test_auth_login_failure_message_is_generic(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(server.auth_service, "login", fake_login)
 
-    await server._handle_message(client, json.dumps({"type": "auth_login", "username": "alpha", "password": "wrongpass"}))
+    await server._handle_message(
+        client,
+        json.dumps(
+            {"type": "auth_login", "username": "alpha", "password": "wrongpass"}
+        ),
+    )
 
-    auth_results = [packet for packet in send_payloads if getattr(packet, "type", "") == "auth_result"]
+    auth_results = _packets_of_type(send_payloads, AuthResultPacket)
     assert auth_results
     assert auth_results[-1].ok is False
     assert auth_results[-1].message == AUTH_LOGIN_FAILURE_MESSAGE
 
 
 @pytest.mark.asyncio
-async def test_auth_login_defers_activation_until_welcome_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_auth_login_defers_activation_until_welcome_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     username = f"ready_{uuid.uuid4().hex[:8]}"
     server.auth_service.register(username, "password99")
@@ -348,7 +430,9 @@ async def test_auth_login_defers_activation_until_welcome_ready(monkeypatch: pyt
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
         send_payloads.append(packet)
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         broadcast_payloads.append(packet)
 
     monkeypatch.setattr(server, "_send", fake_send)
@@ -356,20 +440,28 @@ async def test_auth_login_defers_activation_until_welcome_ready(monkeypatch: pyt
 
     await server._handle_message(
         client,
-        json.dumps({"type": "auth_login", "username": username, "password": "password99"}),
+        json.dumps(
+            {"type": "auth_login", "username": username, "password": "password99"}
+        ),
     )
 
     assert client.authenticated is True
     assert client.world_ready is False
     assert ws not in server.clients
     assert any(getattr(packet, "type", "") == "welcome" for packet in send_payloads)
-    assert not any("has logged in" in getattr(packet, "message", "") for packet in broadcast_payloads)
+    assert not any(
+        "has logged in" in getattr(packet, "message", "")
+        for packet in broadcast_payloads
+    )
 
     await server._handle_message(client, json.dumps({"type": "welcome_ready"}))
 
     assert client.world_ready is True
     assert server.clients.get(ws) is client
-    assert any("has logged in" in getattr(packet, "message", "") for packet in broadcast_payloads)
+    assert any(
+        "has logged in" in getattr(packet, "message", "")
+        for packet in broadcast_payloads
+    )
 
 
 @pytest.mark.asyncio
@@ -389,19 +481,25 @@ async def test_ping_works_before_welcome_ready(monkeypatch: pytest.MonkeyPatch) 
 
     await server._handle_message(
         client,
-        json.dumps({"type": "auth_login", "username": username, "password": "password99"}),
+        json.dumps(
+            {"type": "auth_login", "username": username, "password": "password99"}
+        ),
     )
     assert client.world_ready is False
 
-    await server._handle_message(client, json.dumps({"type": "ping", "clientSentAt": -1}))
+    await server._handle_message(
+        client, json.dumps({"type": "ping", "clientSentAt": -1})
+    )
 
-    pong_packets = [packet for packet in send_payloads if getattr(packet, "type", "") == "pong"]
+    pong_packets = _packets_of_type(send_payloads, PongPacket)
     assert pong_packets
     assert pong_packets[-1].clientSentAt == -1
 
 
 @pytest.mark.asyncio
-async def test_auth_resume_failure_message_is_generic(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_auth_resume_failure_message_is_generic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
     client = ClientConnection(websocket=ws, id="u1", nickname="tester")
@@ -418,9 +516,11 @@ async def test_auth_resume_failure_message_is_generic(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(server.auth_service, "resume", fake_resume)
 
-    await server._handle_message(client, json.dumps({"type": "auth_resume", "sessionToken": "expired-token"}))
+    await server._handle_message(
+        client, json.dumps({"type": "auth_resume", "sessionToken": "expired-token"})
+    )
 
-    auth_results = [packet for packet in send_payloads if getattr(packet, "type", "") == "auth_result"]
+    auth_results = _packets_of_type(send_payloads, AuthResultPacket)
     assert auth_results
     assert auth_results[-1].ok is False
     assert auth_results[-1].message == AUTH_RESUME_FAILURE_MESSAGE
@@ -446,15 +546,20 @@ async def test_item_drop_rejects_out_of_bounds(monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setattr(server, "_send", fake_send)
 
-    await server._handle_message(client, json.dumps({"type": "item_drop", "itemId": item.id, "x": 999, "y": 999}))
+    await server._handle_message(
+        client, json.dumps({"type": "item_drop", "itemId": item.id, "x": 999, "y": 999})
+    )
 
     assert item.carrierId == client.id
-    assert send_payloads[-1].ok is False
-    assert "out of bounds" in send_payloads[-1].message.lower()
+    item_result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert item_result.ok is False
+    assert "out of bounds" in item_result.message.lower()
 
 
 @pytest.mark.asyncio
-async def test_item_transfer_updates_item_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_item_transfer_updates_item_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     owner_ws = _fake_ws()
     target_ws = _fake_ws()
@@ -499,7 +604,9 @@ async def test_item_transfer_updates_item_owner(monkeypatch: pytest.MonkeyPatch)
     async def fake_broadcast_item(broadcast_item: object) -> None:
         broadcasted_items.append(broadcast_item)
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         broadcast_payloads.append(packet)
 
     monkeypatch.setattr(server, "_send", fake_send)
@@ -508,25 +615,28 @@ async def test_item_transfer_updates_item_owner(monkeypatch: pytest.MonkeyPatch)
 
     await server._handle_message(
         owner,
-        json.dumps({"type": "item_transfer", "itemId": item.id, "targetUserId": target.user_id}),
+        json.dumps(
+            {"type": "item_transfer", "itemId": item.id, "targetUserId": target.user_id}
+        ),
     )
 
     assert item.createdBy == target.user_id
     assert item.createdByName == target.username
     assert broadcasted_items
     assert send_payloads
-    result = send_payloads[-1]
-    assert result.type == "item_action_result"
+    result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
     assert result.ok is True
     assert result.action == "transfer"
     assert "you transferred" in result.message.lower()
     assert broadcast_payloads
-    assert getattr(broadcast_payloads[-1], "type", "") == "chat_message"
-    assert "owner transferred" in getattr(broadcast_payloads[-1], "message", "").lower()
+    chat_packet = _last_packet_of_type(broadcast_payloads, BroadcastChatMessagePacket)
+    assert "owner transferred" in chat_packet.message.lower()
 
 
 @pytest.mark.asyncio
-async def test_item_transfer_allows_self_target_for_transfer_any(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_item_transfer_allows_self_target_for_transfer_any(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     owner_ws = _fake_ws()
     actor_ws = _fake_ws()
@@ -575,21 +685,26 @@ async def test_item_transfer_allows_self_target_for_transfer_any(monkeypatch: py
 
     await server._handle_message(
         actor,
-        json.dumps({"type": "item_transfer", "itemId": item.id, "targetUserId": actor.user_id}),
+        json.dumps(
+            {"type": "item_transfer", "itemId": item.id, "targetUserId": actor.user_id}
+        ),
     )
 
     assert item.createdBy == actor.user_id
     assert item.createdByName == actor.username
     assert broadcasted_items
-    result = send_payloads[-1]
-    assert result.type == "item_action_result"
+    result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
     assert result.ok is True
     assert result.action == "transfer"
 
 
 @pytest.mark.asyncio
-async def test_item_transfer_accepts_offline_target_user_id(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    server = SignalingServer("127.0.0.1", 8765, None, None, auth_db_path=tmp_path / "auth.db", grid_size=41)
+async def test_item_transfer_accepts_offline_target_user_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    server = SignalingServer(
+        "127.0.0.1", 8765, None, None, auth_db_path=tmp_path / "auth.db", grid_size=41
+    )
     owner_session = server.auth_service.register("owner_test", "password99")
     actor_session = server.auth_service.register("actor_test", "password99")
     offline_session = server.auth_service.register("offline_test", "password99")
@@ -635,20 +750,29 @@ async def test_item_transfer_accepts_offline_target_user_id(monkeypatch: pytest.
 
     await server._handle_message(
         actor,
-        json.dumps({"type": "item_transfer", "itemId": item.id, "targetUserId": offline_session.user.id}),
+        json.dumps(
+            {
+                "type": "item_transfer",
+                "itemId": item.id,
+                "targetUserId": offline_session.user.id,
+            }
+        ),
     )
 
     assert item.createdBy == offline_session.user.id
     assert item.createdByName == offline_session.user.username
-    result = send_payloads[-1]
-    assert result.type == "item_action_result"
+    result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
     assert result.ok is True
     assert result.action == "transfer"
 
 
 @pytest.mark.asyncio
-async def test_item_transfer_targets_lists_online_and_offline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    server = SignalingServer("127.0.0.1", 8765, None, None, auth_db_path=tmp_path / "auth.db", grid_size=41)
+async def test_item_transfer_targets_lists_online_and_offline(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    server = SignalingServer(
+        "127.0.0.1", 8765, None, None, auth_db_path=tmp_path / "auth.db", grid_size=41
+    )
     owner_session = server.auth_service.register("owner_menu", "password99")
     actor_session = server.auth_service.register("actor_menu", "password99")
     online_session = server.auth_service.register("online_menu", "password99")
@@ -707,11 +831,12 @@ async def test_item_transfer_targets_lists_online_and_offline(monkeypatch: pytes
 
     monkeypatch.setattr(server, "_send", fake_send)
 
-    await server._handle_message(actor, json.dumps({"type": "item_transfer_targets", "itemId": item.id}))
+    await server._handle_message(
+        actor, json.dumps({"type": "item_transfer_targets", "itemId": item.id})
+    )
 
     assert send_payloads
-    result = send_payloads[-1]
-    assert result.type == "item_transfer_targets"
+    result = _last_packet_of_type(send_payloads, ItemTransferTargetsResultPacket)
     usernames = {entry.username for entry in result.targets}
     assert owner_session.user.username not in usernames
     assert online_session.user.username in usernames
@@ -722,7 +847,9 @@ async def test_item_transfer_targets_lists_online_and_offline(monkeypatch: pytes
 
 
 @pytest.mark.asyncio
-async def test_item_delete_sends_others_notification(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_item_delete_sends_others_notification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     owner_ws = _fake_ws()
     watcher_ws = _fake_ws()
@@ -763,25 +890,31 @@ async def test_item_delete_sends_others_notification(monkeypatch: pytest.MonkeyP
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
         send_payloads.append(packet)
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         broadcast_payloads.append(packet)
 
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    await server._handle_message(owner, json.dumps({"type": "item_delete", "itemId": item.id}))
+    await server._handle_message(
+        owner, json.dumps({"type": "item_delete", "itemId": item.id})
+    )
 
-    result_packets = [packet for packet in send_payloads if getattr(packet, "type", "") == "item_action_result"]
+    result_packets = _packets_of_type(send_payloads, ItemActionResultPacket)
     assert result_packets
     assert result_packets[-1].ok is True
     assert "you deleted" in result_packets[-1].message.lower()
-    chat_packets = [packet for packet in broadcast_payloads if getattr(packet, "type", "") == "chat_message"]
+    chat_packets = _packets_of_type(broadcast_payloads, BroadcastChatMessagePacket)
     assert chat_packets
     assert "owner deleted" in getattr(chat_packets[-1], "message", "").lower()
 
 
 @pytest.mark.asyncio
-async def test_item_transfer_rejects_when_not_authorized(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_item_transfer_rejects_when_not_authorized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     owner_ws = _fake_ws()
     target_ws = _fake_ws()
@@ -825,20 +958,23 @@ async def test_item_transfer_rejects_when_not_authorized(monkeypatch: pytest.Mon
 
     await server._handle_message(
         owner,
-        json.dumps({"type": "item_transfer", "itemId": item.id, "targetUserId": target.user_id}),
+        json.dumps(
+            {"type": "item_transfer", "itemId": item.id, "targetUserId": target.user_id}
+        ),
     )
 
     assert item.createdBy == owner.user_id
     assert send_payloads
-    result = send_payloads[-1]
-    assert result.type == "item_action_result"
+    result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
     assert result.ok is False
     assert result.action == "transfer"
     assert "not authorized" in result.message.lower()
 
 
 @pytest.mark.asyncio
-async def test_admin_user_delete_requires_permission(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_admin_user_delete_requires_permission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
     client = ClientConnection(
@@ -860,18 +996,21 @@ async def test_admin_user_delete_requires_permission(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(server, "_send", fake_send)
 
-    await server._handle_message(client, json.dumps({"type": "admin_user_delete", "username": "alpha"}))
+    await server._handle_message(
+        client, json.dumps({"type": "admin_user_delete", "username": "alpha"})
+    )
 
     assert send_payloads
-    packet = send_payloads[-1]
-    assert getattr(packet, "type", "") == "admin_action_result"
+    packet = _last_packet_of_type(send_payloads, AdminActionResultPacket)
     assert packet.ok is False
     assert packet.action == "user_delete"
     assert "not authorized" in packet.message.lower()
 
 
 @pytest.mark.asyncio
-async def test_admin_user_delete_calls_auth_service(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_admin_user_delete_calls_auth_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
     client = ClientConnection(
@@ -893,7 +1032,9 @@ async def test_admin_user_delete_calls_auth_service(monkeypatch: pytest.MonkeyPa
         send_payloads.append(packet)
 
     monkeypatch.setattr(server, "_send", fake_send)
-    monkeypatch.setattr(server.auth_service, "get_user_id_by_username", lambda _username: None)
+    monkeypatch.setattr(
+        server.auth_service, "get_user_id_by_username", lambda _username: None
+    )
 
     def fake_delete_user(username: str, *, actor_user_id: str | None = None) -> str:
         calls.append((username, actor_user_id))
@@ -901,12 +1042,13 @@ async def test_admin_user_delete_calls_auth_service(monkeypatch: pytest.MonkeyPa
 
     monkeypatch.setattr(server.auth_service, "delete_user", fake_delete_user)
 
-    await server._handle_message(client, json.dumps({"type": "admin_user_delete", "username": "alpha"}))
+    await server._handle_message(
+        client, json.dumps({"type": "admin_user_delete", "username": "alpha"})
+    )
 
     assert calls == [("alpha", "1")]
     assert send_payloads
-    packet = send_payloads[-1]
-    assert getattr(packet, "type", "") == "admin_action_result"
+    packet = _last_packet_of_type(send_payloads, AdminActionResultPacket)
     assert packet.ok is True
     assert packet.action == "user_delete"
 
@@ -952,20 +1094,27 @@ async def test_item_add_rejects_unknown_type(monkeypatch: pytest.MonkeyPatch) ->
 
     monkeypatch.setattr(server, "_send", fake_send)
 
-    await server._handle_message(client, json.dumps({"type": "item_add", "itemType": "not_a_type"}))
+    await server._handle_message(
+        client, json.dumps({"type": "item_add", "itemType": "not_a_type"})
+    )
 
     assert send_payloads
-    assert send_payloads[-1].ok is False
-    assert "unknown item type" in send_payloads[-1].message.lower()
+    item_result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert item_result.ok is False
+    assert "unknown item type" in item_result.message.lower()
 
 
 @pytest.mark.asyncio
-async def test_update_position_enforces_cumulative_budget_per_tick(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_update_position_enforces_cumulative_budget_per_tick(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     server.movement_tick_ms = 100
     server.movement_max_steps_per_tick = 2
     ws = _fake_ws()
-    client = _activate_client(ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5))
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5)
+    )
     server.clients[ws] = client
 
     fixed_now = 10_000
@@ -973,17 +1122,25 @@ async def test_update_position_enforces_cumulative_budget_per_tick(monkeypatch: 
 
     broadcast_payloads: list[object] = []
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         broadcast_payloads.append(packet)
 
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
     # First 1-step move in this tick: allowed.
-    await server._handle_message(client, json.dumps({"type": "update_position", "x": 6, "y": 5}))
+    await server._handle_message(
+        client, json.dumps({"type": "update_position", "x": 6, "y": 5})
+    )
     # Second 1-step move in the same tick: allowed (budget now exhausted at 2).
-    await server._handle_message(client, json.dumps({"type": "update_position", "x": 7, "y": 5}))
+    await server._handle_message(
+        client, json.dumps({"type": "update_position", "x": 7, "y": 5})
+    )
     # Third 1-step move in the same tick: must be rejected.
-    await server._handle_message(client, json.dumps({"type": "update_position", "x": 8, "y": 5}))
+    await server._handle_message(
+        client, json.dumps({"type": "update_position", "x": 8, "y": 5})
+    )
 
     assert client.x == 7
     assert client.y == 5
@@ -991,15 +1148,21 @@ async def test_update_position_enforces_cumulative_budget_per_tick(monkeypatch: 
 
 
 @pytest.mark.asyncio
-async def test_teleport_complete_broadcasts_spatial_event(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_teleport_complete_broadcasts_spatial_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     ws = _fake_ws()
-    client = _activate_client(ClientConnection(websocket=ws, id="u1", nickname="tester", x=12, y=13))
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=12, y=13)
+    )
     server.clients[ws] = client
 
     broadcast_payloads: list[object] = []
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         broadcast_payloads.append(packet)
 
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
@@ -1008,24 +1171,33 @@ async def test_teleport_complete_broadcasts_spatial_event(monkeypatch: pytest.Mo
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
     monkeypatch.setattr(server, "_send", fake_send)
 
-    await server._handle_message(client, json.dumps({"type": "teleport_complete", "x": 12, "y": 13}))
+    await server._handle_message(
+        client, json.dumps({"type": "teleport_complete", "x": 12, "y": 13})
+    )
 
-    assert len(broadcast_payloads) == 2
-    assert broadcast_payloads[0].type == "update_position"
-    assert broadcast_payloads[0].id == "u1"
-    assert broadcast_payloads[0].x == 12
-    assert broadcast_payloads[0].y == 13
-    assert broadcast_payloads[1].type == "teleport_complete"
-    assert broadcast_payloads[1].id == "u1"
-    assert broadcast_payloads[1].x == 12
-    assert broadcast_payloads[1].y == 13
+    position_packets = _packets_of_type(broadcast_payloads, BroadcastPositionPacket)
+    teleport_packets = _packets_of_type(
+        broadcast_payloads, BroadcastTeleportCompletePacket
+    )
+    assert len(position_packets) == 1
+    assert len(teleport_packets) == 1
+    assert position_packets[0].id == "u1"
+    assert position_packets[0].x == 12
+    assert position_packets[0].y == 13
+    assert teleport_packets[0].id == "u1"
+    assert teleport_packets[0].x == 12
+    assert teleport_packets[0].y == 13
 
 
 @pytest.mark.asyncio
-async def test_update_position_rate_reject_sends_self_correction(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_update_position_rate_reject_sends_self_correction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     ws = _fake_ws()
-    client = _activate_client(ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5))
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5)
+    )
     server.clients[ws] = client
     server.movement_tick_ms = 100
     server.movement_max_steps_per_tick = 1
@@ -1038,27 +1210,32 @@ async def test_update_position_rate_reject_sends_self_correction(monkeypatch: py
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
         send_payloads.append(packet)
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         return None
 
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
     # 2-tile move exceeds per-window budget and should be rejected with correction.
-    await server._handle_message(client, json.dumps({"type": "update_position", "x": 7, "y": 5}))
+    await server._handle_message(
+        client, json.dumps({"type": "update_position", "x": 7, "y": 5})
+    )
 
     assert client.x == 5
     assert client.y == 5
     assert send_payloads
-    correction = send_payloads[-1]
-    assert correction.type == "update_position"
+    correction = _last_packet_of_type(send_payloads, BroadcastPositionPacket)
     assert correction.id == "u1"
     assert correction.x == 5
     assert correction.y == 5
 
 
 @pytest.mark.asyncio
-async def test_chat_me_command_broadcasts_action(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_chat_me_command_broadcasts_action(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
     client = _activate_client(
@@ -1070,7 +1247,9 @@ async def test_chat_me_command_broadcasts_action(monkeypatch: pytest.MonkeyPatch
     broadcast_payloads: list[object] = []
     send_payloads: list[object] = []
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         broadcast_payloads.append(packet)
 
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
@@ -1079,19 +1258,22 @@ async def test_chat_me_command_broadcasts_action(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
     monkeypatch.setattr(server, "_send", fake_send)
 
-    await server._handle_message(client, json.dumps({"type": "chat_message", "message": "/Me waves hello"}))
+    await server._handle_message(
+        client, json.dumps({"type": "chat_message", "message": "/Me waves hello"})
+    )
 
     assert send_payloads == []
     assert len(broadcast_payloads) == 1
-    packet = broadcast_payloads[0]
-    assert getattr(packet, "type", "") == "chat_message"
+    packet = _last_packet_of_type(broadcast_payloads, BroadcastChatMessagePacket)
     assert packet.action is True
     assert packet.system is False
     assert packet.message == "Tester waves hello"
 
 
 @pytest.mark.asyncio
-async def test_chat_up_command_sends_sender_only(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_chat_up_command_sends_sender_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
     client = _activate_client(
@@ -1103,7 +1285,9 @@ async def test_chat_up_command_sends_sender_only(monkeypatch: pytest.MonkeyPatch
     broadcast_payloads: list[object] = []
     send_payloads: list[object] = []
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         broadcast_payloads.append(packet)
 
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
@@ -1113,18 +1297,21 @@ async def test_chat_up_command_sends_sender_only(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_format_uptime", lambda: "1h 2m 3s")
 
-    await server._handle_message(client, json.dumps({"type": "chat_message", "message": "/UP"}))
+    await server._handle_message(
+        client, json.dumps({"type": "chat_message", "message": "/UP"})
+    )
 
     assert broadcast_payloads == []
     assert len(send_payloads) == 1
-    packet = send_payloads[0]
-    assert getattr(packet, "type", "") == "chat_message"
+    packet = _last_packet_of_type(send_payloads, BroadcastChatMessagePacket)
     assert packet.system is True
     assert packet.message == "Server uptime: 1h 2m 3s"
 
 
 @pytest.mark.asyncio
-async def test_chat_command_requires_leading_slash(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_chat_command_requires_leading_slash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
     client = _activate_client(
@@ -1135,23 +1322,28 @@ async def test_chat_command_requires_leading_slash(monkeypatch: pytest.MonkeyPat
 
     broadcast_payloads: list[object] = []
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         broadcast_payloads.append(packet)
 
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    await server._handle_message(client, json.dumps({"type": "chat_message", "message": " /up"}))
+    await server._handle_message(
+        client, json.dumps({"type": "chat_message", "message": " /up"})
+    )
 
     assert len(broadcast_payloads) == 1
-    packet = broadcast_payloads[0]
-    assert getattr(packet, "type", "") == "chat_message"
+    packet = _last_packet_of_type(broadcast_payloads, BroadcastChatMessagePacket)
     assert packet.system is False
     assert packet.action is False
     assert packet.message == " /up"
 
 
 @pytest.mark.asyncio
-async def test_chat_version_command_is_sender_only(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_chat_version_command_is_sender_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
     client = _activate_client(
@@ -1164,7 +1356,9 @@ async def test_chat_version_command_is_sender_only(monkeypatch: pytest.MonkeyPat
     broadcast_payloads: list[object] = []
     send_payloads: list[object] = []
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         broadcast_payloads.append(packet)
 
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
@@ -1173,12 +1367,13 @@ async def test_chat_version_command_is_sender_only(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
     monkeypatch.setattr(server, "_send", fake_send)
 
-    await server._handle_message(client, json.dumps({"type": "chat_message", "message": "/version"}))
+    await server._handle_message(
+        client, json.dumps({"type": "chat_message", "message": "/version"})
+    )
 
     assert broadcast_payloads == []
     assert len(send_payloads) == 1
-    packet = send_payloads[0]
-    assert getattr(packet, "type", "") == "chat_message"
+    packet = _last_packet_of_type(send_payloads, BroadcastChatMessagePacket)
     assert packet.system is True
     assert packet.message == "Server version: 2026.02.27 R293"
 
@@ -1187,7 +1382,14 @@ async def test_chat_version_command_is_sender_only(monkeypatch: pytest.MonkeyPat
 async def test_chat_reboot_requires_permission(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="Tester", authenticated=True, user_id="1", permissions={"chat.send"})
+    client = ClientConnection(
+        websocket=ws,
+        id="u1",
+        nickname="Tester",
+        authenticated=True,
+        user_id="1",
+        permissions={"chat.send"},
+    )
     _activate_client(client)
     server.clients[ws] = client
 
@@ -1197,19 +1399,24 @@ async def test_chat_reboot_requires_permission(monkeypatch: pytest.MonkeyPatch) 
         send_payloads.append(packet)
 
     monkeypatch.setattr(server, "_send", fake_send)
-    monkeypatch.setattr(server, "_schedule_reboot", lambda _requested_by, _message: True)
+    monkeypatch.setattr(
+        server, "_schedule_reboot", lambda _requested_by, _message: True
+    )
 
-    await server._handle_message(client, json.dumps({"type": "chat_message", "message": "/reboot patching"}))
+    await server._handle_message(
+        client, json.dumps({"type": "chat_message", "message": "/reboot patching"})
+    )
 
     assert send_payloads
-    packet = send_payloads[-1]
-    assert getattr(packet, "type", "") == "chat_message"
+    packet = _last_packet_of_type(send_payloads, BroadcastChatMessagePacket)
     assert packet.system is True
     assert "not authorized" in packet.message.lower()
 
 
 @pytest.mark.asyncio
-async def test_chat_reboot_schedules_and_broadcasts_message(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_chat_reboot_schedules_and_broadcasts_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
     client = ClientConnection(
@@ -1226,23 +1433,34 @@ async def test_chat_reboot_schedules_and_broadcasts_message(monkeypatch: pytest.
 
     broadcast_payloads: list[object] = []
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         broadcast_payloads.append(packet)
 
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
-    monkeypatch.setattr(server, "_schedule_reboot", lambda requested_by, message: requested_by == "tester" and message == "maintenance")
+    monkeypatch.setattr(
+        server,
+        "_schedule_reboot",
+        lambda requested_by, message: (
+            requested_by == "tester" and message == "maintenance"
+        ),
+    )
 
-    await server._handle_message(client, json.dumps({"type": "chat_message", "message": "/reboot maintenance"}))
+    await server._handle_message(
+        client, json.dumps({"type": "chat_message", "message": "/reboot maintenance"})
+    )
 
     assert len(broadcast_payloads) == 1
-    packet = broadcast_payloads[0]
-    assert getattr(packet, "type", "") == "chat_message"
+    packet = _last_packet_of_type(broadcast_payloads, BroadcastChatMessagePacket)
     assert packet.system is True
     assert packet.message == "Server rebooting in 5 seconds. maintenance"
 
 
 @pytest.mark.asyncio
-async def test_chat_reboot_already_in_progress_sends_sender_only_notice(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_chat_reboot_already_in_progress_sends_sender_only_notice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
     client = ClientConnection(
@@ -1260,7 +1478,9 @@ async def test_chat_reboot_already_in_progress_sends_sender_only_notice(monkeypa
     broadcast_payloads: list[object] = []
     send_payloads: list[object] = []
 
-    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
         broadcast_payloads.append(packet)
 
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
@@ -1268,13 +1488,16 @@ async def test_chat_reboot_already_in_progress_sends_sender_only_notice(monkeypa
 
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
     monkeypatch.setattr(server, "_send", fake_send)
-    monkeypatch.setattr(server, "_schedule_reboot", lambda _requested_by, _message: False)
+    monkeypatch.setattr(
+        server, "_schedule_reboot", lambda _requested_by, _message: False
+    )
 
-    await server._handle_message(client, json.dumps({"type": "chat_message", "message": "/reboot maintenance"}))
+    await server._handle_message(
+        client, json.dumps({"type": "chat_message", "message": "/reboot maintenance"})
+    )
 
     assert broadcast_payloads == []
     assert len(send_payloads) == 1
-    packet = send_payloads[0]
-    assert getattr(packet, "type", "") == "chat_message"
+    packet = _last_packet_of_type(send_payloads, BroadcastChatMessagePacket)
     assert packet.system is True
     assert packet.message == "Server reboot already in progress."

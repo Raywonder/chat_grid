@@ -57,12 +57,26 @@ PARAM_KEYS: tuple[str, ...] = (
     "useSound",
     "emitSound",
 )
-EFFECT_OPTIONS: tuple[str, ...] = ("reverb", "echo", "flanger", "high_pass", "low_pass", "off")
+EFFECT_OPTIONS: tuple[str, ...] = (
+    "reverb",
+    "echo",
+    "flanger",
+    "high_pass",
+    "low_pass",
+    "off",
+)
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
-    "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item.", "maxLength": 80},
+    "title": {
+        "valueType": "text",
+        "tooltip": "Display name spoken and shown for this item.",
+        "maxLength": 80,
+    },
     "enabled": {"valueType": "boolean", "tooltip": "Turns this widget on or off."},
-    "directional": {"valueType": "boolean", "tooltip": "If on, emitted sound favors the facing direction."},
+    "directional": {
+        "valueType": "boolean",
+        "tooltip": "If on, emitted sound favors the facing direction.",
+    },
     "facing": {
         "valueType": "number",
         "tooltip": "Facing direction in degrees used when directional is on.",
@@ -99,7 +113,11 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "tooltip": "Delay in seconds between each playing of this audio.",
         "range": {"min": 0, "max": 300, "step": 0.1},
     },
-    "emitEffect": {"valueType": "list", "tooltip": "Effect applied to emitted sound.", "options": list(EFFECT_OPTIONS)},
+    "emitEffect": {
+        "valueType": "list",
+        "tooltip": "Effect applied to emitted sound.",
+        "options": list(EFFECT_OPTIONS),
+    },
     "emitEffectValue": {
         "valueType": "number",
         "tooltip": "Amount for emit effect.",
