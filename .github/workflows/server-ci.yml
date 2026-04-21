@@ -43,5 +43,11 @@ jobs:
       - name: Mypy
         run: uv run --group type mypy .
 
+      - name: Bandit
+        run: uv run --group security bandit -r . -c pyproject.toml
+
+      - name: Pip Audit
+        run: uv run --group security pip-audit
+
       - name: Pytest
         run: uv run --group test pytest --tb=short
