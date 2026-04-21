@@ -1,0 +1,46 @@
+name: Server CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: server/pyproject.toml
+
+      - name: Sync dependencies
+        run: uv sync --all-groups
+
+      - name: Ruff check
+        run: uv run --group lint ruff check .
+
+      - name: Ruff format check
+        run: uv run --group lint ruff format --check .
+
+      - name: Mypy
+        run: uv run --group type mypy .
+
+      - name: Pytest
+        run: uv run --group test pytest --tb=short
