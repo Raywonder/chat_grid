@@ -11,6 +11,7 @@ from pathlib import Path
 from .client import ClientConnection
 from .item_catalog import get_item_definition
 from .models import PersistedWorldItem, WorldItem
+from .seed_items import ensure_builtin_items
 
 LOGGER = logging.getLogger("chgrid.server")
 
@@ -18,7 +19,9 @@ LOGGER = logging.getLogger("chgrid.server")
 class ItemService:
     """Owns world-item storage, lifecycle, and persistence to disk."""
 
-    def __init__(self, state_file: Path | None = None):
+    def __init__(
+        self, state_file: Path | None = None, *, seed_builtin_items: bool = False
+    ):
         """Create service and eagerly load persisted state when configured."""
 
         self.state_file = state_file
@@ -28,6 +31,11 @@ class ItemService:
         self.items: dict[str, WorldItem] = {}
         self.piano_songs: dict[str, dict] = {}
         self.load_state()
+        if seed_builtin_items:
+            added = self.ensure_builtin_items()
+            if added:
+                LOGGER.info("seeded %d built-in world items", len(added))
+                self.save_state()
         self.load_piano_songs()
 
     @staticmethod
@@ -47,6 +55,7 @@ class ItemService:
             id=str(uuid.uuid4()),
             type=item_type,
             title=item_def.default_title,
+            locationId=client.location_id,
             x=client.x,
             y=client.y,
             createdBy=actor_id,
@@ -62,6 +71,11 @@ class ItemService:
             params=deepcopy(item_def.default_params),
             carrierId=None,
         )
+
+    def ensure_builtin_items(self) -> list[WorldItem]:
+        """Insert missing built-in world items and return items added."""
+
+        return ensure_builtin_items(self.items, now_ms=self.now_ms())
 
     def add_item(self, item: WorldItem) -> None:
         """Insert or replace an item in in-memory state."""
@@ -127,6 +141,7 @@ class ItemService:
                     id=persisted.id,
                     type=persisted.type,
                     title=persisted.title,
+                    locationId=persisted.locationId,
                     x=persisted.x,
                     y=persisted.y,
                     createdBy=persisted.createdBy,
@@ -195,6 +210,7 @@ class ItemService:
                     id=item.id,
                     type=item.type,
                     title=item.title,
+                    locationId=item.locationId,
                     x=item.x,
                     y=item.y,
                     createdBy=item.createdBy,

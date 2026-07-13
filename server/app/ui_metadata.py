@@ -34,6 +34,12 @@ class MainModeServerCommandDefinition(TypedDict):
 
 ADMIN_MENU_ACTION_DEFINITIONS: tuple[AdminMenuActionDefinition, ...] = (
     {
+        "id": "platform_overview",
+        "label": "Platform overview",
+        "tooltip": "Speak server, user, item, and BlindSoftware platform link status.",
+        "permission": "server.manage_settings",
+    },
+    {
         "id": "manage_roles",
         "label": "Role management",
         "tooltip": "Manage roles and their permission sets.",

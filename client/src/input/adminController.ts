@@ -57,6 +57,7 @@ export function createAdminController(deps: AdminControllerDeps): {
   openAdminMenu: () => void;
   handleAdminRolesList: (message: Extract<IncomingMessage, { type: 'admin_roles_list' }>) => void;
   handleAdminUsersList: (message: Extract<IncomingMessage, { type: 'admin_users_list' }>) => void;
+  handleAdminPlatformOverview: (message: Extract<IncomingMessage, { type: 'admin_platform_overview' }>) => void;
   handleAdminActionResult: (message: Extract<IncomingMessage, { type: 'admin_action_result' }>) => void;
   handleAdminMenuModeInput: (code: string, key: string) => void;
   handleAdminRoleListModeInput: (code: string, key: string) => void;
@@ -157,6 +158,21 @@ export function createAdminController(deps: AdminControllerDeps): {
     adminUserIndex = 0;
     const first = adminUsers[0];
     deps.announceMenuEntry('Users', `${first.username}, ${first.role}, ${first.status}`);
+  }
+
+  function handleAdminPlatformOverview(message: Extract<IncomingMessage, { type: 'admin_platform_overview' }>): void {
+    const linkSummary =
+      message.links.length > 0
+        ? message.links
+            .slice(0, 6)
+            .map((entry) => `${entry.title} in ${entry.locationId} at ${entry.x}, ${entry.y}`)
+            .join('; ')
+        : 'No service links seeded.';
+    const revision = message.expectedClientRevision ? ` Client ${message.expectedClientRevision}.` : '';
+    deps.updateStatus(
+      `Platform overview. Server ${message.serverVersion}.${revision} ${message.connectedUsers} connected. ${message.itemCount} items, ${message.serviceLinkCount} platform links. ${linkSummary}`,
+    );
+    deps.sfxUiBlip();
   }
 
   function handleAdminActionResult(message: Extract<IncomingMessage, { type: 'admin_action_result' }>): void {
@@ -262,6 +278,11 @@ export function createAdminController(deps: AdminControllerDeps): {
     if (control.type === 'select') {
       const selected = adminMenuActions[adminMenuIndex];
       if (!selected) return;
+      if (selected.id === 'platform_overview') {
+        deps.signalingSend({ type: 'admin_platform_overview' });
+        deps.updateStatus('Loading platform overview...');
+        return;
+      }
       if (selected.id === 'manage_roles') {
         deps.signalingSend({ type: 'admin_roles_list' });
         deps.updateStatus('Loading roles...');
@@ -593,6 +614,7 @@ export function createAdminController(deps: AdminControllerDeps): {
     openAdminMenu,
     handleAdminRolesList,
     handleAdminUsersList,
+    handleAdminPlatformOverview,
     handleAdminActionResult,
     handleAdminMenuModeInput,
     handleAdminRoleListModeInput,

@@ -50,11 +50,11 @@
         },
         {
           "keys": "Slash commands",
-          "description": "In chat, use /me <action>, /up for uptime, and /version for server version"
+          "description": "In chat, use /me <action>, /up for uptime, /version for server version, and /go <location> to travel"
         },
         {
           "keys": "Shift+Z",
-          "description": "Open admin menu when your role permissions allow it"
+          "description": "Open admin menu when your role permissions allow it, including platform overview for administrators"
         },
         {
           "keys": "Comma / Period",
@@ -63,6 +63,23 @@
         {
           "keys": "Less Than / Greater Than",
           "description": "First/last message"
+        }
+      ]
+    },
+    {
+      "title": "Travel and Places",
+      "items": [
+        {
+          "keys": "/go <location>",
+          "description": "Travel to another server-defined place, such as /go city, /go town, /go arcade, /go offices, or /go houses"
+        },
+        {
+          "keys": "Location names",
+          "description": "Seeded places hold different kinds of items: stations in the city, apps in town, games in the arcade, work tools in offices, and Raywonder in houses"
+        },
+        {
+          "keys": "Enter on users/items",
+          "description": "User and item list selections can teleport you directly to that target in the current place"
         }
       ]
     },
@@ -108,6 +125,31 @@
         {
           "keys": "Shift+Enter",
           "description": "Use the selected item's secondary action when it has one"
+        }
+      ]
+    },
+    {
+      "title": "Item Types",
+      "items": [
+        {
+          "keys": "Radio stations",
+          "description": "Use toggles a station on or off; Shift+Enter reports now-playing details when available"
+        },
+        {
+          "keys": "Service links",
+          "description": "Use speaks or opens app, game, site, station, service, and tool details such as AAAStreamer, blind.software, tCast, VoiceLink, or Moonstep Runner"
+        },
+        {
+          "keys": "Dice / wheel / clock",
+          "description": "Use rolls dice, spins a wheel, or announces the clock from that item's spatial position"
+        },
+        {
+          "keys": "Widget / piano",
+          "description": "Widgets can emit configured sounds; pianos open a playable instrument mode"
+        },
+        {
+          "keys": "Quiet items",
+          "description": "Some configured items may keep working on their square while staying out of normal nearby, list, and locate discovery"
         }
       ]
     },
@@ -169,6 +211,31 @@
       ]
     },
     {
+      "title": "Radio and Media",
+      "items": [
+        {
+          "keys": "3",
+          "description": "Toggle the media layer for radio and other item-based media playback"
+        },
+        {
+          "keys": "Enter on radio",
+          "description": "Turn the selected radio station on or off"
+        },
+        {
+          "keys": "Shift+Enter on radio",
+          "description": "Hear current station or now-playing information when the station provides it"
+        },
+        {
+          "keys": "Linked station speakers",
+          "description": "Grouped radio items can share a primary source so sub, mid, high, or high-low-bass speakers stay synchronized"
+        },
+        {
+          "keys": "AAAStreamer stations",
+          "description": "Supported public AAAStreamer station pages can be resolved by the server and played through the same spatial media layer"
+        }
+      ]
+    },
+    {
       "title": "Text, Menus, and Commands",
       "items": [
         {
@@ -202,7 +269,7 @@
       "items": [
         {
           "keys": "Shift+Z",
-          "description": "Open the admin menu when your role has admin actions"
+          "description": "Open the admin menu when your role has admin actions, including platform overview for administrators"
         },
         {
           "keys": "Space",
@@ -210,7 +277,7 @@
         },
         {
           "keys": "Enter",
-          "description": "Run a selected admin action such as role management, user role changes, bans, unbans, or account deletion when permitted"
+          "description": "Run a selected admin action such as platform overview, role management, user role changes, bans, unbans, or account deletion when permitted"
         }
       ]
     },

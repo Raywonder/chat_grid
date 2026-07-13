@@ -23,6 +23,7 @@ When you join the grid, the page also shows a compact dashboard with your curren
   - `/me <action>`: Send action text without `name:`
   - `/up`: Show server uptime (self only)
   - `/version`: Show server version (self only)
+  - `/go <location>`: Travel to another location, such as `/go arcade`
 - `Shift+Z`: Admin menu (when role permissions allow)
 - `,` / `.`: Previous/next message
 - `<` / `>`: First/last message
@@ -109,6 +110,7 @@ Applies to effect select, user/item list modes, item selection, item property li
 - `Shift+Z`: Open admin menu
 - `Space` on admin root actions: Read tooltip/help for the selected action
 - Admin menu options are permission-gated and include:
+  - platform overview for server/client version, connected users, item count, and seeded platform links
   - role management
   - change user role
   - ban user

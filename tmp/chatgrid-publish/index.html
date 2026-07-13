@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat Grid</title>
+    <script type="module" crossorigin src="/chatgrid/assets/index-s1hvG3Y1.js"></script>
+    <link rel="stylesheet" crossorigin href="/chatgrid/assets/index-CL73dsE3.css">
+  </head>
+  <body>
+    <main class="app">
+      <h1 id="gridTitle">Chat Grid</h1>
+      <div id="connectionStatus" role="status" aria-live="polite" aria-atomic="true"></div>
+      <section id="loginView" class="auth-panel">
+        <h2>Sign in</h2>
+        <p class="auth-hint">
+          <a class="button-link" href="/?route=chatgrid_auth_start">Sign in with blind.software</a>
+        </p>
+        <p class="auth-hint">Use the normal blind.software account sign-in, then return here to join the grid.</p>
+      </section>
+      <section id="authSessionView" class="auth-panel hidden">
+        <h2>Logged In</h2>
+        <p id="authSessionText" class="auth-hint"></p>
+      </section>
+      <div class="controls" id="button-container">
+        <button id="connectButton">Connect</button>
+        <button id="logoutButton" class="hidden">Log out</button>
+        <button id="settingsButton">Audio setup</button>
+        <button id="disconnectButton" class="hidden">Disconnect</button>
+        <button id="focusGridButton" class="hidden" aria-controls="gameCanvas">Chat Grid</button>
+      </div>
+      <div id="deviceSummary">
+        <p id="audioInputCurrent" class="hidden"></p>
+        <p id="audioOutputCurrent" class="hidden"></p>
+      </div>
+      <section id="joinGuide" class="join-guide" aria-labelledby="joinGuideTitle">
+        <h2 id="joinGuideTitle">Join the grid</h2>
+        <div class="join-guide-grid">
+          <p><b>Move:</b> arrow keys walk square by square with positional footsteps.</p>
+          <p><b>Chat:</b> press / to type, then Enter to send to everyone on the grid.</p>
+          <p><b>Find people:</b> press L for nearest user, Shift+L for the user list and teleport.</p>
+          <p><b>Use things:</b> press I to find items, Enter to use one, and ? for full help.</p>
+        </div>
+      </section>
+      <div id="status" role="region" aria-live="polite"></div>
+      <section id="gridDashboard" class="grid-dashboard hidden" aria-label="Current grid state">
+        <p><b>Position</b> <span id="gridPosition">--</span></p>
+        <p><b>People</b> <span id="gridPeople">--</span></p>
+        <p><b>Items</b> <span id="gridItems">--</span></p>
+        <p><b>Here</b> <span id="gridHere">--</span></p>
+      </section>
+      <canvas
+        id="gameCanvas"
+        width="600"
+        height="600"
+        tabindex="0"
+        class="hidden"
+        aria-label="Chat Grid, press question mark for help."
+      ></canvas>
+      <footer id="appFooter">
+        <section id="helpSection" class="updates-section hidden">
+          <h2>Help</h2>
+          <button id="helpToggle" type="button" aria-expanded="false" aria-controls="instructions">Show help</button>
+          <div id="instructions" class="hidden" hidden></div>
+        </section>
+        <section id="updatesSection" class="updates-section">
+          <h2>Latest Updates</h2>
+          <button id="updatesToggle" type="button" aria-expanded="false" aria-controls="updatesPanel">
+            Show updates
+          </button>
+          <div id="updatesPanel" class="hidden" hidden></div>
+        </section>
+        <small id="appVersion">Raywonder/TappedIn version. Original Chat Grid by Jage. Version</small>
+        <small id="appGithubLinkWrap">
+          <a id="appGithubLink" href="https://git.tappedin.fm/raywonder/chat_grid">Chat Grid on TappedIn Gitea</a>
+          <span aria-hidden="true"> · </span>
+          <a id="appOriginalLink" href="https://github.com/jage9/chat_grid">Original project</a>
+        </small>
+      </footer>
+
+      <div id="settingsModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="modal-content">
+          <h2 id="modalTitle">Audio Settings</h2>
+          <label for="audioInputSelect">Microphone (Input)</label>
+          <select id="audioInputSelect"></select>
+          <label for="audioOutputSelect">Speakers (Output)</label>
+          <select id="audioOutputSelect"></select>
+          <button id="closeSettingsButton">Close</button>
+        </div>
+      </div>
+    </main>
+    <script src="/chatgrid/version.js"></script>
+  </body>
+</html>

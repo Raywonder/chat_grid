@@ -3,15 +3,19 @@ import { EFFECT_IDS, clampEffectLevel, connectEffectChain, disconnectEffectRunti
 import { AudioEngine } from './audioEngine';
 import { applySpatialMixToNodes, resolveSpatialMix } from './spatial';
 import { volumePercentToGain } from './volume';
+import Hls from 'hls.js';
 
 export const RADIO_CHANNEL_OPTIONS = ['stereo', 'mono', 'left', 'right'] as const;
 export type RadioChannelMode = (typeof RADIO_CHANNEL_OPTIONS)[number];
+export const RADIO_SPEAKER_ROLE_OPTIONS = ['primary', 'sub', 'mid', 'high', 'high_low_bass'] as const;
+export type RadioSpeakerRole = (typeof RADIO_SPEAKER_ROLE_OPTIONS)[number];
 const APP_BASE_PATH = import.meta.env.BASE_URL ?? '/';
 
 type SharedRadioSource = {
   streamUrl: string;
   element: HTMLAudioElement;
   source: MediaElementAudioSourceNode;
+  hls: Hls | null;
   refCount: number;
 };
 
@@ -28,8 +32,21 @@ type ItemRadioOutput = {
   effectRuntime: EffectRuntime | null;
   effect: EffectId;
   effectValue: number;
+  speakerRole: RadioSpeakerRole;
+  speakerFilterInput: GainNode;
+  speakerFilterNodes: BiquadFilterNode[];
   gain: GainNode;
   panner: StereoPannerNode | null;
+};
+
+type EffectiveRadioItem = {
+  streamUrl: string;
+  enabled: boolean;
+  mediaChannel: unknown;
+  mediaVolume: unknown;
+  mediaEffect: unknown;
+  mediaEffectValue: unknown;
+  speakerRole: RadioSpeakerRole;
 };
 
 export function normalizeRadioEffect(effect: unknown): EffectId {
@@ -49,6 +66,19 @@ export function normalizeRadioChannel(channel: unknown): RadioChannelMode {
   if (typeof channel !== 'string') return 'stereo';
   const normalized = channel.trim().toLowerCase() as RadioChannelMode;
   return (RADIO_CHANNEL_OPTIONS as readonly string[]).includes(normalized) ? normalized : 'stereo';
+}
+
+export function normalizeRadioSpeakerRole(role: unknown): RadioSpeakerRole {
+  if (typeof role !== 'string') return 'primary';
+  const normalized = role.trim().toLowerCase();
+  if (normalized === 'low' || normalized === 'bass' || normalized === 'subwoofer') return 'sub';
+  if (normalized === 'hi' || normalized === 'treble') return 'high';
+  if (normalized === 'high_low' || normalized === 'highlow' || normalized === 'hi_low_bass' || normalized === 'hilowbass') {
+    return 'high_low_bass';
+  }
+  return (RADIO_SPEAKER_ROLE_OPTIONS as readonly string[]).includes(normalized)
+    ? (normalized as RadioSpeakerRole)
+    : 'primary';
 }
 
 /** Connects a shared radio media source according to channel mode. */
@@ -111,6 +141,49 @@ function connectRadioChannelSource(
   };
 }
 
+/** Connects an item's speaker-role EQ chain between the effect output and final gain. */
+function connectSpeakerRoleFilter(
+  audioCtx: AudioContext,
+  destination: GainNode,
+  speakerRole: RadioSpeakerRole,
+): { input: GainNode; filters: BiquadFilterNode[] } {
+  const input = audioCtx.createGain();
+  input.gain.value = 1;
+  if (speakerRole === 'primary') {
+    input.connect(destination);
+    return { input, filters: [] };
+  }
+
+  const filters: BiquadFilterNode[] = [];
+  const addFilter = (type: BiquadFilterType, frequency: number, q = 0.707): BiquadFilterNode => {
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = type;
+    filter.frequency.value = frequency;
+    filter.Q.value = q;
+    filters.push(filter);
+    return filter;
+  };
+
+  if (speakerRole === 'sub') {
+    addFilter('lowpass', 130, 0.9);
+  } else if (speakerRole === 'mid') {
+    addFilter('bandpass', 950, 1.1);
+  } else if (speakerRole === 'high') {
+    addFilter('highpass', 2600, 0.8);
+  } else if (speakerRole === 'high_low_bass') {
+    addFilter('highpass', 90, 0.7);
+    addFilter('lowpass', 420, 0.9);
+  }
+
+  let previous: AudioNode = input;
+  for (const filter of filters) {
+    previous.connect(filter);
+    previous = filter;
+  }
+  previous.connect(destination);
+  return { input, filters };
+}
+
 /** Returns whether a hostname belongs to Dropbox domains that need proxy support. */
 function isDropboxHost(hostname: string): boolean {
   const host = hostname.toLowerCase();
@@ -127,6 +200,7 @@ export function shouldProxyStreamUrl(streamUrl: string): boolean {
       return false;
     }
     if (parsed.protocol === 'http:') return true;
+    if (parsed.protocol === 'https:' && parsed.origin !== window.location.origin && urlLooksLikeHlsPlaylist(parsed)) return true;
     if (parsed.protocol === 'https:' && isDropboxHost(parsed.hostname)) return true;
   } catch {
     return false;
@@ -157,6 +231,18 @@ function freshStreamUrl(streamUrl: string): string {
   return `${playbackSource}${separator}chgrid_start=${Date.now()}`;
 }
 
+/** Returns whether a URL path or proxied target points at an HLS playlist. */
+function urlLooksLikeHlsPlaylist(parsed: URL): boolean {
+  if (parsed.pathname.toLowerCase().endsWith('.m3u8')) return true;
+  const proxiedUrl = parsed.searchParams.get('url');
+  if (!proxiedUrl) return false;
+  try {
+    return new URL(proxiedUrl).pathname.toLowerCase().endsWith('.m3u8');
+  } catch {
+    return proxiedUrl.toLowerCase().split('?')[0].endsWith('.m3u8');
+  }
+}
+
 type RadioSpatialConfig = {
   range: number;
   directional: boolean;
@@ -168,6 +254,22 @@ const UNSUBSCRIBE_HYSTERESIS_SQUARES = 8;
 const STREAM_PLAY_RETRY_MS = 5000;
 const STREAM_PLAY_MAX_RETRIES = 6;
 const STREAM_PLAY_RESET_COOLDOWN_MS = 60000;
+
+function resolveRadioPlaybackUrl(item: WorldItem): string {
+  return String(item.params.playbackUrl || item.params.streamUrl || '').trim();
+}
+
+function linkedMediaGroup(item: WorldItem): string {
+  return String(item.params.linkedMediaGroup ?? '').trim().toLowerCase();
+}
+
+function isHlsPlaybackUrl(streamUrl: string): boolean {
+  try {
+    return urlLooksLikeHlsPlaylist(new URL(streamUrl));
+  } catch {
+    return streamUrl.toLowerCase().split('?')[0].endsWith('.m3u8');
+  }
+}
 
 export class RadioStationRuntime {
   private readonly sharedRadioSources = new Map<string, SharedRadioSource>();
@@ -206,6 +308,10 @@ export class RadioStationRuntime {
     output.sourceInput.disconnect();
     output.effectInput.disconnect();
     disconnectEffectRuntime(output.effectRuntime);
+    output.speakerFilterInput.disconnect();
+    for (const filter of output.speakerFilterNodes) {
+      filter.disconnect();
+    }
     output.gain.disconnect();
     output.panner?.disconnect();
     this.itemRadioOutputs.delete(itemId);
@@ -246,15 +352,17 @@ export class RadioStationRuntime {
       this.listenerPositions = [{ ...listenerPositions }];
     }
     const listeners = this.listenerPositions;
+    const itemList = Array.from(items);
     const validIds = new Set<string>();
-    for (const item of items) {
+    for (const item of itemList) {
       if (item.type !== 'radio_station') continue;
       validIds.add(item.id);
-      if (!this.shouldKeepRuntime(item, listeners, this.itemRadioOutputs.has(item.id))) {
+      const effective = this.resolveEffectiveRadioItem(item, itemList);
+      if (!this.shouldKeepRuntime(item, effective, listeners, this.itemRadioOutputs.has(item.id))) {
         this.cleanup(item.id);
         continue;
       }
-      await this.ensureRuntime(item);
+      await this.ensureRuntime(item, effective);
     }
     for (const id of Array.from(this.itemRadioOutputs.keys())) {
       if (!validIds.has(id)) {
@@ -273,12 +381,14 @@ export class RadioStationRuntime {
         this.cleanup(itemId);
         continue;
       }
-      const streamUrl = String(item.params.streamUrl ?? '').trim();
-      const enabled = item.params.enabled !== false;
-      const normalizedVolume = volumePercentToGain(item.params.mediaVolume, 50);
-      const effect = normalizeRadioEffect(item.params.mediaEffect);
-      const effectValue = normalizeRadioEffectValue(item.params.mediaEffectValue);
+      const effective = this.resolveEffectiveRadioItem(item, items.values());
+      const streamUrl = effective.streamUrl;
+      const enabled = effective.enabled;
+      const normalizedVolume = volumePercentToGain(effective.mediaVolume, 50);
+      const effect = normalizeRadioEffect(effective.mediaEffect);
+      const effectValue = normalizeRadioEffectValue(effective.mediaEffectValue);
       this.applyEffect(output, audioCtx, effect, effectValue);
+      this.applySpeakerRole(output, audioCtx, effective.speakerRole);
       if (!streamUrl || !enabled) {
         output.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
         continue;
@@ -314,6 +424,30 @@ export class RadioStationRuntime {
     }
   }
 
+  private resolveEffectiveRadioItem(item: WorldItem, items: Iterable<WorldItem>): EffectiveRadioItem {
+    const group = linkedMediaGroup(item);
+    const syncWithPrimary = item.params.syncWithPrimary === true && group.length > 0;
+    const primary =
+      syncWithPrimary && normalizeRadioSpeakerRole(item.params.speakerRole) !== 'primary'
+        ? Array.from(items).find(
+            (candidate) =>
+              candidate.id !== item.id &&
+              candidate.type === 'radio_station' &&
+              linkedMediaGroup(candidate) === group &&
+              normalizeRadioSpeakerRole(candidate.params.speakerRole) === 'primary',
+          )
+        : null;
+    return {
+      streamUrl: primary ? resolveRadioPlaybackUrl(primary) : resolveRadioPlaybackUrl(item),
+      enabled: item.params.enabled !== false && (!primary || primary.params.enabled !== false),
+      mediaChannel: item.params.mediaChannel,
+      mediaVolume: item.params.mediaVolume,
+      mediaEffect: item.params.mediaEffect,
+      mediaEffectValue: item.params.mediaEffectValue,
+      speakerRole: normalizeRadioSpeakerRole(item.params.speakerRole),
+    };
+  }
+
   private applyEffect(
     output: ItemRadioOutput,
     audioCtx: AudioContext,
@@ -330,12 +464,36 @@ export class RadioStationRuntime {
     output.effectValue = effectValue;
   }
 
+  private applySpeakerRole(
+    output: ItemRadioOutput,
+    audioCtx: AudioContext,
+    speakerRole: RadioSpeakerRole,
+  ): void {
+    if (output.speakerRole === speakerRole) {
+      return;
+    }
+    output.effectInput.disconnect();
+    output.speakerFilterInput.disconnect();
+    for (const filter of output.speakerFilterNodes) {
+      filter.disconnect();
+    }
+    disconnectEffectRuntime(output.effectRuntime);
+    const filterChain = connectSpeakerRoleFilter(audioCtx, output.gain, speakerRole);
+    output.speakerFilterInput = filterChain.input;
+    output.speakerFilterNodes = filterChain.filters;
+    output.effectRuntime = connectEffectChain(audioCtx, output.effectInput, output.speakerFilterInput, output.effect, output.effectValue);
+    output.speakerRole = speakerRole;
+  }
+
   private releaseSharedSource(streamUrl: string): void {
     const shared = this.sharedRadioSources.get(streamUrl);
     if (!shared) return;
     shared.refCount -= 1;
     if (shared.refCount > 0) return;
     shared.element.pause();
+    if (shared.hls) {
+      shared.hls.destroy();
+    }
     shared.element.src = '';
     shared.source.disconnect();
     this.sharedRadioSources.delete(streamUrl);
@@ -352,15 +510,31 @@ export class RadioStationRuntime {
     }
     const audioCtx = this.audio.context;
     if (!audioCtx) return null;
-    const element = new Audio(freshStreamUrl(streamUrl));
+    const element = new Audio();
     element.crossOrigin = 'anonymous';
     element.loop = true;
     element.preload = 'none';
+    let hls: Hls | null = null;
+    const playbackUrl = freshStreamUrl(streamUrl);
+    if (isHlsPlaybackUrl(playbackUrl) && Hls.isSupported()) {
+      hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        maxBufferLength: 20,
+        maxMaxBufferLength: 40,
+        backBufferLength: 30,
+      });
+      hls.loadSource(playbackUrl);
+      hls.attachMedia(element);
+    } else {
+      element.src = playbackUrl;
+    }
     const source = audioCtx.createMediaElementSource(element);
     const shared: SharedRadioSource = {
       streamUrl,
       element,
       source,
+      hls,
       refCount: 1,
     };
     this.sharedRadioSources.set(streamUrl, shared);
@@ -410,8 +584,8 @@ export class RadioStationRuntime {
       });
   }
 
-  private async ensureRuntime(item: WorldItem): Promise<void> {
-    const streamUrl = String(item.params.streamUrl ?? '').trim();
+  private async ensureRuntime(item: WorldItem, effective: EffectiveRadioItem): Promise<void> {
+    const streamUrl = effective.streamUrl;
     if (!streamUrl) {
       this.cleanup(item.id);
       return;
@@ -420,9 +594,11 @@ export class RadioStationRuntime {
     const audioCtx = this.audio.context;
     if (!audioCtx) return;
 
-    const channel = normalizeRadioChannel(item.params.mediaChannel);
+    const channel = normalizeRadioChannel(effective.mediaChannel);
+    const speakerRole = effective.speakerRole;
     const existing = this.itemRadioOutputs.get(item.id);
     if (existing && existing.streamUrl === streamUrl && existing.channel === channel) {
+      this.applySpeakerRole(existing, audioCtx, speakerRole);
       return;
     }
     if (existing) {
@@ -436,9 +612,10 @@ export class RadioStationRuntime {
     gain.gain.value = 0;
     const effectInput = audioCtx.createGain();
     const channelSource = connectRadioChannelSource(audioCtx, shared.source, channel, effectInput);
-    const effect = normalizeRadioEffect(item.params.mediaEffect);
-    const effectValue = normalizeRadioEffectValue(item.params.mediaEffectValue);
-    const effectRuntime = connectEffectChain(audioCtx, effectInput, gain, effect, effectValue);
+    const effect = normalizeRadioEffect(effective.mediaEffect);
+    const effectValue = normalizeRadioEffectValue(effective.mediaEffectValue);
+    const speakerFilter = connectSpeakerRoleFilter(audioCtx, gain, speakerRole);
+    const effectRuntime = connectEffectChain(audioCtx, effectInput, speakerFilter.input, effect, effectValue);
     const destination = this.audio.getOutputDestinationNode() ?? audioCtx.destination;
     let panner: StereoPannerNode | null = null;
     if (this.audio.supportsStereoPanner()) {
@@ -460,6 +637,9 @@ export class RadioStationRuntime {
       effectRuntime,
       effect,
       effectValue,
+      speakerRole,
+      speakerFilterInput: speakerFilter.input,
+      speakerFilterNodes: speakerFilter.filters,
       gain,
       panner,
     });
@@ -467,11 +647,11 @@ export class RadioStationRuntime {
 
   private shouldKeepRuntime(
     item: WorldItem,
+    effective: EffectiveRadioItem,
     listenerPositions: Array<{ x: number; y: number }>,
     currentlyActive: boolean,
   ): boolean {
-    const streamUrl = String(item.params.streamUrl ?? '').trim();
-    if (!streamUrl || item.params.enabled === false || listenerPositions.length === 0) {
+    if (!effective.streamUrl || !effective.enabled || listenerPositions.length === 0) {
       return false;
     }
     const spatialConfig = this.getSpatialConfig(item);

@@ -5,6 +5,10 @@ This is behavior-focused documentation for item types and their defaults.
 ## Shared Item Behavior
 
 - Items are server-authoritative.
+- Built-in service/station items are seeded by the server on startup when missing.
+  Existing matching items with the same type, title, and location are preserved.
+  Newly shipped built-ins are also checked before authenticated welcomes, so
+  restarted or freshly updated servers expose new items to reconnecting users.
 - Global per-type fields are injected by the server and are not persisted per-instance:
   - `capabilities`
   - `useSound`
@@ -21,11 +25,16 @@ This is behavior-focused documentation for item types and their defaults.
 - Title: `radio`
 - Params:
   - `streamUrl=""`
+  - `playbackUrl=""` (server-managed)
   - `enabled=true`
   - `mediaChannel="stereo"`
   - `mediaVolume=50`
   - `mediaEffect="off"`
   - `mediaEffectValue=50`
+  - `speakerRole="primary"`
+  - `linkedMediaGroup=""`
+  - `syncWithPrimary=false`
+  - `itemVisibility="shown"`
   - `stationName=""` (server-managed, read-only)
   - `nowPlaying=""` (server-managed, read-only)
   - `facing=0`
@@ -47,9 +56,49 @@ This is behavior-focused documentation for item types and their defaults.
 - `mediaEffect`: `reverb | echo | flanger | high_pass | low_pass | off`
 - `mediaEffectValue`: number `0..100` with `0.1` precision
   - Visible only when `mediaEffect != off` (`visibleWhen: {"mediaEffect": "!off"}`)
+- `speakerRole`: `primary | sub | mid | high | high_low_bass`
+- `linkedMediaGroup`: optional shared group name, max 80 chars
+- `syncWithPrimary`: boolean or on/off style input. When enabled on a non-primary grouped radio, the browser uses the group's primary item as the shared playback source so linked speaker/filter items stay synced.
+- `itemVisibility`: `shown | quiet`. Quiet items continue to play and remain editable on their square, but are omitted from normal nearby, list, and locate discovery.
 - `facing`: number `0..360` with step `1`
 - `emitRange`: integer `5..20`
 - `stationName` / `nowPlaying`: server-fetched metadata fields; not editable by clients.
+- `playbackUrl`: server-resolved playback URL for supported station pages; not editable by clients.
+
+## `service_link`
+
+### Defaults
+- Title: `service`
+- Params:
+  - `serviceKind="service"`
+  - `url=""`
+  - `description=""`
+  - `launchMessage=""`
+  - `enabled=true`
+- Global:
+  - `useSound=none`
+  - `emitSound=none`
+  - `useCooldownMs=1000`
+  - `emitRange=12`
+  - `directional=false`
+
+### Use
+- `use` speaks the launch message when configured, otherwise it speaks the service/app details and URL.
+- `secondary use` always speaks the full service/app details.
+
+### Validation
+- `serviceKind`: `app | game | service | site | station | tool`
+- `url`: empty, absolute public `http/https` URL, or site-relative path
+- `description`: max 240 chars
+- `launchMessage`: max 240 chars
+- `enabled`: boolean or on/off style input
+
+### Built-In Seeds
+- City: `SoulFoodRadio`, `DivineCreations radio`, `ACB Media 1` through `ACB Media 10`, `AAAStreamer`, `blind.software`, `tappedin.fm`
+- Town: `tCast`, `Bema Media Player`, `Thrive Messenger`
+- Arcade: `Moonstep Runner`, `Future games shelf`, `Clawdia's toolkit`
+- Offices: `VoiceLink`, `OpenLink`, `OpenClaw and Clawdia`, `FlexPBX`
+- Houses: `Raywonder`
 
 ## `dice`
 
@@ -175,6 +224,7 @@ This is behavior-focused documentation for item types and their defaults.
 - `emitEffectValue`: number `0..100` with `0.1` precision
 - `useSound`: empty, filename (assumed under `sounds/`), or full URL
 - `emitSound`: empty, filename (assumed under `sounds/`), or full URL
+- TappedIn Archive ambience/FX URLs under `https://tappedin.fm/wp-content/uploads/Archive/fx/` are valid full URL values for world-building sounds.
 
 ## `piano`
 

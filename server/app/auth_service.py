@@ -131,6 +131,7 @@ class AuthUser:
     last_nickname: str | None
     last_x: int | None
     last_y: int | None
+    last_location_id: str | None
 
 
 @dataclass(frozen=True)
@@ -557,7 +558,8 @@ class AuthService:
                 u.email,
                 us.last_nickname,
                 us.last_x,
-                us.last_y
+                us.last_y,
+                us.last_location_id
             FROM users u
             JOIN roles r ON r.id = u.role_id
             LEFT JOIN user_state us ON us.user_id = u.id
@@ -673,8 +675,8 @@ class AuthService:
             raise AuthError("Failed to load newly created user.")
         self._db_execute(
             """
-            INSERT OR IGNORE INTO user_state (user_id, last_nickname, last_x, last_y, updated_at_ms)
-            VALUES (?, ?, NULL, NULL, ?)
+            INSERT OR IGNORE INTO user_state (user_id, last_nickname, last_x, last_y, last_location_id, updated_at_ms)
+            VALUES (?, ?, NULL, NULL, 'city', ?)
             """,
             (int(user.id), user.username, self.now_ms()),
         )
@@ -689,6 +691,7 @@ class AuthService:
             last_nickname=user.username,
             last_x=user.last_x,
             last_y=user.last_y,
+            last_location_id=user.last_location_id,
         )
         return self._create_session(user)
 
@@ -707,7 +710,8 @@ class AuthService:
                 u.status,
                 us.last_nickname,
                 us.last_x,
-                us.last_y
+                us.last_y,
+                us.last_location_id
             FROM users u
             JOIN roles r ON r.id = u.role_id
             LEFT JOIN user_state us ON us.user_id = u.id
@@ -740,6 +744,7 @@ class AuthService:
                 last_nickname=user.username,
                 last_x=user.last_x,
                 last_y=user.last_y,
+                last_location_id=user.last_location_id,
             )
         now_ms = self.now_ms()
         self._db_execute(
@@ -865,7 +870,7 @@ class AuthService:
         row = self._db_fetchone(
             """
             SELECT s.id AS session_id, s.user_id, s.expires_at_ms, s.revoked_at_ms,
-                   u.username, r.name AS role_name, u.status, u.email, us.last_nickname, us.last_x, us.last_y
+                   u.username, r.name AS role_name, u.status, u.email, us.last_nickname, us.last_x, us.last_y, us.last_location_id
             FROM sessions s
             JOIN users u ON u.id = s.user_id
             JOIN roles r ON r.id = u.role_id
@@ -904,6 +909,7 @@ class AuthService:
             last_nickname=row["last_nickname"],
             last_x=row["last_x"] if "last_x" in row.keys() else None,
             last_y=row["last_y"] if "last_y" in row.keys() else None,
+            last_location_id=row["last_location_id"] if "last_location_id" in row.keys() else None,
         )
         if not user.last_nickname:
             self.set_last_nickname(user.id, user.username)
@@ -917,6 +923,7 @@ class AuthService:
                 last_nickname=user.username,
                 last_x=user.last_x,
                 last_y=user.last_y,
+                last_location_id=user.last_location_id,
             )
         return AuthSession(session_id=str(row["session_id"]), token=cleaned, user=user)
 
@@ -946,19 +953,21 @@ class AuthService:
         try:
             self._db_execute(
                 """
-                INSERT INTO user_state (user_id, last_nickname, last_x, last_y, updated_at_ms)
-                VALUES (?, ?, NULL, NULL, ?)
+                INSERT INTO user_state (user_id, last_nickname, last_x, last_y, last_location_id, updated_at_ms)
+                VALUES (?, ?, NULL, NULL, COALESCE((SELECT last_location_id FROM user_state WHERE user_id = ?), 'city'), ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     last_nickname = excluded.last_nickname,
                     updated_at_ms = excluded.updated_at_ms
                 """,
-                (user_id_value, cleaned, self.now_ms()),
+                (user_id_value, cleaned, user_id_value, self.now_ms()),
             )
             self._db_commit()
         except sqlite3.IntegrityError:
             self._db_rollback()
 
-    def set_last_position(self, user_id: str, x: int, y: int) -> None:
+    def set_last_position(
+        self, user_id: str, x: int, y: int, location_id: str = "city"
+    ) -> None:
         """Persist last known world position for one user."""
 
         try:
@@ -968,14 +977,15 @@ class AuthService:
         try:
             self._db_execute(
                 """
-                INSERT INTO user_state (user_id, last_nickname, last_x, last_y, updated_at_ms)
-                VALUES (?, NULL, ?, ?, ?)
+                INSERT INTO user_state (user_id, last_nickname, last_x, last_y, last_location_id, updated_at_ms)
+                VALUES (?, NULL, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     last_x = excluded.last_x,
                     last_y = excluded.last_y,
+                    last_location_id = excluded.last_location_id,
                     updated_at_ms = excluded.updated_at_ms
                 """,
-                (user_id_value, int(x), int(y), self.now_ms()),
+                (user_id_value, int(x), int(y), location_id.strip() or "city", self.now_ms()),
             )
             self._db_commit()
         except sqlite3.IntegrityError:
@@ -1086,11 +1096,18 @@ class AuthService:
                 last_nickname TEXT,
                 last_x INTEGER,
                 last_y INTEGER,
+                last_location_id TEXT,
                 updated_at_ms INTEGER NOT NULL,
                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
             )
             """
         )
+        user_state_cols = {
+            str(row["name"])
+            for row in self._db_fetchall("PRAGMA table_info(user_state)")
+        }
+        if "last_location_id" not in user_state_cols:
+            self._db_execute("ALTER TABLE user_state ADD COLUMN last_location_id TEXT")
         self._db_execute(
             """
             CREATE TABLE IF NOT EXISTS external_identities (
@@ -1318,8 +1335,8 @@ class AuthService:
         nickname = self._display_name_to_nickname(display_name) or normalized_username
         self._conn.execute(
             """
-            INSERT OR IGNORE INTO user_state (user_id, last_nickname, last_x, last_y, updated_at_ms)
-            VALUES (?, ?, NULL, NULL, ?)
+            INSERT OR IGNORE INTO user_state (user_id, last_nickname, last_x, last_y, last_location_id, updated_at_ms)
+            VALUES (?, ?, NULL, NULL, 'city', ?)
             """,
             (user_id, nickname, now_ms),
         )
@@ -1368,13 +1385,13 @@ class AuthService:
         if nickname:
             self._conn.execute(
                 """
-                INSERT INTO user_state (user_id, last_nickname, last_x, last_y, updated_at_ms)
-                VALUES (?, ?, NULL, NULL, ?)
+                INSERT INTO user_state (user_id, last_nickname, last_x, last_y, last_location_id, updated_at_ms)
+                VALUES (?, ?, NULL, NULL, COALESCE((SELECT last_location_id FROM user_state WHERE user_id = ?), 'city'), ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     last_nickname = COALESCE(user_state.last_nickname, excluded.last_nickname),
                     updated_at_ms = excluded.updated_at_ms
                 """,
-                (user_id, nickname, now_ms),
+                (user_id, nickname, user_id, now_ms),
             )
 
     def _unique_external_username(self, username: str, email: str | None) -> str:
@@ -1441,7 +1458,8 @@ class AuthService:
                 u.email,
                 us.last_nickname,
                 us.last_x,
-                us.last_y
+                us.last_y,
+                us.last_location_id
             FROM users u
             JOIN roles r ON r.id = u.role_id
             LEFT JOIN user_state us ON us.user_id = u.id
@@ -1499,6 +1517,7 @@ class AuthService:
             else None,
             last_x=row["last_x"] if "last_x" in row.keys() else None,
             last_y=row["last_y"] if "last_y" in row.keys() else None,
+            last_location_id=row["last_location_id"] if "last_location_id" in row.keys() else None,
         )
 
     @staticmethod

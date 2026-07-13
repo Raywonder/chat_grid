@@ -51,3 +51,11 @@ Current defaults:
 ## Stale Stream Mitigation
 
 Radio stream startup appends a cache-busting query token on runtime creation to avoid stale buffered playback after reconnect/layer re-enable.
+
+## Remote HLS Playback
+
+Remote `.m3u8` live playlists, including server-resolved AAAStreamer playback URLs, are routed through the same-origin media proxy before browser playback. HLS detection is performed after proxy URL resolution so the tile audio runtime still uses `hls.js` for proxied live playlists and keeps playback inside the spatial media graph.
+
+## TappedIn Archive Sounds
+
+Reusable public FX and ambience files live at `https://tappedin.fm/wp-content/uploads/Archive/fx/`. Use full HTTPS Archive URLs in widget `emitSound` for looping ambience or `useSound` for one-shot effects. See `docs/archive-sound-library.md` for the local path, categories, and a verified example URL.

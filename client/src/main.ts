@@ -40,6 +40,7 @@ import {
   getDirection,
   getNearestItem,
   getNearestPeer,
+  isItemQuiet,
   type GameMode,
   type WorldItem,
 } from './state/gameState';
@@ -108,18 +109,8 @@ type Dom = {
   connectionStatus: HTMLElement;
   appVersion: HTMLElement;
   loginView: HTMLElement;
-  registerView: HTMLElement;
-  authUsername: HTMLInputElement;
-  authPassword: HTMLInputElement;
-  registerUsername: HTMLInputElement;
-  registerPassword: HTMLInputElement;
-  registerPasswordConfirm: HTMLInputElement;
-  registerEmail: HTMLInputElement;
-  authPolicyHintRegister: HTMLParagraphElement;
   authSessionView: HTMLElement;
   authSessionText: HTMLParagraphElement;
-  authModeSeparator: HTMLElement;
-  showRegisterButton: HTMLButtonElement;
   helpSection: HTMLElement;
   helpToggle: HTMLButtonElement;
   updatesSection: HTMLElement;
@@ -152,18 +143,8 @@ const dom: Dom = {
   connectionStatus: requiredById('connectionStatus'),
   appVersion: requiredById('appVersion'),
   loginView: requiredById('loginView'),
-  registerView: requiredById('registerView'),
-  authUsername: requiredById('authUsername'),
-  authPassword: requiredById('authPassword'),
-  registerUsername: requiredById('registerUsername'),
-  registerPassword: requiredById('registerPassword'),
-  registerPasswordConfirm: requiredById('registerPasswordConfirm'),
-  registerEmail: requiredById('registerEmail'),
-  authPolicyHintRegister: requiredById('authPolicyHintRegister'),
   authSessionView: requiredById('authSessionView'),
   authSessionText: requiredById('authSessionText'),
-  authModeSeparator: requiredById('authModeSeparator'),
-  showRegisterButton: requiredById('showRegisterButton'),
   helpSection: requiredById('helpSection'),
   helpToggle: requiredById('helpToggle'),
   updatesSection: requiredById('updatesSection'),
@@ -244,7 +225,7 @@ dom.appVersion.textContent = APP_DISPLAY_VERSION
   : 'Another AI experiment with Jage. Version unknown';
 const DEFAULT_GRID_NAME = 'Chat Grid';
 const DEFAULT_WELCOME_MESSAGE =
-  'Welcome to the Chat Grid, your immersive audio playground. Configure your audio, then Log in or register to join the grid.';
+  'Welcome to the Chat Grid, your immersive audio playground. Configure your audio, then sign in with blind.software to join the grid.';
 const APP_BASE_URL = import.meta.env.BASE_URL || '/';
 /** Resolves an app-relative path against the configured Vite base path. */
 function withBase(path: string): string {
@@ -851,7 +832,7 @@ function pushChatMessage(message: string): void {
 function updateGridDashboard(): void {
   if (!state.running) return;
   const peerCount = state.peers.size;
-  const itemCount = Array.from(state.items.values()).filter((item) => !item.carrierId).length;
+  const itemCount = Array.from(state.items.values()).filter((item) => !item.carrierId && !isItemQuiet(item)).length;
   const namesHere = getPeerNamesAtPosition(state.player.x, state.player.y);
   const itemsHere = getItemsAtPosition(state.player.x, state.player.y).map((item) => itemLabel(item));
   const hereSummary = [...namesHere, ...itemsHere].join(', ') || 'just you';
@@ -974,8 +955,10 @@ function openHelpViewer(lines: string[], returnMode: GameMode = 'normal'): void 
 }
 
 /** Returns non-carried items occupying a given grid position. */
-function getItemsAtPosition(x: number, y: number): WorldItem[] {
-  return Array.from(state.items.values()).filter((item) => !item.carrierId && item.x === x && item.y === y);
+function getItemsAtPosition(x: number, y: number, includeQuiet = false): WorldItem[] {
+  return Array.from(state.items.values()).filter(
+    (item) => !item.carrierId && item.x === x && item.y === y && (includeQuiet || !isItemQuiet(item)),
+  );
 }
 
 /** Returns the item currently carried by the local player, if any. */
@@ -1468,6 +1451,11 @@ function handleAdminUsersList(message: Extract<IncomingMessage, { type: 'admin_u
   adminController.handleAdminUsersList(message);
 }
 
+/** Handles server platform overview response for admin menu flows. */
+function handleAdminPlatformOverview(message: Extract<IncomingMessage, { type: 'admin_platform_overview' }>): void {
+  adminController.handleAdminPlatformOverview(message);
+}
+
 /** Handles server transfer-target list response for item-management transfer flow. */
 function handleItemTransferTargets(message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>): void {
   itemInteractionController.handleItemTransferTargets(message);
@@ -1631,6 +1619,7 @@ const onAppMessage = createOnMessageHandler({
   handleAuthPermissions,
   handleAdminRolesList,
   handleAdminUsersList,
+  handleAdminPlatformOverview,
   handleAdminActionResult,
   handleItemTransferTargets,
   isPeerNegotiationReady: () => peerNegotiationReady,
@@ -1743,7 +1732,7 @@ function toggleMute(): void {
 }
 
 function getCurrentSquareItems(): WorldItem[] {
-  return getItemsAtPosition(state.player.x, state.player.y);
+  return getItemsAtPosition(state.player.x, state.player.y, true);
 }
 
 function getUsableItemsOnCurrentSquare(): WorldItem[] {
@@ -1899,7 +1888,7 @@ function addItemCommand(): void {
 
 function listItemsCommand(): void {
   state.sortedItemIds = Array.from(state.items.entries())
-    .filter(([, item]) => !item.carrierId)
+    .filter(([, item]) => !item.carrierId && !isItemQuiet(item))
     .sort(
       (a, b) =>
         Math.hypot(a[1].x - state.player.x, a[1].y - state.player.y) -

@@ -59,6 +59,7 @@ Summary:
 
 - Controls/keymap: `docs/controls.md`
 - Audio architecture and layers: `docs/audio-architecture.md`
+- TappedIn Archive sound source: `docs/archive-sound-library.md`
 - Item behavior by type: `docs/item-types.md`
 - Runtime lifecycle flow: `docs/runtime-flow.md`
 - Protocol behavior notes: `docs/protocol-notes.md`

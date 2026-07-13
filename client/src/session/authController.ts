@@ -7,22 +7,10 @@ export type AuthPolicy = {
   passwordMaxLength: number;
 };
 
-type AuthMode = 'login' | 'register';
-
 type AuthDom = {
   loginView: HTMLElement;
-  registerView: HTMLElement;
-  authUsername: HTMLInputElement;
-  authPassword: HTMLInputElement;
-  registerUsername: HTMLInputElement;
-  registerPassword: HTMLInputElement;
-  registerPasswordConfirm: HTMLInputElement;
-  registerEmail: HTMLInputElement;
-  authPolicyHintRegister: HTMLParagraphElement;
   authSessionView: HTMLElement;
   authSessionText: HTMLParagraphElement;
-  authModeSeparator: HTMLElement;
-  showRegisterButton: HTMLButtonElement;
   connectButton: HTMLButtonElement;
   logoutButton: HTMLButtonElement;
 };
@@ -66,7 +54,6 @@ export function createAuthController(deps: AuthControllerDeps): {
   getVoiceSendAllowed: () => boolean;
   getAuthUserId: () => string;
   sendAuthRequest: () => void;
-  setAuthMode: (mode: AuthMode) => void;
   handleAuthRequired: (message: Extract<IncomingMessage, { type: 'auth_required' }>) => void;
   handleAuthResult: (message: Extract<IncomingMessage, { type: 'auth_result' }>) => Promise<void>;
   handleAuthPermissions: (message: Extract<IncomingMessage, { type: 'auth_permissions' }>) => void;
@@ -76,7 +63,6 @@ export function createAuthController(deps: AuthControllerDeps): {
   ) => void;
   logOutAccount: () => void;
 } {
-  let authMode: AuthMode = 'login';
   let authUsername = deps.initialAuthUsername;
   let authUserId = '';
   let authPolicy: AuthPolicy | null = null;
@@ -134,17 +120,6 @@ export function createAuthController(deps: AuthControllerDeps): {
       passwordMaxLength: passwordMax,
     };
     localStorage.setItem(deps.authPolicyStorageKey, JSON.stringify(authPolicy));
-    deps.dom.authPolicyHintRegister.textContent = `Username, ${usernameMin}-${usernameMax} characters. Password, ${passwordMin}-${passwordMax} characters.`;
-    deps.dom.authUsername.minLength = usernameMin;
-    deps.dom.authUsername.maxLength = usernameMax;
-    deps.dom.registerUsername.minLength = usernameMin;
-    deps.dom.registerUsername.maxLength = usernameMax;
-    deps.dom.authPassword.minLength = passwordMin;
-    deps.dom.authPassword.maxLength = passwordMax;
-    deps.dom.registerPassword.minLength = passwordMin;
-    deps.dom.registerPassword.maxLength = passwordMax;
-    deps.dom.registerPasswordConfirm.minLength = passwordMin;
-    deps.dom.registerPasswordConfirm.maxLength = passwordMax;
     updateConnectAvailability();
   }
 
@@ -162,8 +137,6 @@ export function createAuthController(deps: AuthControllerDeps): {
     authUserId = '';
     authUsername = '';
     deps.saveAuthUsername('');
-    deps.dom.authUsername.value = '';
-    deps.dom.registerUsername.value = '';
   }
 
   function updateConnectAvailability(): void {
@@ -176,69 +149,31 @@ export function createAuthController(deps: AuthControllerDeps): {
       deps.dom.connectButton.textContent = 'Connect';
       deps.dom.connectButton.disabled = true;
       deps.dom.loginView.classList.add('hidden');
-      deps.dom.registerView.classList.add('hidden');
       deps.dom.authSessionView.classList.add('hidden');
       return;
     }
     if (hasSavedSessionHint) {
       deps.dom.authSessionText.textContent = `Logged in as ${sanitizeAuthUsername(authUsername)}.`;
-      deps.dom.showRegisterButton.classList.add('hidden');
-      deps.dom.authModeSeparator.classList.add('hidden');
       deps.dom.loginView.classList.add('hidden');
-      deps.dom.registerView.classList.add('hidden');
       deps.dom.authSessionView.classList.remove('hidden');
     } else {
-      deps.dom.showRegisterButton.classList.remove('hidden');
-      deps.dom.authModeSeparator.classList.remove('hidden');
-      deps.dom.showRegisterButton.textContent = authMode === 'login' ? 'Register' : 'Login';
-      deps.dom.loginView.classList.toggle('hidden', authMode !== 'login');
-      deps.dom.registerView.classList.toggle('hidden', authMode !== 'register');
+      deps.dom.loginView.classList.remove('hidden');
       deps.dom.authSessionView.classList.add('hidden');
     }
-    const usernameMin = authPolicy?.usernameMinLength ?? 1;
-    const passwordMin = authPolicy?.passwordMinLength ?? 1;
-    const hasLoginCredentials =
-      sanitizeAuthUsername(deps.dom.authUsername.value).length >= usernameMin &&
-      deps.dom.authPassword.value.trim().length >= passwordMin;
-    const hasRegisterCredentials =
-      sanitizeAuthUsername(deps.dom.registerUsername.value).length >= usernameMin &&
-      deps.dom.registerPassword.value.trim().length >= passwordMin &&
-      deps.dom.registerPassword.value === deps.dom.registerPasswordConfirm.value;
-    const authReady = hasExternalAuth || (authMode === 'login' ? hasSavedSessionHint || hasLoginCredentials : hasRegisterCredentials);
+    const authReady = hasExternalAuth || hasSavedSessionHint;
     deps.dom.connectButton.textContent = hasSavedSessionHint
       ? 'Connect'
       : hasExternalAuth
         ? 'Continue with blind.software'
-      : authMode === 'register'
-        ? 'Register & Connect'
-        : hasLoginCredentials
-          ? 'Log In & Connect'
-          : 'Connect';
+        : 'Connect';
     deps.dom.connectButton.disabled = deps.isConnecting() || !authReady;
-  }
-
-  function setAuthMode(mode: AuthMode): void {
-    authMode = mode;
-    deps.dom.loginView.classList.toggle('hidden', mode !== 'login');
-    deps.dom.registerView.classList.toggle('hidden', mode !== 'register');
-    updateConnectAvailability();
   }
 
   function buildAuthRequestPacket(): OutgoingMessage | null {
     if (externalAuthAssertion) {
       return { type: 'auth_external', assertion: externalAuthAssertion };
     }
-    if (authMode === 'register') {
-      const username = sanitizeAuthUsername(deps.dom.registerUsername.value);
-      const password = deps.dom.registerPassword.value;
-      const email = deps.dom.registerEmail.value.trim();
-      if (!username || !password || password !== deps.dom.registerPasswordConfirm.value) return null;
-      return { type: 'auth_register', username, password, ...(email ? { email } : {}) };
-    }
-    const username = sanitizeAuthUsername(deps.dom.authUsername.value);
-    const password = deps.dom.authPassword.value;
-    if (!username || !password) return null;
-    return { type: 'auth_login', username, password };
+    return null;
   }
 
   function sendAuthRequest(): void {
@@ -248,7 +183,7 @@ export function createAuthController(deps: AuthControllerDeps): {
       if (sanitizeAuthUsername(authUsername).length > 0) {
         deps.setConnectionStatus('Restoring saved session...');
       } else {
-        deps.setConnectionStatus('Enter your username and password to log in.');
+        deps.setConnectionStatus('Sign in with blind.software to join the grid.');
         deps.setConnecting(false);
       }
       updateConnectAvailability();
@@ -278,7 +213,6 @@ export function createAuthController(deps: AuthControllerDeps): {
       }
       if (sanitizeAuthUsername(authUsername).length > 0) {
         resetSavedSessionHint();
-        setAuthMode('login');
       }
       deps.setConnecting(false);
       updateConnectAvailability();
@@ -332,9 +266,6 @@ export function createAuthController(deps: AuthControllerDeps): {
     if (!message.ok) {
       externalAuthAssertion = '';
       authUserId = '';
-      deps.dom.authPassword.value = '';
-      deps.dom.registerPassword.value = '';
-      deps.dom.registerPasswordConfirm.value = '';
       if (message.message.toLowerCase().includes('session')) {
         resetSavedSessionHint();
         void clearHttpOnlySessionCookie();
@@ -355,14 +286,9 @@ export function createAuthController(deps: AuthControllerDeps): {
     if (message.username) {
       authUsername = message.username;
       deps.saveAuthUsername(message.username);
-      deps.dom.authUsername.value = message.username;
-      deps.dom.registerUsername.value = message.username;
     }
     applyAuthPermissions(message.role, message.permissions);
     deps.onServerAdminMenuActions(message.adminMenuActions);
-    deps.dom.authPassword.value = '';
-    deps.dom.registerPassword.value = '';
-    deps.dom.registerPasswordConfirm.value = '';
     deps.setConnectionStatus('Authenticated. Joining world...');
   }
 
@@ -399,64 +325,19 @@ export function createAuthController(deps: AuthControllerDeps): {
       deps.signalingSend({ type: 'auth_logout' });
       deps.disconnect();
     }
-    setAuthMode('login');
     deps.updateStatus('Logged out.');
     updateConnectAvailability();
   }
 
   function setupUiHandlers(uiDeps: AuthUiDeps): void {
-    deps.dom.showRegisterButton.addEventListener('click', () => {
-      if (authMode === 'login') {
-        setAuthMode('register');
-        deps.dom.registerUsername.focus();
-      } else {
-        setAuthMode('login');
-        deps.dom.authUsername.focus();
-      }
-    });
     deps.dom.logoutButton.addEventListener('click', () => {
       logOutAccount();
     });
-    deps.dom.authUsername.addEventListener('input', () => {
-      deps.dom.authUsername.value = sanitizeAuthUsername(deps.dom.authUsername.value);
-      updateConnectAvailability();
-    });
-    deps.dom.authPassword.addEventListener('input', () => {
-      updateConnectAvailability();
-    });
-    deps.dom.registerUsername.addEventListener('input', () => {
-      deps.dom.registerUsername.value = sanitizeAuthUsername(deps.dom.registerUsername.value);
-      updateConnectAvailability();
-    });
-    deps.dom.registerPassword.addEventListener('input', () => {
-      updateConnectAvailability();
-    });
-    deps.dom.registerPasswordConfirm.addEventListener('input', () => {
-      updateConnectAvailability();
-    });
-    deps.dom.registerEmail.addEventListener('input', () => {
-      updateConnectAvailability();
-    });
-
-    const submitAuthOnEnter = (event: KeyboardEvent): void => {
-      if (event.key !== 'Enter') return;
-      if (deps.dom.connectButton.disabled) return;
-      event.preventDefault();
-      void uiDeps.connect();
-    };
-    deps.dom.authUsername.addEventListener('keydown', submitAuthOnEnter);
-    deps.dom.authPassword.addEventListener('keydown', submitAuthOnEnter);
-    deps.dom.registerUsername.addEventListener('keydown', submitAuthOnEnter);
-    deps.dom.registerPassword.addEventListener('keydown', submitAuthOnEnter);
-    deps.dom.registerPasswordConfirm.addEventListener('keydown', submitAuthOnEnter);
-    deps.dom.registerEmail.addEventListener('keydown', submitAuthOnEnter);
+    void uiDeps;
   }
 
   function initializeUi(): void {
-    deps.dom.authUsername.value = sanitizeAuthUsername(authUsername);
-    deps.dom.registerUsername.value = sanitizeAuthUsername(authUsername);
     loadPersistedAuthPolicy();
-    setAuthMode('login');
     updateConnectAvailability();
   }
 
@@ -468,7 +349,6 @@ export function createAuthController(deps: AuthControllerDeps): {
     getVoiceSendAllowed: () => voiceSendAllowed,
     getAuthUserId: () => authUserId,
     sendAuthRequest,
-    setAuthMode,
     handleAuthRequired,
     handleAuthResult,
     handleAuthPermissions,

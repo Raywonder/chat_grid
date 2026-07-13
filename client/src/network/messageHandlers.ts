@@ -75,6 +75,7 @@ type MessageHandlerDeps = {
   handleAuthPermissions: (message: Extract<IncomingMessage, { type: 'auth_permissions' }>) => void;
   handleAdminRolesList: (message: Extract<IncomingMessage, { type: 'admin_roles_list' }>) => void;
   handleAdminUsersList: (message: Extract<IncomingMessage, { type: 'admin_users_list' }>) => void;
+  handleAdminPlatformOverview: (message: Extract<IncomingMessage, { type: 'admin_platform_overview' }>) => void;
   handleAdminActionResult: (message: Extract<IncomingMessage, { type: 'admin_action_result' }>) => void;
   handleItemTransferTargets: (message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>) => void;
   isPeerNegotiationReady: () => boolean;
@@ -102,6 +103,9 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         break;
       case 'admin_users_list':
         deps.handleAdminUsersList(message);
+        break;
+      case 'admin_platform_overview':
+        deps.handleAdminPlatformOverview(message);
         break;
       case 'admin_action_result':
         deps.handleAdminActionResult(message);
@@ -154,6 +158,30 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         await deps.applyAudioLayerState();
         deps.gameLoop();
         break;
+
+      case 'location_changed': {
+        if (message.id === deps.state.player.id) {
+          deps.state.player.x = message.x;
+          deps.state.player.y = message.y;
+          deps.state.peers.clear();
+          deps.state.items.clear();
+          deps.state.carriedItemId = null;
+          deps.updateStatus(`Arrived in ${message.locationName}.`);
+          await deps.refreshAudioSubscriptions(true);
+          await deps.applyAudioLayerState();
+          deps.gameLoop();
+          break;
+        }
+        deps.state.peers.set(message.id, {
+          id: message.id,
+          userId: message.userId ?? null,
+          nickname: deps.sanitizeName(message.nickname || 'user...') || 'user...',
+          locationId: message.locationId,
+          x: message.x,
+          y: message.y,
+        });
+        break;
+      }
 
       case 'signal': {
         if (!deps.isPeerNegotiationReady()) {

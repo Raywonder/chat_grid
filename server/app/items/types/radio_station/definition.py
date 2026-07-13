@@ -8,6 +8,10 @@ EDITABLE_PROPERTIES: tuple[str, ...] = (
     "title",
     "streamUrl",
     "enabled",
+    "speakerRole",
+    "linkedMediaGroup",
+    "syncWithPrimary",
+    "itemVisibility",
     "mediaVolume",
     "mediaChannel",
     "mediaEffect",
@@ -24,11 +28,16 @@ DIRECTIONAL = True
 DEFAULT_TITLE = "radio"
 DEFAULT_PARAMS: dict = {
     "streamUrl": "",
+    "playbackUrl": "",
     "enabled": True,
     "mediaVolume": 50,
     "mediaChannel": "stereo",
     "mediaEffect": "off",
     "mediaEffectValue": 50,
+    "speakerRole": "primary",
+    "linkedMediaGroup": "",
+    "syncWithPrimary": False,
+    "itemVisibility": "shown",
     "stationName": "",
     "nowPlaying": "",
     "facing": 0,
@@ -36,11 +45,16 @@ DEFAULT_PARAMS: dict = {
 }
 PARAM_KEYS: tuple[str, ...] = (
     "streamUrl",
+    "playbackUrl",
     "enabled",
     "mediaVolume",
     "mediaChannel",
     "mediaEffect",
     "mediaEffectValue",
+    "speakerRole",
+    "linkedMediaGroup",
+    "syncWithPrimary",
+    "itemVisibility",
     "stationName",
     "nowPlaying",
     "facing",
@@ -48,6 +62,14 @@ PARAM_KEYS: tuple[str, ...] = (
 )
 
 CHANNEL_OPTIONS: tuple[str, ...] = ("stereo", "mono", "left", "right")
+SPEAKER_ROLE_OPTIONS: tuple[str, ...] = (
+    "primary",
+    "sub",
+    "mid",
+    "high",
+    "high_low_bass",
+)
+VISIBILITY_OPTIONS: tuple[str, ...] = ("shown", "quiet")
 EFFECT_OPTIONS: tuple[str, ...] = (
     "reverb",
     "echo",
@@ -65,8 +87,12 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
     },
     "streamUrl": {
         "valueType": "text",
-        "tooltip": "Audio stream URL used by this radio.",
+        "tooltip": "Audio stream URL or supported station page used by this radio.",
         "maxLength": 2048,
+    },
+    "playbackUrl": {
+        "valueType": "text",
+        "tooltip": "Server-resolved playback URL for supported station pages.",
     },
     "enabled": {
         "valueType": "boolean",
@@ -92,6 +118,30 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "tooltip": "Amount for the selected effect.",
         "range": {"min": 0, "max": 100, "step": 0.1},
         "visibleWhen": {"mediaEffect": "!off"},
+    },
+    "speakerRole": {
+        "valueType": "list",
+        "label": "Speaker role",
+        "tooltip": "Audio filter role for this linked media item.",
+        "options": list(SPEAKER_ROLE_OPTIONS),
+    },
+    "linkedMediaGroup": {
+        "valueType": "text",
+        "label": "Linked media group",
+        "tooltip": "Shared group name used to sync related primary, sub, mid, and high media items.",
+        "maxLength": 80,
+    },
+    "syncWithPrimary": {
+        "valueType": "boolean",
+        "label": "Sync with primary",
+        "tooltip": "Use the primary item in this linked group as the shared media source.",
+        "visibleWhen": {"linkedMediaGroup": "!"},
+    },
+    "itemVisibility": {
+        "valueType": "list",
+        "label": "Item visibility",
+        "tooltip": "Quiet items stay playable but are omitted from ordinary nearby item lists.",
+        "options": list(VISIBILITY_OPTIONS),
     },
     "stationName": {
         "valueType": "text",

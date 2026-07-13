@@ -15,6 +15,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `auth_resume`: resume prior session via stored session token.
 - `auth_logout`: revoke current session and disconnect.
 - `welcome_ready`: client confirms it accepted `welcome` preflight and is ready to join active roster.
+- `change_location`: move to another server-defined location by id/name. `/go <location>` uses the same server handler.
 - `admin_roles_list`: request server role list (with user counts + permission sets).
 - `admin_role_create`: create role.
 - `admin_role_update_permissions`: replace one role permission set.
@@ -48,7 +49,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `welcome`: initial snapshot with users/items plus server UI/world metadata.
   - Server delays roster activation/login broadcast until `welcome_ready` is received.
 - `signal`: forwarded WebRTC offer/answer/ICE.
-- `update_position`, `update_nickname`, `user_left`: presence updates.
+- `update_position`, `location_changed`, `update_nickname`, `user_left`: presence updates.
 - `teleport_complete`: peer teleport landing event with spatial coordinates.
 - `chat_message`: system and user chat stream.
 - `pong`: ping response.
@@ -104,6 +105,8 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `welcome.worldConfig.gridSize`: server-authoritative grid size used by clients for bounds/drawing.
 - `welcome.worldConfig.movementTickMs`: server movement-rate window used for client movement pacing.
 - `welcome.worldConfig.movementMaxStepsPerTick`: max allowed grid steps per movement window.
+- `welcome.worldConfig.locationId` / `locationName` / `locationDescription`: current location metadata for this session.
+- `welcome.worldConfig.locations`: available location list, including the Arcade game area.
 - `welcome.player`: server-assigned spawn/current self position at connect time.
 - `welcome.serverInfo`: server process identity/version metadata:
   - `instanceId`: unique id generated at server startup

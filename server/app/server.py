@@ -49,6 +49,7 @@ from .item_catalog import (
 from .item_type_handlers import get_item_type_handler
 from .item_service import ItemService
 from .items.types.clock.time_format import parse_alarm_time_flexible
+from .items.types.radio_station.aaastreamer import resolve_aaastreamer_playback
 from .models import (
     AuthExternalPacket,
     AuthLoginPacket,
@@ -65,6 +66,9 @@ from .models import (
     AdminRoleUpdatePermissionsPacket,
     AdminRolesListPacket,
     AdminRolesListResultPacket,
+    AdminPlatformLinkSummary,
+    AdminPlatformOverviewPacket,
+    AdminPlatformOverviewResultPacket,
     AdminUserBanPacket,
     AdminUserDeletePacket,
     AdminUserSetRolePacket,
@@ -77,6 +81,7 @@ from .models import (
     BroadcastPositionPacket,
     BroadcastTeleportCompletePacket,
     ChatMessagePacket,
+    ChangeLocationPacket,
     ClientPacket,
     ForwardSignalPacket,
     ItemActionResultPacket,
@@ -99,6 +104,7 @@ from .models import (
     ItemUpsertPacket,
     ItemUsePacket,
     ItemUseSoundPacket,
+    LocationChangedPacket,
     NicknameResultPacket,
     PingPacket,
     PongPacket,
@@ -119,6 +125,13 @@ from .ui_metadata import (
     MAIN_MODE_SERVER_COMMAND_DEFINITIONS,
 )
 from .version import format_server_version
+from .world import (
+    DEFAULT_LOCATION_ID,
+    WORLD_LOCATIONS,
+    get_location,
+    location_options_text,
+    normalize_location_id,
+)
 
 LOGGER = logging.getLogger("chgrid.server")
 PACKET_LOGGER = logging.getLogger("chgrid.server.packet")
@@ -151,6 +164,7 @@ AUTH_RESUME_FAILURE_MESSAGE = "We couldn't restore your session. Please log in a
 AUTH_EXTERNAL_FAILURE_MESSAGE = "We couldn't complete the blind.software sign-in. Please try again."
 
 AdminActionName: TypeAlias = Literal[
+    "platform_overview",
     "role_create",
     "role_update_permissions",
     "role_delete",
@@ -238,7 +252,7 @@ class SignalingServer:
             username_min_length=username_min_length,
             username_max_length=username_max_length,
         )
-        self.item_service = ItemService(state_file=state_file)
+        self.item_service = ItemService(state_file=state_file, seed_builtin_items=True)
         self.item_last_use_ms: dict[str, int] = {}
         self.active_piano_keys_by_client: dict[str, set[str]] = {}
         self.piano_recording_state_by_item: dict[str, PianoRecordingSession] = {}
@@ -351,8 +365,37 @@ class SignalingServer:
             )
             if now_ms - last_saved_ms < POSITION_PERSIST_DEBOUNCE_MS:
                 return
-        self.auth_service.set_last_position(client.user_id, client.x, client.y)
+        self.auth_service.set_last_position(
+            client.user_id, client.x, client.y, client.location_id
+        )
         self._last_position_persist_ms_by_user[client.user_id] = now_ms
+
+    def _clients_in_location(
+        self, location_id: str, *, exclude: ServerConnection | None = None
+    ) -> list[ServerConnection]:
+        """Return active websocket recipients currently in one world location."""
+
+        return [
+            websocket
+            for websocket, client in self.clients.items()
+            if websocket is not exclude and client.location_id == location_id
+        ]
+
+    async def _broadcast_location(
+        self,
+        location_id: str,
+        packet: object,
+        *,
+        exclude: ServerConnection | None = None,
+    ) -> None:
+        """Broadcast one packet only to clients inside the selected location."""
+
+        recipients = self._clients_in_location(location_id, exclude=exclude)
+        if not recipients:
+            return
+        await asyncio.gather(
+            *(self._send(websocket, packet) for websocket in recipients)
+        )
 
     def _auth_policy(self) -> dict[str, int]:
         """Return server-auth policy limits advertised to clients."""
@@ -896,16 +939,23 @@ class SignalingServer:
 
         emit_range = self._get_item_emit_range(item)
         for client in self.clients.values():
+            if client.location_id != item.locationId:
+                continue
             if max(abs(client.x - item.x), abs(client.y - item.y)) <= emit_range:
                 return True
         return False
 
     @staticmethod
-    def _fetch_stream_metadata(stream_url: str) -> tuple[str, str]:
-        """Read ICY headers/metadata from a stream URL and return station/title."""
+    def _fetch_stream_metadata(stream_url: str) -> tuple[str, str, str]:
+        """Read stream metadata and return station/title/resolved playback URL."""
 
         if not stream_url:
-            return "", ""
+            return "", "", ""
+        resolved = resolve_aaastreamer_playback(
+            stream_url, timeout=RADIO_METADATA_TIMEOUT_S
+        )
+        if resolved is not None:
+            return resolved.title, resolved.now_playing, resolved.playback_url
         try:
             with open_validated_public_url(
                 stream_url,
@@ -933,9 +983,9 @@ class SignalingServer:
                                 match = re.search(r"StreamTitle='(.*?)';", meta)
                                 if match:
                                     title = match.group(1).strip()
-                return station[:160], title[:200]
+                return station[:160], title[:200], ""
         except (OSError, URLError, ValueError):
-            return "", ""
+            return "", "", ""
 
     async def _refresh_radio_metadata_once(self) -> None:
         """Refresh station/title metadata for active radios near at least one listener."""
@@ -951,15 +1001,21 @@ class SignalingServer:
         ]
         for item in radios:
             stream_url = str(item.params.get("streamUrl", "")).strip()
-            station_name, now_playing = await asyncio.to_thread(
+            station_name, now_playing, playback_url = await asyncio.to_thread(
                 self._fetch_stream_metadata, stream_url
             )
             current_station = str(item.params.get("stationName", "")).strip()
             current_playing = str(item.params.get("nowPlaying", "")).strip()
-            if station_name == current_station and now_playing == current_playing:
+            current_playback_url = str(item.params.get("playbackUrl", "")).strip()
+            if (
+                station_name == current_station
+                and now_playing == current_playing
+                and playback_url == current_playback_url
+            ):
                 continue
             item.params["stationName"] = station_name
             item.params["nowPlaying"] = now_playing
+            item.params["playbackUrl"] = playback_url
             item.updatedAt = self.item_service.now_ms()
             item.updatedBy = "system"
             item.updatedByName = "system"
@@ -1775,11 +1831,24 @@ class SignalingServer:
         )
 
     async def _broadcast_item(self, item: WorldItem) -> None:
-        """Broadcast a full item snapshot update to all connected clients."""
+        """Broadcast a full item snapshot update to clients in the item's location."""
 
-        await self._broadcast(
+        await self._broadcast_location(
+            item.locationId,
             ItemUpsertPacket(type="item_upsert", item=self._outbound_item(item))
         )
+
+    async def _ensure_builtin_items_and_broadcast(self) -> list[WorldItem]:
+        """Seed any newly shipped built-in items and broadcast them to live clients."""
+
+        added = self.item_service.ensure_builtin_items()
+        if not added:
+            return []
+        self.item_service.save_state()
+        LOGGER.info("seeded %d newly available built-in world items", len(added))
+        for item in added:
+            await self._broadcast_item(item)
+        return added
 
     async def start(self) -> None:
         """Start websocket serving and run until cancelled."""
@@ -1788,6 +1857,7 @@ class SignalingServer:
         LOGGER.info(
             "starting signaling server on %s://%s:%d", protocol, self.host, self.port
         )
+        await self._ensure_builtin_items_and_broadcast()
         self._radio_metadata_task = asyncio.create_task(self._run_radio_metadata_loop())
         self._clock_announce_task = asyncio.create_task(
             self._run_clock_top_of_hour_loop()
@@ -1906,17 +1976,21 @@ class SignalingServer:
     async def _send_welcome(self, client: ClientConnection) -> None:
         """Send initial world snapshot to a newly connected client."""
 
+        await self._ensure_builtin_items_and_broadcast()
         users = [
             RemoteUser(
                 id=other.id,
                 userId=other.user_id,
                 nickname=other.nickname,
+                locationId=other.location_id,
                 x=other.x,
                 y=other.y,
             )
             for ws, other in self.clients.items()
             if ws is not client.websocket
+            and other.location_id == client.location_id
         ]
+        location = get_location(client.location_id)
         packet = WelcomePacket(
             type="welcome",
             id=client.id,
@@ -1924,6 +1998,7 @@ class SignalingServer:
                 id=client.id,
                 userId=client.user_id,
                 nickname=client.nickname,
+                locationId=client.location_id,
                 x=client.x,
                 y=client.y,
             ),
@@ -1931,11 +2006,16 @@ class SignalingServer:
             items=[
                 self._outbound_item(item).model_dump(exclude_none=True)
                 for item in self.items.values()
+                if item.locationId == client.location_id
             ],
             worldConfig={
                 "gridSize": self.grid_size,
                 "movementTickMs": self.movement_tick_ms,
                 "movementMaxStepsPerTick": self.movement_max_steps_per_tick,
+                "locationId": client.location_id,
+                "locationName": location.name,
+                "locationDescription": location.description,
+                "locations": [entry.as_dict() for entry in WORLD_LOCATIONS],
             },
             uiDefinitions=self._build_ui_definitions(client),
             serverInfo={
@@ -1962,6 +2042,10 @@ class SignalingServer:
 
         saved_x = getattr(client, "saved_x", None)
         saved_y = getattr(client, "saved_y", None)
+        client.location_id = normalize_location_id(
+            getattr(client, "saved_location_id", None) or DEFAULT_LOCATION_ID
+        )
+        location = get_location(client.location_id)
         if (
             isinstance(saved_x, int)
             and isinstance(saved_y, int)
@@ -1970,8 +2054,8 @@ class SignalingServer:
             client.x = saved_x
             client.y = saved_y
         else:
-            client.x = random.randrange(self.grid_size)  # nosec B311
-            client.y = random.randrange(self.grid_size)  # nosec B311
+            client.x = min(max(location.spawn_x, 0), self.grid_size - 1)
+            client.y = min(max(location.spawn_y, 0), self.grid_size - 1)
         now_ms = self.item_service.now_ms()
         self._refresh_client_permissions(client)
         client.last_position_update_ms = now_ms
@@ -2197,6 +2281,7 @@ class SignalingServer:
         client.nickname = session.user.last_nickname or client.nickname
         client.saved_x = session.user.last_x
         client.saved_y = session.user.last_y
+        client.saved_location_id = session.user.last_location_id
         await self._send(
             client.websocket,
             AuthResultPacket(
@@ -2385,6 +2470,24 @@ class SignalingServer:
                 ),
             )
             return True
+        if command in {"go", "travel", "location"}:
+            if not separator or not remainder.strip():
+                await self._send(
+                    client.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message=f"Usage: /go <location>. Locations: {location_options_text()}",
+                        system=True,
+                    ),
+                )
+                return True
+            await self._handle_message(
+                client,
+                ChangeLocationPacket(
+                    type="change_location", locationId=remainder.strip()
+                ).model_dump_json(),
+            )
+            return True
         if command == "reboot":
             if not self._client_has_permission(client, "server.allow_reboot"):
                 await self._send(
@@ -2443,6 +2546,7 @@ class SignalingServer:
                 AdminRoleUpdatePermissionsPacket,
                 AdminRoleDeletePacket,
                 AdminUsersListPacket,
+                AdminPlatformOverviewPacket,
                 AdminUserSetRolePacket,
                 AdminUserBanPacket,
                 AdminUserUnbanPacket,
@@ -2500,6 +2604,48 @@ class SignalingServer:
                 client.websocket,
                 AdminUsersListResultPacket(
                     type="admin_users_list", users=user_summaries
+                ),
+            )
+            return True
+
+        if isinstance(packet, AdminPlatformOverviewPacket):
+            if not self._client_has_permission(client, "server.manage_settings"):
+                await deny("platform_overview", "Not authorized.")
+                return True
+            service_items = [
+                item
+                for item in self.item_service.items.values()
+                if item.type == "service_link"
+            ]
+            links = [
+                AdminPlatformLinkSummary(
+                    title=item.title,
+                    kind=str(item.params.get("serviceKind", "service")),
+                    locationId=item.locationId,
+                    x=item.x,
+                    y=item.y,
+                    url=str(item.params.get("url") or "") or None,
+                )
+                for item in sorted(
+                    service_items,
+                    key=lambda entry: (
+                        entry.locationId,
+                        entry.x,
+                        entry.y,
+                        entry.title.casefold(),
+                    ),
+                )[:20]
+            ]
+            await self._send(
+                client.websocket,
+                AdminPlatformOverviewResultPacket(
+                    type="admin_platform_overview",
+                    serverVersion=self.server_version,
+                    expectedClientRevision=self.expected_client_revision or None,
+                    connectedUsers=len(self.clients),
+                    itemCount=len(self.item_service.items),
+                    serviceLinkCount=len(service_items),
+                    links=links,
                 ),
             )
             return True
@@ -2759,6 +2905,125 @@ class SignalingServer:
         if await self._handle_admin_packet(client, packet):
             return
 
+        if isinstance(packet, ChangeLocationPacket):
+            next_location = get_location(packet.locationId)
+            old_location_id = client.location_id
+            if next_location.id == old_location_id:
+                await self._send(
+                    client.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message=f"You are already in {next_location.name}.",
+                        system=True,
+                    ),
+                )
+                return
+
+            await self._broadcast_location(
+                old_location_id,
+                UserLeftPacket(type="user_left", id=client.id),
+                exclude=client.websocket,
+            )
+            await self._broadcast_location(
+                old_location_id,
+                BroadcastChatMessagePacket(
+                    type="chat_message",
+                    message=f"{client.nickname} left for {next_location.name}.",
+                    system=True,
+                ),
+                exclude=client.websocket,
+            )
+
+            client.location_id = next_location.id
+            client.x = min(max(next_location.spawn_x, 0), self.grid_size - 1)
+            client.y = min(max(next_location.spawn_y, 0), self.grid_size - 1)
+            now_ms = self.item_service.now_ms()
+            client.last_position_update_ms = now_ms
+            client.movement_window_index = self._movement_window_index(now_ms)
+            client.movement_window_steps_used = 0
+            self._persist_client_position(client, force=True)
+            carried = self.item_service.find_carried_item(client.id)
+            if carried:
+                actor_id, actor_name = self._item_updated_actor(client)
+                carried.locationId = client.location_id
+                carried.x = client.x
+                carried.y = client.y
+                carried.updatedAt = now_ms
+                carried.updatedBy = actor_id
+                carried.updatedByName = actor_name
+                await self._broadcast_item(carried)
+
+            await self._send(
+                client.websocket,
+                LocationChangedPacket(
+                    type="location_changed",
+                    id=client.id,
+                    userId=client.user_id,
+                    nickname=client.nickname,
+                    locationId=client.location_id,
+                    locationName=next_location.name,
+                    x=client.x,
+                    y=client.y,
+                ),
+            )
+            for other in self.clients.values():
+                if other.id == client.id or other.location_id != client.location_id:
+                    continue
+                await self._send(
+                    client.websocket,
+                    LocationChangedPacket(
+                        type="location_changed",
+                        id=other.id,
+                        userId=other.user_id,
+                        nickname=other.nickname,
+                        locationId=other.location_id,
+                        locationName=next_location.name,
+                        x=other.x,
+                        y=other.y,
+                    ),
+                )
+            for item in self.items.values():
+                if item.locationId == client.location_id:
+                    await self._send(
+                        client.websocket,
+                        ItemUpsertPacket(
+                            type="item_upsert", item=self._outbound_item(item)
+                        ),
+                    )
+            await self._broadcast_location(
+                client.location_id,
+                LocationChangedPacket(
+                    type="location_changed",
+                    id=client.id,
+                    userId=client.user_id,
+                    nickname=client.nickname,
+                    locationId=client.location_id,
+                    locationName=next_location.name,
+                    x=client.x,
+                    y=client.y,
+                ),
+                exclude=client.websocket,
+            )
+            await self._broadcast_location(
+                client.location_id,
+                BroadcastChatMessagePacket(
+                    type="chat_message",
+                    message=f"{client.nickname} arrived in {next_location.name}.",
+                    system=True,
+                ),
+                exclude=client.websocket,
+            )
+            await self._send(
+                client.websocket,
+                BroadcastChatMessagePacket(
+                    type="chat_message",
+                    message=f"You arrive in {next_location.name}. {next_location.description}",
+                    system=True,
+                ),
+            )
+            self._request_state_save()
+            return
+
         if isinstance(packet, UpdatePositionPacket):
             if not self._is_in_bounds(packet.x, packet.y):
                 PACKET_LOGGER.warning(
@@ -2808,12 +3073,21 @@ class SignalingServer:
             await self._send(
                 client.websocket,
                 BroadcastPositionPacket(
-                    type="update_position", id=client.id, x=client.x, y=client.y
+                    type="update_position",
+                    id=client.id,
+                    locationId=client.location_id,
+                    x=client.x,
+                    y=client.y,
                 ),
             )
-            await self._broadcast(
+            await self._broadcast_location(
+                client.location_id,
                 BroadcastPositionPacket(
-                    type="update_position", id=client.id, x=client.x, y=client.y
+                    type="update_position",
+                    id=client.id,
+                    locationId=client.location_id,
+                    x=client.x,
+                    y=client.y,
                 ),
                 exclude=client.websocket,
             )
@@ -2852,12 +3126,21 @@ class SignalingServer:
             await self._send(
                 client.websocket,
                 BroadcastPositionPacket(
-                    type="update_position", id=client.id, x=client.x, y=client.y
+                    type="update_position",
+                    id=client.id,
+                    locationId=client.location_id,
+                    x=client.x,
+                    y=client.y,
                 ),
             )
-            await self._broadcast(
+            await self._broadcast_location(
+                client.location_id,
                 BroadcastPositionPacket(
-                    type="update_position", id=client.id, x=client.x, y=client.y
+                    type="update_position",
+                    id=client.id,
+                    locationId=client.location_id,
+                    x=client.x,
+                    y=client.y,
                 ),
                 exclude=client.websocket,
             )
@@ -2870,7 +3153,8 @@ class SignalingServer:
                 carried.updatedBy = actor_id
                 carried.updatedByName = actor_name
                 await self._broadcast_item(carried)
-            await self._broadcast(
+            await self._broadcast_location(
+                client.location_id,
                 BroadcastTeleportCompletePacket(
                     type="teleport_complete",
                     id=client.id,
@@ -2952,7 +3236,8 @@ class SignalingServer:
                     effectiveNickname=client.nickname,
                 ),
             )
-            await self._broadcast(
+            await self._broadcast_location(
+                client.location_id,
                 BroadcastNicknamePacket(
                     type="update_nickname", id=client.id, nickname=client.nickname
                 ),
@@ -3004,14 +3289,15 @@ class SignalingServer:
                 return
             if await self._handle_chat_command(client, packet.message):
                 return
-            await self._broadcast(
+            await self._broadcast_location(
+                client.location_id,
                 BroadcastChatMessagePacket(
                     type="chat_message",
                     message=packet.message,
                     senderId=client.id,
                     senderNickname=client.nickname,
                     system=False,
-                )
+                ),
             )
             return
 

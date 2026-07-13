@@ -22,6 +22,8 @@ class ClientConnection:
     nickname: str = "user..."
     saved_x: int | None = None
     saved_y: int | None = None
+    saved_location_id: str | None = None
+    location_id: str = "city"
     x: int = 20
     y: int = 20
     last_position_update_ms: int = 0
@@ -32,4 +34,10 @@ class ClientConnection:
     def summary(self) -> dict[str, str | int]:
         """Return a compact serializable snapshot for logs/diagnostics."""
 
-        return {"id": self.id, "nickname": self.nickname, "x": self.x, "y": self.y}
+        return {
+            "id": self.id,
+            "nickname": self.nickname,
+            "locationId": self.location_id,
+            "x": self.x,
+            "y": self.y,
+        }

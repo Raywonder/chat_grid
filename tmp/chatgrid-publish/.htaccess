@@ -1,0 +1,10 @@
+# Chat Grid publish-dir cache policy.
+# Applied to /chgrid/.htaccess by deploy_client.sh.
+
+<IfModule mod_headers.c>
+  <FilesMatch "^(index\.html|version\.js)$">
+    Header set Cache-Control "no-store, no-cache, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+</IfModule>

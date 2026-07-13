@@ -10,6 +10,7 @@ export const itemSchema = z.object({
   id: z.string(),
   type: z.string().min(1),
   title: z.string(),
+  locationId: z.string().optional(),
   x: z.number().int(),
   y: z.number().int(),
   createdBy: z.string(),
@@ -32,6 +33,7 @@ export const welcomeMessageSchema = z.object({
     id: z.string(),
     userId: z.string().nullable().optional(),
     nickname: z.string(),
+    locationId: z.string().optional(),
     x: z.number().int(),
     y: z.number().int(),
   }),
@@ -40,6 +42,7 @@ export const welcomeMessageSchema = z.object({
       id: z.string(),
       userId: z.string().nullable().optional(),
       nickname: z.string(),
+      locationId: z.string().optional(),
       x: z.number().int(),
       y: z.number().int(),
     }),
@@ -50,6 +53,21 @@ export const welcomeMessageSchema = z.object({
       gridSize: z.number().int().positive(),
       movementTickMs: z.number().int().positive().optional(),
       movementMaxStepsPerTick: z.number().int().positive().optional(),
+      locationId: z.string().optional(),
+      locationName: z.string().optional(),
+      locationDescription: z.string().optional(),
+      locations: z
+        .array(
+          z.object({
+            id: z.string(),
+            name: z.string(),
+            kind: z.string(),
+            description: z.string(),
+            spawnX: z.number().int(),
+            spawnY: z.number().int(),
+          }),
+        )
+        .optional(),
     })
     .optional(),
   serverInfo: z
@@ -189,6 +207,18 @@ export const signalMessageSchema = z.object({
 export const updatePositionSchema = z.object({
   type: z.literal('update_position'),
   id: z.string(),
+  locationId: z.string().optional(),
+  x: z.number().int(),
+  y: z.number().int(),
+});
+
+export const locationChangedSchema = z.object({
+  type: z.literal('location_changed'),
+  id: z.string(),
+  userId: z.string().nullable().optional(),
+  nickname: z.string().optional(),
+  locationId: z.string(),
+  locationName: z.string(),
   x: z.number().int(),
   y: z.number().int(),
 });
@@ -349,10 +379,30 @@ export const adminUsersListSchema = z.object({
   ),
 });
 
+export const adminPlatformOverviewSchema = z.object({
+  type: z.literal('admin_platform_overview'),
+  serverVersion: z.string(),
+  expectedClientRevision: z.string().nullable().optional(),
+  connectedUsers: z.number().int().nonnegative(),
+  itemCount: z.number().int().nonnegative(),
+  serviceLinkCount: z.number().int().nonnegative(),
+  links: z.array(
+    z.object({
+      title: z.string(),
+      kind: z.string(),
+      locationId: z.string(),
+      x: z.number().int(),
+      y: z.number().int(),
+      url: z.string().nullable().optional(),
+    }),
+  ),
+});
+
 export const adminActionResultSchema = z.object({
   type: z.literal('admin_action_result'),
   ok: z.boolean(),
   action: z.enum([
+    'platform_overview',
     'role_create',
     'role_update_permissions',
     'role_delete',
@@ -370,6 +420,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   welcomeMessageSchema,
   signalMessageSchema,
   updatePositionSchema,
+  locationChangedSchema,
   teleportCompleteSchema,
   updateNicknameSchema,
   userLeftSchema,
@@ -387,6 +438,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   authPermissionsSchema,
   adminRolesListSchema,
   adminUsersListSchema,
+  adminPlatformOverviewSchema,
   adminActionResultSchema,
 ]);
 
@@ -404,12 +456,14 @@ export type OutgoingMessage =
   | { type: 'admin_role_update_permissions'; role: string; permissions: string[] }
   | { type: 'admin_role_delete'; role: string; replacementRole: string }
   | { type: 'admin_users_list'; action?: 'set_role' | 'ban' | 'unban' | 'delete_account' }
+  | { type: 'admin_platform_overview' }
   | { type: 'admin_user_set_role'; username: string; role: string }
   | { type: 'admin_user_ban'; username: string }
   | { type: 'admin_user_unban'; username: string }
   | { type: 'admin_user_delete'; username: string }
   | { type: 'signal'; targetId: string; sdp?: RTCSessionDescriptionInit; ice?: RTCIceCandidateInit }
   | { type: 'update_position'; x: number; y: number }
+  | { type: 'change_location'; locationId: string }
   | { type: 'teleport_complete'; x: number; y: number }
   | { type: 'update_nickname'; nickname: string }
   | { type: 'chat_message'; message: string }
@@ -435,6 +489,7 @@ export type RemoteUser = {
   id: string;
   userId?: string | null;
   nickname: string;
+  locationId?: string;
   x: number;
   y: number;
 };

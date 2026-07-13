@@ -1,0 +1,82 @@
+{
+  "sections": [
+    {
+      "date": "March 8, 2026",
+      "items": [
+        "First public release, v0.1.0.",
+        "Added a command palette with Shift+K, Shift+F10, or the Applications key to show all available commands."
+      ]
+    },
+    {
+      "date": "February 28, 2026",
+      "items": [
+        "Added Item Management menu with z, to transfer items or delete them. Shift+D is gone now.",
+        "Added initial delay and loop delay for widgets, letting you do looped audio that has pauses."
+      ]
+    },
+    {
+      "date": "February 27, 2026",
+      "items": [
+        "Added chat actions with /me.",
+        "Added /version and /up commands for server status.",
+        "Added user roles/permissions system.",
+        "Added an admin menu and management commands",
+        "Clock item type now is an actual talking clock with optional alarm and top of hour announcement."
+      ]
+    },
+    {
+      "date": "February 24, 2026",
+      "items": [
+        "Added secondary actions with Shift+Enter. Currently, it works on the radio for now playing.",
+        "Added now playing for media streams.",
+        "Added user accounts. Username cannot be changed but nicknames can.",
+        "Did a lot of behind-the-scenes work, including rewriting the item system and moving a lot of things away from the client. If things break, please let me know."
+      ]
+    },
+    {
+      "date": "February 23, 2026",
+      "items": [
+        "Added a Piano item type."
+      ]
+    },
+    {
+      "date": "February 22, 2026",
+      "items": [
+        "Teleporting now takes a bit of time.",
+        "You can now use left and right arrows on item properties to quickly adjust them.",
+        "Added volume adjustment for other users. Press left or right arrow from the user list.",
+        "Improved handling of audio streams so only nearby ones will be loaded, saves a ton of bandwidth.",
+        "Moved Use item to Enter Key instead of u, moved speak users to U from Shift U.",
+        "Added up/down arrows and page up/page down for numeric field adjustment.",
+        "Added user volume control and calibration.",
+        "Added support for Dropbox links and HTTP streams for item sounds and radio stations.",
+        "You will no longer repeatedly hit walls."
+      ]
+    },
+    {
+      "date": "February 21, 2026",
+      "items": [
+        "Added a generic Widget item type. This type lets you edit a variety of global item properties, and you can use remote URL's for sounds.",
+        "Added tooltips for items and item properties. Press space from the Add Item or properties menus.",
+        "Added directional audio support, used now for the Radio item type.",
+        "Added audio layers to toggle voice, item sounds, media, and world (other users).",
+        "Added new item type clock.",
+        "Changed the E effect key to open a menu list for choosing effects.",
+        "Moved chat key from apostrophe to slash.",
+        "Added simple first-letter navigation for menus and lists.",
+        "Added Channel property for radio items (stereo, mono, left, right).",
+        "Added new wheel item type with configurable spaces and spin results.",
+        "Added movement/teleport sounds."
+      ]
+    },
+    {
+      "date": "February 20, 2026",
+      "items": [
+        "Added Shift+O inspector mode to read all item properties.",
+        "Added paste support for chat and text-entry fields.",
+        "Persisted player position across refresh/reconnect.",
+        "Added loopback monitoring toggle for hearing your own effect."
+      ]
+    }
+  ]
+}

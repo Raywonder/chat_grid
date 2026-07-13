@@ -25,6 +25,11 @@ class UpdatePositionPacket(BasePacket):
     y: int
 
 
+class ChangeLocationPacket(BasePacket):
+    type: Literal["change_location"]
+    locationId: str = Field(min_length=1, max_length=64)
+
+
 class TeleportCompletePacket(BasePacket):
     type: Literal["teleport_complete"]
     x: int
@@ -96,6 +101,10 @@ class AdminRoleDeletePacket(BasePacket):
 class AdminUsersListPacket(BasePacket):
     type: Literal["admin_users_list"]
     action: Literal["set_role", "ban", "unban", "delete_account"] | None = None
+
+
+class AdminPlatformOverviewPacket(BasePacket):
+    type: Literal["admin_platform_overview"]
 
 
 class AdminUserSetRolePacket(BasePacket):
@@ -191,6 +200,7 @@ class ItemUpdatePacket(BasePacket):
 ClientPacket = (
     SignalPacket
     | UpdatePositionPacket
+    | ChangeLocationPacket
     | TeleportCompletePacket
     | UpdateNicknamePacket
     | ChatMessagePacket
@@ -205,6 +215,7 @@ ClientPacket = (
     | AdminRoleUpdatePermissionsPacket
     | AdminRoleDeletePacket
     | AdminUsersListPacket
+    | AdminPlatformOverviewPacket
     | AdminUserSetRolePacket
     | AdminUserBanPacket
     | AdminUserUnbanPacket
@@ -228,6 +239,7 @@ class RemoteUser(BaseModel):
     id: str
     userId: str | None = None
     nickname: str
+    locationId: str = "city"
     x: int
     y: int
 
@@ -283,6 +295,18 @@ class UserLeftPacket(BasePacket):
 class BroadcastPositionPacket(BasePacket):
     type: Literal["update_position"]
     id: str
+    locationId: str | None = None
+    x: int
+    y: int
+
+
+class LocationChangedPacket(BasePacket):
+    type: Literal["location_changed"]
+    id: str
+    userId: str | None = None
+    nickname: str | None = None
+    locationId: str
+    locationName: str
     x: int
     y: int
 
@@ -304,6 +328,7 @@ class ForwardSignalPacket(BasePacket):
     type: Literal["signal"]
     senderId: str
     senderNickname: str
+    locationId: str | None = None
     x: int
     y: int
     sdp: dict | None = None
@@ -336,6 +361,7 @@ class WorldItem(BaseModel):
     id: str
     type: str = Field(min_length=1)
     title: str
+    locationId: str = "city"
     x: int
     y: int
     createdBy: str
@@ -358,6 +384,7 @@ class PersistedWorldItem(BaseModel):
     id: str
     type: str = Field(min_length=1)
     title: str
+    locationId: str = "city"
     x: int
     y: int
     createdBy: str
@@ -482,10 +509,30 @@ class AdminUsersListResultPacket(BasePacket):
     users: list[AdminUserSummary]
 
 
+class AdminPlatformLinkSummary(BaseModel):
+    title: str
+    kind: str
+    locationId: str
+    x: int
+    y: int
+    url: str | None = None
+
+
+class AdminPlatformOverviewResultPacket(BasePacket):
+    type: Literal["admin_platform_overview"]
+    serverVersion: str
+    expectedClientRevision: str | None = None
+    connectedUsers: int
+    itemCount: int
+    serviceLinkCount: int
+    links: list[AdminPlatformLinkSummary]
+
+
 class AdminActionResultPacket(BasePacket):
     type: Literal["admin_action_result"]
     ok: bool
     action: Literal[
+        "platform_overview",
         "role_create",
         "role_update_permissions",
         "role_delete",

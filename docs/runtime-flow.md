@@ -20,7 +20,8 @@
    - applies `welcome.worldConfig.gridSize` for authoritative grid bounds/rendering
    - applies `welcome.worldConfig.movementTickMs` as movement pacing guidance
    - applies `welcome.worldConfig.movementMaxStepsPerTick` for movement-rate parity
-  - uses `welcome.player` as authoritative starting position (restored from server-side account state when available)
+   - receives current location metadata and the server-defined location list
+   - uses `welcome.player` as authoritative starting position (restored from server-side account state when available)
    - records `welcome.serverInfo` (`instanceId`, `releaseVersion`, `serverVersion`, `expectedClientRevision`, `gridName`, `welcomeMessage`) for restart detection and client branding
    - if `welcome.serverInfo.expectedClientRevision` differs from the running client revision, auto-reloads the page
    - applies `welcome.uiDefinitions` for item menus/properties/options, server-backed command metadata, item-management metadata, and admin menu labels/order
@@ -55,6 +56,7 @@ Core incoming message effects:
 - `admin_users_list`: user metadata list for role/ban admin flows.
 - `admin_action_result`: success/error for role/user admin mutations.
 - `update_position`: update peer position; may play movement/teleport world sound.
+- `location_changed`: reset local room state for the new location or add a peer arrival.
 - `teleport_complete`: play peer teleport landing sound at final tile.
 - `update_nickname`: update peer display name.
 - `chat_message`: append/readable status; optional system sound class.

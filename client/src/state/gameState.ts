@@ -8,6 +8,7 @@ export type WorldItem = {
   id: string;
   type: ItemType;
   title: string;
+  locationId?: string;
   x: number;
   y: number;
   createdBy: string;
@@ -65,6 +66,7 @@ export type PeerState = {
   id: string;
   userId?: string | null;
   nickname: string;
+  locationId?: string;
   x: number;
   y: number;
 };
@@ -167,6 +169,7 @@ export function getNearestItem(state: GameState): { itemId: string | null; dista
   let minDist = Infinity;
   for (const [id, item] of state.items.entries()) {
     if (item.carrierId) continue;
+    if (isItemQuiet(item)) continue;
     const dist = Math.hypot(item.x - state.player.x, item.y - state.player.y);
     if (dist < minDist) {
       minDist = dist;
@@ -174,4 +177,9 @@ export function getNearestItem(state: GameState): { itemId: string | null; dista
     }
   }
   return { itemId: nearest, distance: minDist };
+}
+
+export function isItemQuiet(item: WorldItem): boolean {
+  const visibility = String(item.params.itemVisibility ?? '').trim().toLowerCase();
+  return visibility === 'quiet' || visibility === 'hidden';
 }

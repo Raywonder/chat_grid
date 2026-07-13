@@ -5,7 +5,7 @@
 ```json
 {
   "id": "string",
-  "type": "radio_station | dice | wheel | clock | widget | piano",
+  "type": "radio_station | dice | wheel | clock | widget | piano | service_link",
   "title": "string",
   "x": 0,
   "y": 0,
@@ -29,8 +29,8 @@
 - `capabilities`, `useSound`, and `emitSound` are derived from global item-type definitions at runtime (not stored per-instance in persisted state).
 - `createdBy` / `updatedBy` are stable user IDs.
 - `createdByName` / `updatedByName` are display-name snapshots used for inspect/readout text.
-- `useCooldownMs`: global per item type (`radio_station=1000`, `dice=1000`, `wheel=4000`, `clock=1000`, `widget=1000`, `piano=1000`), not per-instance editable.
-- `emitRange`: global spatial range default per item type (`radio_station=10`, `dice=15`, `wheel=15`, `clock=10`, `widget=15`, `piano=15`).
+- `useCooldownMs`: global per item type (`radio_station=1000`, `dice=1000`, `wheel=4000`, `clock=1000`, `widget=1000`, `piano=1000`, `service_link=1000`), not per-instance editable.
+- `emitRange`: global spatial range default per item type (`radio_station=10`, `dice=15`, `wheel=15`, `clock=10`, `widget=15`, `piano=15`, `service_link=12`).
   - `radio_station` can override this per instance via `params.emitRange` (`5..20`).
 - `directional`: global directional attenuation flag per item type (`radio_station=true`, others `false`); `widget` can override per instance via `params.directional`.
 
@@ -39,7 +39,7 @@
 ```json
 {
   "id": "string",
-  "type": "radio_station | dice | wheel | clock | widget | piano",
+  "type": "radio_station | dice | wheel | clock | widget | piano | service_link",
   "title": "string",
   "x": 0,
   "y": 0,
@@ -68,11 +68,16 @@
 ```json
 {
   "streamUrl": "",
+  "playbackUrl": "",
   "enabled": true,
   "mediaChannel": "stereo",
   "mediaVolume": 50,
   "mediaEffect": "off",
   "mediaEffectValue": 50,
+  "speakerRole": "primary",
+  "linkedMediaGroup": "",
+  "syncWithPrimary": false,
+  "itemVisibility": "shown",
   "stationName": "",
   "nowPlaying": "",
   "facing": 0,
@@ -80,7 +85,8 @@
 }
 ```
 
-- `streamUrl`: string, empty allowed until configured.
+- `streamUrl`: string, empty allowed until configured. Accepts direct audio stream URLs and supported station pages such as public AAAStreamer `/s/<slug>` URLs.
+- `playbackUrl`: server-managed resolved playback URL for supported station pages.
 - `enabled`: boolean on/off flag.
   - UI behavior: in property menu, `Enter` toggles on/off directly.
 - `mediaVolume`: integer, range `0-100`, default `50`.
@@ -88,11 +94,33 @@
 - `mediaEffect`: one of `reverb | echo | flanger | high_pass | low_pass | off`, default `off`.
 - `mediaEffectValue`: number, range `0-100`, precision `0.1`.
 - UI visibility: `mediaEffectValue` is shown only when `mediaEffect != off` (`visibleWhen: {"mediaEffect": "!off"}`).
+- `speakerRole`: one of `primary | sub | mid | high | high_low_bass`, default `primary`.
+- `linkedMediaGroup`: optional group name, max 80 chars. Radio items with the same group can behave like linked speaker/filter components.
+- `syncWithPrimary`: boolean, default `false`. When enabled on a non-primary item with a `linkedMediaGroup`, the client uses the group's `primary` item as the shared media source so secondary speaker/filter items stay time-synced.
+- `itemVisibility`: one of `shown | quiet`, default `shown`. `quiet` items still play and can be edited on their square, but are skipped by ordinary nearby/list/locate discovery.
 - `stationName`: server-managed station label derived from ICY metadata when available.
 - `nowPlaying`: server-managed stream title derived from ICY metadata when available.
 - `facing`: number, range `0-360`, step `1` (used when `directional=true`).
 - UI visibility: `facing` is shown only when `directional=true` (`visibleWhen` metadata).
 - `emitRange`: integer, range `5-20`, default `10`.
+
+### `service_link`
+
+```json
+{
+  "serviceKind": "service",
+  "url": "",
+  "description": "",
+  "launchMessage": "",
+  "enabled": true
+}
+```
+
+- `serviceKind`: one of `app | game | service | site | station | tool`.
+- `url`: empty, absolute public `http/https` URL, or site-relative path.
+- `description`: short spoken description, max 240 chars.
+- `launchMessage`: optional use-action message, max 240 chars.
+- `enabled`: boolean on/off flag.
 
 ### `dice`
 

@@ -1,0 +1,53 @@
+{
+  "sections": [
+    {
+      "title": "Piano Mode",
+      "items": [
+        {
+          "keys": "Home row",
+          "description": "A S D F G H J K L semicolon quote. Play white keys (C major scale from C4)."
+        },
+        {
+          "keys": "Qwerty row",
+          "description": "W E T Y U O P right bracket. Play black keys (sharps)."
+        },
+        {
+          "keys": "1 through 0",
+          "description": "Change instrument presets."
+        },
+        {
+          "keys": "Shift+K / Applications / Shift+F10",
+          "description": "Open the command palette."
+        },
+        {
+          "keys": "Minus / Equals",
+          "description": "Shift octave down or up."
+        },
+        {
+          "keys": "Z",
+          "description": "Start, pause, or resume recording (up to 30 seconds of recorded time)."
+        },
+        {
+          "keys": "X",
+          "description": "Play saved recording."
+        },
+        {
+          "keys": "Enter",
+          "description": "Play demo melody."
+        },
+        {
+          "keys": "C",
+          "description": "Stop demo, recording playback, and active recording."
+        },
+        {
+          "keys": "Escape",
+          "description": "Exit piano mode."
+        },
+        {
+          "keys": "Shifted note keys",
+          "description": "Ignored in piano mode so shifted shortcuts stay distinct."
+        }
+      ]
+    }
+  ]
+}

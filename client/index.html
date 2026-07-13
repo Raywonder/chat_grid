@@ -10,38 +10,11 @@
       <h1 id="gridTitle">Chat Grid</h1>
       <div id="connectionStatus" role="status" aria-live="polite" aria-atomic="true"></div>
       <section id="loginView" class="auth-panel">
-        <h2>Login</h2>
+        <h2>Sign in</h2>
         <p class="auth-hint">
           <a class="button-link" href="/?route=chatgrid_auth_start">Sign in with blind.software</a>
         </p>
-        <div class="auth-row">
-          <label for="authUsername">Username</label>
-          <input id="authUsername" type="text" maxlength="32" autocomplete="username" />
-        </div>
-        <div class="auth-row">
-          <label for="authPassword">Password</label>
-          <input id="authPassword" type="password" maxlength="64" autocomplete="current-password" />
-        </div>
-      </section>
-      <section id="registerView" class="auth-panel hidden">
-        <h2>Register</h2>
-        <div class="auth-row">
-          <label for="registerUsername">Username</label>
-          <input id="registerUsername" type="text" maxlength="32" autocomplete="username" />
-        </div>
-        <div class="auth-row">
-          <label for="registerPassword">Password</label>
-          <input id="registerPassword" type="password" maxlength="64" autocomplete="new-password" />
-        </div>
-        <div class="auth-row">
-          <label for="registerPasswordConfirm">Confirm Password</label>
-          <input id="registerPasswordConfirm" type="password" maxlength="64" autocomplete="new-password" />
-        </div>
-        <div class="auth-row">
-          <label for="registerEmail">Email (optional)</label>
-          <input id="registerEmail" type="email" maxlength="320" autocomplete="email" />
-        </div>
-        <p id="authPolicyHintRegister" class="auth-hint"></p>
+        <p class="auth-hint">Use the normal blind.software account sign-in, then return here to join the grid.</p>
       </section>
       <section id="authSessionView" class="auth-panel hidden">
         <h2>Logged In</h2>
@@ -49,8 +22,6 @@
       </section>
       <div class="controls" id="button-container">
         <button id="connectButton">Connect</button>
-        <span id="authModeSeparator" aria-hidden="true">or</span>
-        <button id="showRegisterButton" type="button">Register</button>
         <button id="logoutButton" class="hidden">Log out</button>
         <button id="settingsButton">Audio setup</button>
         <button id="disconnectButton" class="hidden">Disconnect</button>

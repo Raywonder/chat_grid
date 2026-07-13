@@ -238,7 +238,7 @@ export function getInspectItemPropertyKeys(item: WorldItem): string[] {
 
   // Keep derived radio metadata in a stable, user-friendly order.
   if (item.type === 'radio_station') {
-    for (const key of ['stationName', 'nowPlaying']) {
+    for (const key of ['stationName', 'nowPlaying', 'playbackUrl']) {
       if (!isItemPropertyVisible(item, key)) continue;
       if (seen.has(key)) continue;
       seen.add(key);
