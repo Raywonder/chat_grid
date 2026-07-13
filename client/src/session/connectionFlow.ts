@@ -101,6 +101,8 @@ export function runDisconnectFlow(deps: ConnectFlowDeps): void {
   deps.dom.focusGridButton.classList.add('hidden');
   deps.dom.canvas.classList.add('hidden');
   deps.dom.instructions.classList.add('hidden');
+  document.getElementById('joinGuide')?.classList.remove('hidden');
+  document.getElementById('gridDashboard')?.classList.add('hidden');
   deps.updateConnectAvailability();
 
   deps.updateStatus('Disconnected.');

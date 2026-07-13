@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
 from pathlib import Path
+import time
 
 import pytest
 
@@ -18,6 +23,17 @@ def make_auth_service(tmp_path: Path) -> AuthService:
     )
 
 
+def sign_external_assertion(payload: dict[str, object], secret: str) -> str:
+    encoded_payload = base64.urlsafe_b64encode(
+        json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    ).decode("ascii").rstrip("=")
+    signature = hmac.new(
+        secret.encode("utf-8"), encoded_payload.encode("ascii"), hashlib.sha256
+    ).digest()
+    encoded_signature = base64.urlsafe_b64encode(signature).decode("ascii").rstrip("=")
+    return f"{encoded_payload}.{encoded_signature}"
+
+
 def test_register_and_resume_session(tmp_path: Path) -> None:
     service = make_auth_service(tmp_path)
     try:
@@ -26,6 +42,63 @@ def test_register_and_resume_session(tmp_path: Path) -> None:
         resumed = service.resume(session.token)
         assert resumed.user.id == session.user.id
         assert resumed.user.role == "user"
+    finally:
+        service.close()
+
+
+def test_login_external_assertion_creates_user_and_session(tmp_path: Path) -> None:
+    service = make_auth_service(tmp_path)
+    try:
+        now = int(time.time())
+        assertion = sign_external_assertion(
+            {
+                "aud": "chatgrid",
+                "provider": "blind.software",
+                "sub": "member-123",
+                "username": "Blind Member",
+                "email": "member@example.com",
+                "displayName": "Blind Member",
+                "role": "editor",
+                "nonce": "nonce-1",
+                "iat": now,
+                "exp": now + 120,
+            },
+            "external-secret",
+        )
+
+        session = service.login_external_assertion(
+            assertion, signing_secret="external-secret"
+        )
+
+        assert session.user.username == "blind-member"
+        assert session.user.email == "member@example.com"
+        assert session.user.role == "editor"
+        resumed = service.resume(session.token)
+        assert resumed.user.id == session.user.id
+    finally:
+        service.close()
+
+
+def test_login_external_assertion_rejects_nonce_replay(tmp_path: Path) -> None:
+    service = make_auth_service(tmp_path)
+    try:
+        now = int(time.time())
+        assertion = sign_external_assertion(
+            {
+                "aud": "chatgrid",
+                "provider": "blind.software",
+                "sub": "member-123",
+                "username": "Blind Member",
+                "nonce": "nonce-1",
+                "iat": now,
+                "exp": now + 120,
+            },
+            "external-secret",
+        )
+
+        service.login_external_assertion(assertion, signing_secret="external-secret")
+        with pytest.raises(AuthError, match="already used"):
+            service.login_external_assertion(assertion, signing_secret="external-secret")
     finally:
         service.close()
 

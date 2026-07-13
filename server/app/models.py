@@ -59,6 +59,11 @@ class AuthResumePacket(BasePacket):
     sessionToken: str = Field(min_length=1, max_length=512)
 
 
+class AuthExternalPacket(BasePacket):
+    type: Literal["auth_external"]
+    assertion: str = Field(min_length=1, max_length=8192)
+
+
 class AuthLogoutPacket(BasePacket):
     type: Literal["auth_logout"]
 
@@ -192,6 +197,7 @@ ClientPacket = (
     | AuthRegisterPacket
     | AuthLoginPacket
     | AuthResumePacket
+    | AuthExternalPacket
     | AuthLogoutPacket
     | WelcomeReadyPacket
     | AdminRolesListPacket

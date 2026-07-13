@@ -3,11 +3,13 @@
 server/.env
 server/config.toml
 server/runtime/
+runtime/
 
 # Python
 server/.venv/
 server/.coverage
 server/coverage.xml
+server/*.egg-info/
 **/__pycache__/
 *.py[cod]
 .pytest_cache/

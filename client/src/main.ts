@@ -3,11 +3,7 @@ import { AudioEngine } from './audio/audioEngine';
 import {
   EFFECT_SEQUENCE,
 } from './audio/effects';
-import {
-  RadioStationRuntime,
-  getProxyUrlForStream,
-  shouldProxyStreamUrl,
-} from './audio/radioStationRuntime';
+import { RadioStationRuntime } from './audio/radioStationRuntime';
 import { getProxyUrlForMedia, shouldProxyExternalMediaUrl } from './audio/mediaUrl';
 import { ItemEmitRuntime } from './audio/itemEmitRuntime';
 import { ClockAnnouncer } from './audio/clockAnnouncer';
@@ -31,7 +27,6 @@ import { dispatchModeInput } from './input/modeDispatcher';
 import { handleListControlKey } from './input/listController';
 import { createAdminController, type AdminMenuAction } from './input/adminController';
 import { setupKeyboardInputHandlers } from './input/keyboardController';
-import { handleYesNoMenuInput, YES_NO_OPTIONS } from './input/yesNoMenu';
 import { getEditSessionAction } from './input/editSession';
 import { formatSteppedNumber, snapNumberToStep } from './input/numeric';
 import { type IncomingMessage, type OutgoingMessage } from './network/protocol';
@@ -130,6 +125,12 @@ type Dom = {
   audioOutputSelect: HTMLSelectElement;
   audioInputCurrent: HTMLParagraphElement;
   audioOutputCurrent: HTMLParagraphElement;
+  joinGuide: HTMLElement;
+  gridDashboard: HTMLElement;
+  gridPosition: HTMLSpanElement;
+  gridPeople: HTMLSpanElement;
+  gridItems: HTMLSpanElement;
+  gridHere: HTMLSpanElement;
   canvas: HTMLCanvasElement;
   status: HTMLDivElement;
   instructions: HTMLDivElement;
@@ -168,6 +169,12 @@ const dom: Dom = {
   audioOutputSelect: requiredById('audioOutputSelect'),
   audioInputCurrent: requiredById('audioInputCurrent'),
   audioOutputCurrent: requiredById('audioOutputCurrent'),
+  joinGuide: requiredById('joinGuide'),
+  gridDashboard: requiredById('gridDashboard'),
+  gridPosition: requiredById('gridPosition'),
+  gridPeople: requiredById('gridPeople'),
+  gridItems: requiredById('gridItems'),
+  gridHere: requiredById('gridHere'),
   canvas: requiredById('gameCanvas'),
   status: requiredById('status'),
   instructions: requiredById('instructions'),
@@ -820,7 +827,26 @@ function pushChatMessage(message: string): void {
     messageBuffer.shift();
   }
   messageCursor = messageBuffer.length - 1;
+  const normalized = message.trim().toLowerCase();
+  if (state.running && normalized.endsWith(' has logged in.')) {
+    setConnectionStatus(`${message} Press Shift+L to find them or / to say hello.`);
+  }
   updateStatus(message);
+}
+
+/** Refreshes the compact visible dashboard for sighted and low-vision grid users. */
+function updateGridDashboard(): void {
+  if (!state.running) return;
+  const peerCount = state.peers.size;
+  const itemCount = Array.from(state.items.values()).filter((item) => !item.carrierId).length;
+  const namesHere = getPeerNamesAtPosition(state.player.x, state.player.y);
+  const itemsHere = getItemsAtPosition(state.player.x, state.player.y).map((item) => itemLabel(item));
+  const hereSummary = [...namesHere, ...itemsHere].join(', ') || 'just you';
+
+  dom.gridPosition.textContent = `${state.player.x}, ${state.player.y}`;
+  dom.gridPeople.textContent = peerCount === 1 ? '1 other user' : `${peerCount} other users`;
+  dom.gridItems.textContent = itemCount === 1 ? '1 item' : `${itemCount} items`;
+  dom.gridHere.textContent = hereSummary;
 }
 
 /** Classifies a system chat line into a corresponding notification sound, when applicable. */
@@ -1210,6 +1236,7 @@ function gameLoop(): void {
   radioRuntime.updateSpatialAudio(state.items, { x: state.player.x, y: state.player.y });
   itemEmitRuntime.updateSpatialAudio(state.items, { x: state.player.x, y: state.player.y });
   state.cursorVisible = Math.floor(Date.now() / 500) % 2 === 0;
+  updateGridDashboard();
   renderer.draw(state);
   requestAnimationFrame(gameLoop);
 }

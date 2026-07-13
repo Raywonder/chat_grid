@@ -50,6 +50,7 @@ from .item_type_handlers import get_item_type_handler
 from .item_service import ItemService
 from .items.types.clock.time_format import parse_alarm_time_flexible
 from .models import (
+    AuthExternalPacket,
     AuthLoginPacket,
     AuthLogoutPacket,
     AuthPermissionsPacket,
@@ -147,6 +148,7 @@ WEBSOCKET_PATH = "ws"
 AUTH_SESSION_COOKIE_CLIENT_HEADER = "X-Chgrid-Auth-Client"
 AUTH_LOGIN_FAILURE_MESSAGE = "We couldn't log you in. Check your details and try again."
 AUTH_RESUME_FAILURE_MESSAGE = "We couldn't restore your session. Please log in again."
+AUTH_EXTERNAL_FAILURE_MESSAGE = "We couldn't complete the blind.software sign-in. Please try again."
 
 AdminActionName: TypeAlias = Literal[
     "role_create",
@@ -225,6 +227,9 @@ class SignalingServer:
         )
         if not auth_secret:
             raise ValueError("CHGRID_AUTH_SECRET is required.")
+        self.external_auth_secret = os.getenv(
+            "CHGRID_EXTERNAL_AUTH_SECRET", auth_secret
+        ).strip()
         self.auth_service = AuthService(
             db_path=resolved_auth_db_path,
             token_hash_secret=auth_secret,
@@ -722,6 +727,8 @@ class SignalingServer:
             username = packet.username.strip().lower()
         elif isinstance(packet, AuthResumePacket):
             username = "resume"
+        elif isinstance(packet, AuthExternalPacket):
+            username = "external"
         else:
             username = "unknown"
         return f"{self._client_ip(client)}::{username}"
@@ -2003,7 +2010,8 @@ class SignalingServer:
         """Handle pre-auth packets; returns True when packet was an auth command."""
 
         if client.authenticated and isinstance(
-            packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket)
+            packet,
+            (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket, AuthExternalPacket),
         ):
             await self._send(
                 client.websocket,
@@ -2017,7 +2025,8 @@ class SignalingServer:
             return True
 
         if isinstance(
-            packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket)
+            packet,
+            (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket, AuthExternalPacket),
         ) and self._is_auth_rate_limited(client, packet):
             LOGGER.warning(
                 "auth rate limited id=%s ip=%s packet=%s",
@@ -2072,6 +2081,19 @@ class SignalingServer:
                     session.user.username,
                     session.user.id,
                 )
+            elif isinstance(packet, AuthExternalPacket):
+                session = self.auth_service.login_external_assertion(
+                    packet.assertion,
+                    signing_secret=self.external_auth_secret,
+                    expected_audience="chatgrid",
+                )
+                LOGGER.info(
+                    "auth external success id=%s ip=%s username=%s user_id=%s",
+                    client.id,
+                    self._client_ip(client),
+                    session.user.username,
+                    session.user.id,
+                )
             elif isinstance(packet, AuthLogoutPacket):
                 if client.session_token:
                     self.auth_service.revoke(client.session_token)
@@ -2098,7 +2120,13 @@ class SignalingServer:
                 return False
         except AuthError as exc:
             if isinstance(
-                packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket)
+                packet,
+                (
+                    AuthLoginPacket,
+                    AuthRegisterPacket,
+                    AuthResumePacket,
+                    AuthExternalPacket,
+                ),
             ):
                 self._record_auth_failure(client, packet)
                 await self._sleep_auth_failure_jitter()
@@ -2107,6 +2135,8 @@ class SignalingServer:
                 response_message = AUTH_LOGIN_FAILURE_MESSAGE
             elif isinstance(packet, AuthResumePacket):
                 response_message = AUTH_RESUME_FAILURE_MESSAGE
+            elif isinstance(packet, AuthExternalPacket):
+                response_message = AUTH_EXTERNAL_FAILURE_MESSAGE
             LOGGER.warning(
                 "auth failure id=%s ip=%s packet=%s reason=%s",
                 client.id,
@@ -2126,7 +2156,13 @@ class SignalingServer:
             return True
         except Exception:
             if isinstance(
-                packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket)
+                packet,
+                (
+                    AuthLoginPacket,
+                    AuthRegisterPacket,
+                    AuthResumePacket,
+                    AuthExternalPacket,
+                ),
             ):
                 self._record_auth_failure(client, packet)
                 await self._sleep_auth_failure_jitter()
@@ -2147,7 +2183,9 @@ class SignalingServer:
             )
             return True
 
-        if isinstance(packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket)):
+        if isinstance(
+            packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket, AuthExternalPacket)
+        ):
             self._clear_auth_failures(client, packet)
 
         client.authenticated = True

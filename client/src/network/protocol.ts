@@ -396,6 +396,7 @@ export type OutgoingMessage =
   | { type: 'auth_register'; username: string; password: string; email?: string }
   | { type: 'auth_login'; username: string; password: string }
   | { type: 'auth_resume'; sessionToken: string }
+  | { type: 'auth_external'; assertion: string }
   | { type: 'auth_logout' }
   | { type: 'welcome_ready' }
   | { type: 'admin_roles_list' }

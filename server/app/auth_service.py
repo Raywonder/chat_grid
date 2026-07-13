@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import base64
+import json
 import hashlib
 import hmac
 import logging
@@ -25,6 +27,7 @@ ARGON2_HASH_LEN = 32
 ARGON2_SALT_LEN = 16
 USERNAME_PATTERN = re.compile(r"^[a-z0-9_-]+$")
 ROLE_NAME_PATTERN = re.compile(r"^[a-z0-9_-]+$")
+EXTERNAL_PROVIDER_PATTERN = re.compile(r"^[a-z0-9_.:-]+$")
 LOGGER = logging.getLogger("chgrid.server.auth")
 
 PERMISSIONS: tuple[str, ...] = (
@@ -746,6 +749,112 @@ class AuthService:
         self._db_commit()
         return self._create_session(user)
 
+    def login_external(
+        self,
+        *,
+        provider: str,
+        subject: str,
+        username: str,
+        email: str | None = None,
+        role: str = "user",
+        display_name: str | None = None,
+    ) -> AuthSession:
+        """Authenticate a verified external identity and issue a Chat Grid session."""
+
+        normalized_provider = self._normalize_external_provider(provider)
+        normalized_subject = subject.strip()
+        if not normalized_subject:
+            raise AuthError("External account is missing an identity subject.")
+        normalized_email = self._normalize_email(email)
+        normalized_role = self._external_role_name(role)
+
+        with self._conn_lock:
+            identity_row = self._conn.execute(
+                """
+                SELECT user_id
+                FROM external_identities
+                WHERE provider = ? AND subject = ?
+                """,
+                (normalized_provider, normalized_subject),
+            ).fetchone()
+            if identity_row is not None:
+                user_id = int(identity_row["user_id"])
+                self._sync_external_user_profile(
+                    user_id=user_id,
+                    email=normalized_email,
+                    role=normalized_role,
+                    display_name=display_name,
+                )
+                self._conn.commit()
+                user = self.get_user_by_id(str(user_id))
+                if user is None:
+                    raise AuthError("Linked Chat Grid account was not found.")
+                return self._create_session(user)
+
+            user_id = self._find_existing_external_user_id(
+                normalized_email, self._normalize_username(username)
+            )
+            if user_id is None:
+                user_id = self._create_external_user(
+                    username=username,
+                    email=normalized_email,
+                    role=normalized_role,
+                    display_name=display_name,
+                )
+            else:
+                self._sync_external_user_profile(
+                    user_id=user_id,
+                    email=normalized_email,
+                    role=normalized_role,
+                    display_name=display_name,
+                )
+
+            now_ms = self.now_ms()
+            self._conn.execute(
+                """
+                INSERT INTO external_identities (
+                    provider, subject, user_id, created_at_ms, last_login_at_ms
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(provider, subject) DO UPDATE SET
+                    user_id = excluded.user_id,
+                    last_login_at_ms = excluded.last_login_at_ms
+                """,
+                (normalized_provider, normalized_subject, user_id, now_ms, now_ms),
+            )
+            self._conn.commit()
+
+        user = self.get_user_by_id(str(user_id))
+        if user is None:
+            raise AuthError("Failed to load external Chat Grid account.")
+        return self._create_session(user)
+
+    def login_external_assertion(
+        self, assertion: str, *, signing_secret: str, expected_audience: str = "chatgrid"
+    ) -> AuthSession:
+        """Validate a signed external-login assertion and issue a session."""
+
+        payload = self._verify_external_assertion(
+            assertion, signing_secret=signing_secret, expected_audience=expected_audience
+        )
+        nonce = str(payload.get("nonce", "")).strip()
+        if not nonce:
+            raise AuthError("External sign-in token is missing a nonce.")
+        exp = int(payload.get("exp", 0))
+        self._consume_external_nonce(nonce, exp)
+
+        provider = str(payload.get("provider") or payload.get("iss") or "external")
+        subject = str(payload.get("sub") or "")
+        if subject.startswith(f"{provider}:"):
+            subject = subject[len(provider) + 1 :]
+        return self.login_external(
+            provider=provider,
+            subject=subject,
+            username=str(payload.get("username") or ""),
+            email=str(payload.get("email") or "") or None,
+            role=str(payload.get("role") or "user"),
+            display_name=str(payload.get("displayName") or "") or None,
+        )
+
     def resume(self, token: str) -> AuthSession:
         """Validate a session token and apply rolling expiry."""
 
@@ -982,6 +1091,28 @@ class AuthService:
             )
             """
         )
+        self._db_execute(
+            """
+            CREATE TABLE IF NOT EXISTS external_identities (
+                provider TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                user_id INTEGER NOT NULL,
+                created_at_ms INTEGER NOT NULL,
+                last_login_at_ms INTEGER NOT NULL,
+                PRIMARY KEY(provider, subject),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        self._db_execute(
+            """
+            CREATE TABLE IF NOT EXISTS external_auth_nonces (
+                nonce TEXT PRIMARY KEY,
+                expires_at_ms INTEGER NOT NULL,
+                used_at_ms INTEGER NOT NULL
+            )
+            """
+        )
 
         self._seed_permissions_and_roles()
         self._backfill_user_roles()
@@ -1006,6 +1137,12 @@ class AuthService:
         )
         self._db_execute(
             "CREATE INDEX IF NOT EXISTS idx_user_state_updated ON user_state(updated_at_ms)"
+        )
+        self._db_execute(
+            "CREATE INDEX IF NOT EXISTS idx_external_identities_user_id ON external_identities(user_id)"
+        )
+        self._db_execute(
+            "CREATE INDEX IF NOT EXISTS idx_external_auth_nonces_expires ON external_auth_nonces(expires_at_ms)"
         )
         self._db_commit()
 
@@ -1119,6 +1256,178 @@ class AuthService:
         self._db_commit()
         return AuthSession(session_id=session_id, token=token, user=user)
 
+    def _find_existing_external_user_id(
+        self, email: str | None, preferred_username: str
+    ) -> int | None:
+        """Find an existing local account that can safely receive an external link."""
+
+        if email:
+            row = self._conn.execute(
+                "SELECT id FROM users WHERE lower(email) = ?",
+                (email.lower(),),
+            ).fetchone()
+            if row is not None:
+                return int(row["id"])
+        if preferred_username:
+            row = self._conn.execute(
+                "SELECT id FROM users WHERE username = ?",
+                (preferred_username,),
+            ).fetchone()
+            if row is not None:
+                return int(row["id"])
+        return None
+
+    def _create_external_user(
+        self,
+        *,
+        username: str,
+        email: str | None,
+        role: str,
+        display_name: str | None,
+    ) -> int:
+        """Create a local Chat Grid account for a verified external identity."""
+
+        normalized_username = self._unique_external_username(username, email)
+        role_row = self._conn.execute(
+            "SELECT id FROM roles WHERE name = ?", (role,)
+        ).fetchone()
+        if role_row is None:
+            raise AuthError("Role not found.")
+        now_ms = self.now_ms()
+        random_password_hash = self._hash_password(secrets.token_urlsafe(48))
+        self._conn.execute(
+            """
+            INSERT INTO users (
+                username, password_hash, email, role_id, status, created_at_ms, updated_at_ms, last_login_at_ms
+            ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?)
+            """,
+            (
+                normalized_username,
+                random_password_hash,
+                email,
+                int(role_row["id"]),
+                now_ms,
+                now_ms,
+                now_ms,
+            ),
+        )
+        row = self._conn.execute("SELECT last_insert_rowid() AS id").fetchone()
+        if row is None:
+            raise AuthError("Failed to create external account.")
+        user_id = int(row["id"])
+        nickname = self._display_name_to_nickname(display_name) or normalized_username
+        self._conn.execute(
+            """
+            INSERT OR IGNORE INTO user_state (user_id, last_nickname, last_x, last_y, updated_at_ms)
+            VALUES (?, ?, NULL, NULL, ?)
+            """,
+            (user_id, nickname, now_ms),
+        )
+        return user_id
+
+    def _sync_external_user_profile(
+        self,
+        *,
+        user_id: int,
+        email: str | None,
+        role: str,
+        display_name: str | None,
+    ) -> None:
+        """Refresh safe local account fields from a verified external account."""
+
+        user_row = self._conn.execute(
+            """
+            SELECT u.email, r.name AS role_name
+            FROM users u
+            JOIN roles r ON r.id = u.role_id
+            WHERE u.id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+        if user_row is None:
+            raise AuthError("User not found.")
+        role_name = str(user_row["role_name"])
+        target_role = role_name if role_name == "admin" and role != "admin" else role
+        role_row = self._conn.execute(
+            "SELECT id FROM roles WHERE name = ?", (target_role,)
+        ).fetchone()
+        if role_row is None:
+            raise AuthError("Role not found.")
+
+        now_ms = self.now_ms()
+        update_email = email if not user_row["email"] else user_row["email"]
+        self._conn.execute(
+            """
+            UPDATE users
+            SET email = ?, role_id = ?, status = 'active', last_login_at_ms = ?, updated_at_ms = ?
+            WHERE id = ?
+            """,
+            (update_email, int(role_row["id"]), now_ms, now_ms, user_id),
+        )
+        nickname = self._display_name_to_nickname(display_name)
+        if nickname:
+            self._conn.execute(
+                """
+                INSERT INTO user_state (user_id, last_nickname, last_x, last_y, updated_at_ms)
+                VALUES (?, ?, NULL, NULL, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    last_nickname = COALESCE(user_state.last_nickname, excluded.last_nickname),
+                    updated_at_ms = excluded.updated_at_ms
+                """,
+                (user_id, nickname, now_ms),
+            )
+
+    def _unique_external_username(self, username: str, email: str | None) -> str:
+        """Return a valid unique username derived from external account fields."""
+
+        candidate = self._normalize_username(username)
+        if not candidate and email and "@" in email:
+            candidate = self._normalize_username(email.split("@", 1)[0])
+        candidate = re.sub(r"[^a-z0-9_-]+", "-", candidate)
+        candidate = candidate.strip("-_") or "blind-user"
+        max_base_length = max(self.username_min_length, min(self.username_max_length, 24))
+        candidate = candidate[:max_base_length].strip("-_") or "blind-user"
+        if len(candidate) < self.username_min_length:
+            candidate = (candidate + "-user")[: self.username_max_length]
+
+        base = candidate[: self.username_max_length]
+        for suffix_index in range(0, 10_000):
+            if suffix_index == 0:
+                attempt = base
+            else:
+                suffix = f"-{suffix_index}"
+                attempt = f"{base[: self.username_max_length - len(suffix)]}{suffix}"
+            if len(attempt) < self.username_min_length:
+                continue
+            row = self._conn.execute(
+                "SELECT 1 FROM users WHERE username = ?", (attempt,)
+            ).fetchone()
+            if row is None:
+                return attempt
+        raise AuthError("Could not allocate a Chat Grid username.")
+
+    def _consume_external_nonce(self, nonce: str, exp_seconds: int) -> None:
+        """Store a one-use external assertion nonce or reject a replay."""
+
+        now_ms = self.now_ms()
+        expires_at_ms = int(exp_seconds) * 1000
+        self._db_execute(
+            "DELETE FROM external_auth_nonces WHERE expires_at_ms < ?",
+            (now_ms,),
+        )
+        try:
+            self._db_execute(
+                """
+                INSERT INTO external_auth_nonces (nonce, expires_at_ms, used_at_ms)
+                VALUES (?, ?, ?)
+                """,
+                (nonce, expires_at_ms, now_ms),
+            )
+            self._db_commit()
+        except sqlite3.IntegrityError as exc:
+            self._db_rollback()
+            raise AuthError("External sign-in token was already used.") from exc
+
     def _get_user_by_username(self, username: str) -> AuthUser | None:
         """Fetch one user by normalized username."""
 
@@ -1205,6 +1514,35 @@ class AuthService:
         return role_name.strip().lower()
 
     @staticmethod
+    def _normalize_external_provider(provider: str) -> str:
+        """Normalize external identity provider names."""
+
+        normalized = provider.strip().lower()
+        if not normalized or len(normalized) > 64:
+            raise AuthError("Invalid external sign-in provider.")
+        if EXTERNAL_PROVIDER_PATTERN.fullmatch(normalized) is None:
+            raise AuthError("Invalid external sign-in provider.")
+        return normalized
+
+    @staticmethod
+    def _external_role_name(role_name: str) -> str:
+        """Map external site roles into Chat Grid roles."""
+
+        normalized = role_name.strip().lower()
+        if normalized == "admin":
+            return "admin"
+        if normalized in {"moderator", "editor"}:
+            return "editor"
+        return "user"
+
+    @staticmethod
+    def _display_name_to_nickname(display_name: str | None) -> str:
+        """Convert an external display name into a safe initial nickname."""
+
+        cleaned = re.sub(r"\s+", " ", str(display_name or "").strip())
+        return cleaned[:32]
+
+    @staticmethod
     def _normalize_email(email: str | None) -> str | None:
         """Normalize optional email and collapse blanks to None."""
 
@@ -1279,3 +1617,55 @@ class AuthService:
         return hmac.new(
             self._token_secret, token.encode("utf-8"), hashlib.sha256
         ).hexdigest()
+
+    @staticmethod
+    def _base64url_decode(value: str) -> bytes:
+        """Decode unpadded base64url text."""
+
+        padding = "=" * (-len(value) % 4)
+        return base64.urlsafe_b64decode((value + padding).encode("ascii"))
+
+    @classmethod
+    def _verify_external_assertion(
+        cls, assertion: str, *, signing_secret: str, expected_audience: str
+    ) -> dict[str, object]:
+        """Verify one HMAC-signed external-login assertion payload."""
+
+        secret = signing_secret.strip()
+        if not secret:
+            raise AuthError("External sign-in is not configured.")
+        parts = assertion.strip().split(".")
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            raise AuthError("Invalid external sign-in token.")
+        payload_part, signature_part = parts
+        expected_signature = hmac.new(
+            secret.encode("utf-8"),
+            payload_part.encode("ascii"),
+            hashlib.sha256,
+        ).digest()
+        try:
+            provided_signature = cls._base64url_decode(signature_part)
+        except Exception as exc:
+            raise AuthError("Invalid external sign-in token.") from exc
+        if not hmac.compare_digest(expected_signature, provided_signature):
+            raise AuthError("Invalid external sign-in token.")
+
+        try:
+            payload = json.loads(cls._base64url_decode(payload_part))
+        except Exception as exc:
+            raise AuthError("Invalid external sign-in token.") from exc
+        if not isinstance(payload, dict):
+            raise AuthError("Invalid external sign-in token.")
+        aud = str(payload.get("aud", ""))
+        if aud != expected_audience:
+            raise AuthError("External sign-in token was issued for a different app.")
+        now_seconds = int(time.time())
+        exp = int(payload.get("exp", 0))
+        iat = int(payload.get("iat", 0))
+        if exp <= now_seconds:
+            raise AuthError("External sign-in token has expired.")
+        if iat > now_seconds + 60:
+            raise AuthError("External sign-in token is not valid yet.")
+        if exp - now_seconds > 300:
+            raise AuthError("External sign-in token expiry is too long.")
+        return payload

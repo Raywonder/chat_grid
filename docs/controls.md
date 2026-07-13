@@ -4,6 +4,8 @@ This document is the authoritative keymap for the client.
 
 ## Normal Mode
 
+When you join the grid, the page also shows a compact dashboard with your current coordinates, connected user count, item count, and anything sharing your current square.
+
 ### Movement
 - `Arrow Keys`: Move
 - `Shift+K`, `Applications`, or `Shift+F10`: Open the command palette in supported modes

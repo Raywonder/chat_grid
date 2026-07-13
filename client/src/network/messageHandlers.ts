@@ -133,6 +133,8 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.dom.focusGridButton.classList.remove('hidden');
         deps.dom.canvas.classList.remove('hidden');
         deps.dom.instructions.classList.remove('hidden');
+        document.getElementById('joinGuide')?.classList.add('hidden');
+        document.getElementById('gridDashboard')?.classList.remove('hidden');
         deps.dom.canvas.focus();
 
         deps.signalingSend({ type: 'update_position', x: deps.state.player.x, y: deps.state.player.y });
