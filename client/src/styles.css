@@ -35,11 +35,11 @@ body {
   margin-bottom: 0.5rem;
 }
 
-#appGithubLink {
+#appFooter a {
   color: #93c5fd;
 }
 
-#appGithubLink:visited {
+#appFooter a:visited {
   color: #bfdbfe;
 }
 

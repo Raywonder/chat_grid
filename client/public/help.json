@@ -12,6 +12,10 @@
           "description": "Open the command palette in supported modes"
         },
         {
+          "keys": "?",
+          "description": "Open the main help viewer"
+        },
+        {
           "keys": "C",
           "description": "Speak your coordinates"
         },
@@ -21,7 +25,7 @@
         },
         {
           "keys": "Escape",
-          "description": "Disconnect/cancel"
+          "description": "Press once for the disconnect prompt, press again to disconnect"
         }
       ]
     },
@@ -47,6 +51,10 @@
         {
           "keys": "Slash commands",
           "description": "In chat, use /me <action>, /up for uptime, and /version for server version"
+        },
+        {
+          "keys": "Shift+Z",
+          "description": "Open admin menu when your role permissions allow it"
         },
         {
           "keys": "Comma / Period",
@@ -90,8 +98,16 @@
           "description": "Item management (delete/transfer when permitted)"
         },
         {
+          "keys": "Space in item menus",
+          "description": "Read tooltip or help for the selected item action or property"
+        },
+        {
           "keys": "Enter",
           "description": "Use item"
+        },
+        {
+          "keys": "Shift+Enter",
+          "description": "Use the selected item's secondary action when it has one"
         }
       ]
     },
@@ -149,6 +165,98 @@
         {
           "keys": "Shift+V",
           "description": "Microphone calibration"
+        }
+      ]
+    },
+    {
+      "title": "Text, Menus, and Commands",
+      "items": [
+        {
+          "keys": "Enter / Escape",
+          "description": "Confirm or cancel in text entry, menus, and dialogs"
+        },
+        {
+          "keys": "Arrow Up / Arrow Down",
+          "description": "Move through menu and list choices"
+        },
+        {
+          "keys": "Page Up / Page Down",
+          "description": "Jump larger steps in numeric and long property option lists"
+        },
+        {
+          "keys": "Home / End",
+          "description": "Move to the start or end in text fields and help viewer"
+        },
+        {
+          "keys": "Ctrl+A/C/X/V or Cmd+A/C/X/V",
+          "description": "Select all, copy, cut, and paste in text entry fields"
+        },
+        {
+          "keys": "First letter",
+          "description": "Jump to the next matching entry in most command and list menus"
+        }
+      ]
+    },
+    {
+      "title": "Admin",
+      "items": [
+        {
+          "keys": "Shift+Z",
+          "description": "Open the admin menu when your role has admin actions"
+        },
+        {
+          "keys": "Space",
+          "description": "Read help for the selected admin action"
+        },
+        {
+          "keys": "Enter",
+          "description": "Run a selected admin action such as role management, user role changes, bans, unbans, or account deletion when permitted"
+        }
+      ]
+    },
+    {
+      "title": "Piano Mode",
+      "items": [
+        {
+          "keys": "1-9 / 0",
+          "description": "Switch instrument preset slots"
+        },
+        {
+          "keys": "A S D F G H J K L ; '",
+          "description": "Play white keys"
+        },
+        {
+          "keys": "W E T Y U O P ]",
+          "description": "Play sharps"
+        },
+        {
+          "keys": "Minus / Equals",
+          "description": "Shift octave down or up"
+        },
+        {
+          "keys": "Z / X / Enter / C",
+          "description": "Record, play recording, play demo, or stop piano playback"
+        },
+        {
+          "keys": "? / Escape",
+          "description": "Open piano help or exit piano mode"
+        }
+      ]
+    },
+    {
+      "title": "Help Viewer",
+      "items": [
+        {
+          "keys": "Arrow Up / Arrow Down",
+          "description": "Read the previous or next help line"
+        },
+        {
+          "keys": "Home / End",
+          "description": "Jump to the first or last help line"
+        },
+        {
+          "keys": "Escape",
+          "description": "Close help and return to the previous mode"
         }
       ]
     }
