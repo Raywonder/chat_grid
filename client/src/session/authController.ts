@@ -34,6 +34,7 @@ type AuthControllerDeps = {
   authSessionCookieClearUrl: string;
   authSessionCookieClientHeader: string;
   initialAuthUsername: string;
+  initialExternalAuthAssertion: string;
   isRunning: () => boolean;
   isMuted: () => boolean;
   isConnecting: () => boolean;
@@ -82,6 +83,7 @@ export function createAuthController(deps: AuthControllerDeps): {
   let authPermissions = new Set<string>();
   let voiceSendAllowed = true;
   let pendingAuthRequest = false;
+  let externalAuthAssertion = deps.initialExternalAuthAssertion.trim();
 
   function sanitizeAuthUsername(value: string): string {
     const maxLength = authPolicy?.usernameMaxLength ?? 128;
@@ -166,6 +168,7 @@ export function createAuthController(deps: AuthControllerDeps): {
 
   function updateConnectAvailability(): void {
     const hasSavedSessionHint = sanitizeAuthUsername(authUsername).length > 0;
+    const hasExternalAuth = externalAuthAssertion.length > 0;
     const showLogout = deps.isRunning() || hasSavedSessionHint;
     deps.dom.logoutButton.classList.toggle('hidden', !showLogout);
     deps.dom.logoutButton.disabled = !showLogout;
@@ -201,9 +204,11 @@ export function createAuthController(deps: AuthControllerDeps): {
       sanitizeAuthUsername(deps.dom.registerUsername.value).length >= usernameMin &&
       deps.dom.registerPassword.value.trim().length >= passwordMin &&
       deps.dom.registerPassword.value === deps.dom.registerPasswordConfirm.value;
-    const authReady = authMode === 'login' ? true : hasRegisterCredentials;
+    const authReady = hasExternalAuth || (authMode === 'login' ? hasSavedSessionHint || hasLoginCredentials : hasRegisterCredentials);
     deps.dom.connectButton.textContent = hasSavedSessionHint
       ? 'Connect'
+      : hasExternalAuth
+        ? 'Continue with blind.software'
       : authMode === 'register'
         ? 'Register & Connect'
         : hasLoginCredentials
@@ -220,6 +225,9 @@ export function createAuthController(deps: AuthControllerDeps): {
   }
 
   function buildAuthRequestPacket(): OutgoingMessage | null {
+    if (externalAuthAssertion) {
+      return { type: 'auth_external', assertion: externalAuthAssertion };
+    }
     if (authMode === 'register') {
       const username = sanitizeAuthUsername(deps.dom.registerUsername.value);
       const password = deps.dom.registerPassword.value;
@@ -237,8 +245,12 @@ export function createAuthController(deps: AuthControllerDeps): {
     const packet = buildAuthRequestPacket();
     if (!packet) {
       pendingAuthRequest = false;
-      deps.setConnectionStatus('Attempting saved session...');
-      deps.setConnecting(false);
+      if (sanitizeAuthUsername(authUsername).length > 0) {
+        deps.setConnectionStatus('Restoring saved session...');
+      } else {
+        deps.setConnectionStatus('Enter your username and password to log in.');
+        deps.setConnecting(false);
+      }
       updateConnectAvailability();
       return;
     }
@@ -318,6 +330,7 @@ export function createAuthController(deps: AuthControllerDeps): {
     pendingAuthRequest = false;
     applyAuthPolicy(message.authPolicy);
     if (!message.ok) {
+      externalAuthAssertion = '';
       authUserId = '';
       deps.dom.authPassword.value = '';
       deps.dom.registerPassword.value = '';
@@ -335,6 +348,7 @@ export function createAuthController(deps: AuthControllerDeps): {
       return;
     }
 
+    externalAuthAssertion = '';
     if (message.sessionToken) {
       void persistHttpOnlySessionCookie(message.sessionToken);
     }

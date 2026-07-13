@@ -78,6 +78,17 @@ const MIC_CALIBRATION_TARGET_RMS = 0.12;
 const MIC_CALIBRATION_ACTIVE_RMS_THRESHOLD = 0.003;
 const MIC_INPUT_GAIN_SCALE_MULTIPLIER = 2;
 const MIC_INPUT_GAIN_STEP = 0.05;
+
+/** Reads and removes a one-time external auth assertion from the URL. */
+function consumeExternalAuthAssertion(): string {
+  const url = new URL(window.location.href);
+  const assertion = String(url.searchParams.get('external_auth') || '').trim();
+  if (assertion) {
+    url.searchParams.delete('external_auth');
+    window.history.replaceState({}, document.title, url.toString());
+  }
+  return assertion;
+}
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const RECONNECT_DELAY_MS = 5_000;
 const RECONNECT_MAX_ATTEMPTS = 3;
@@ -275,6 +286,7 @@ let messageCursor = -1;
 const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig);
 const itemEmitRuntime = new ItemEmitRuntime(audio, resolveIncomingSoundUrl, getItemSpatialConfig);
 const clockAnnouncer = new ClockAnnouncer(audio, () => ({ x: state.player.x, y: state.player.y }));
+const initialExternalAuthAssertion = consumeExternalAuthAssertion();
 let replaceTextOnNextType = false;
 let pendingEscapeDisconnect = false;
 let micGainLoopbackRestoreState: boolean | null = null;
@@ -423,6 +435,7 @@ const authController = createAuthController({
   authSessionCookieClearUrl: AUTH_SESSION_COOKIE_CLEAR_URL,
   authSessionCookieClientHeader: AUTH_SESSION_COOKIE_CLIENT_HEADER,
   initialAuthUsername: settings.loadAuthUsername(),
+  initialExternalAuthAssertion,
   isRunning: () => state.running,
   isMuted: () => state.isMuted,
   isConnecting: () => mediaSession.isConnecting(),
@@ -2754,3 +2767,8 @@ setConnectionStatus(
     ? 'Client updated, please reconnect.'
     : activeWelcomeMessage,
 );
+if (initialExternalAuthAssertion) {
+  window.setTimeout(() => {
+    void connect();
+  }, 0);
+}
