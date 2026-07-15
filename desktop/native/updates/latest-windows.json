@@ -1,11 +1,11 @@
 {
-  "version": "0.1.0",
-  "releaseNotes": "Initial official accessible wxPython Windows client.",
+  "version": "0.3.3",
+  "releaseNotes": "Reliable post-authentication world join, corrected audio-device enumeration, login-first native UI, binaural spatial-audio runtime, NVDA speech routing, and verified silent updates.",
   "platforms": {
     "windows": {
-      "url": "https://blind.software/chatgrid/downloads/ChatGridSetup-0.1.0.exe",
-      "fileName": "ChatGridSetup-0.1.0.exe",
-      "sha256": "5131fef5bad006eed8ff4763d335fde808b8087035af90e8d2a2ecfc2a2e73db",
+      "url": "https://blind.software/chatgrid/downloads/ChatGridSetup-0.3.3.exe",
+      "fileName": "ChatGridSetup-0.3.3.exe",
+      "sha256": "57d6b6d7866f29bbe87437c08f9678e69443dd150ea656d7b954b31d712cfcb4",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }
   }

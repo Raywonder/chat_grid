@@ -217,7 +217,14 @@ class MainFrame(wx.Frame):
         self.backoff.reset()
         self._announce("Chat Grid loaded. Session and reconnect monitoring are active.")
         if self.settings.auto_connect:
-            self.web.RunScript("setTimeout(() => document.getElementById('connectButton')?.click(), 500);")
+            self.web.RunScript(
+                "(()=>{if(window.chatGridNativeAutoConnect)return;"
+                "window.chatGridNativeAutoConnect=true;let attempts=0;"
+                "const timer=setInterval(()=>{attempts++;const button=document.getElementById('connectButton');"
+                "const login=document.getElementById('loginView');const authenticated=login?.classList.contains('hidden');"
+                "if(authenticated&&button&&!button.disabled&&!button.classList.contains('hidden')){"
+                "clearInterval(timer);button.click();}else if(attempts>=120)clearInterval(timer);},500);})();"
+            )
         self.web.RunScript(
             "window.chatGridNativeSpeak=(text,options={})=>"
             "window.chrome?.webview?.postMessage(JSON.stringify({type:'speak',text:String(text),interrupt:!!options.interrupt}));"

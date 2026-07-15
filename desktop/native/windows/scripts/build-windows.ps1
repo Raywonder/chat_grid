@@ -6,7 +6,19 @@ try {
 $Venv = Join-Path $Root ".venv"
 $Python = Join-Path $Venv "Scripts\python.exe"
 if (-not (Test-Path $Python)) {
-    py -3.12 -m venv $Venv
+    $Candidates = @("3.13", "3.12", "3.11")
+    $Created = $false
+    foreach ($Version in $Candidates) {
+        & py "-$Version" -c "import sys; raise SystemExit(0 if sys.maxsize > 2**32 else 1)" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            & py "-$Version" -m venv $Venv
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $Python)) {
+                $Created = $true
+                break
+            }
+        }
+    }
+    if (-not $Created) { throw "Python 3.11-3.13 x64 is required to build Chat Grid." }
 }
 & $Python -m pip install --upgrade pip
 & $Python -m pip install -e "$Root[build,test]"

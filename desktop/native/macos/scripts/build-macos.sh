@@ -10,5 +10,5 @@ python -m pytest
 rm -rf build dist
 python -m PyInstaller --noconfirm --clean macos/ChatGrid-macOS.spec
 mkdir -p macos/release
-ditto -c -k --sequesterRsrc --keepParent "dist/Chat Grid.app" "macos/release/ChatGrid-0.3.2-macOS.zip"
-hdiutil create -volname "Chat Grid" -srcfolder "dist/Chat Grid.app" -ov -format UDZO "macos/release/ChatGrid-0.3.2.dmg"
+ditto -c -k --sequesterRsrc --keepParent "dist/Chat Grid.app" "macos/release/ChatGrid-0.3.3-macOS.zip"
+hdiutil create -volname "Chat Grid" -srcfolder "dist/Chat Grid.app" -ov -format UDZO "macos/release/ChatGrid-0.3.3.dmg"
