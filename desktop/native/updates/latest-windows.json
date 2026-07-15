@@ -1,11 +1,11 @@
 {
-  "version": "0.3.3",
-  "releaseNotes": "Reliable post-authentication world join, corrected audio-device enumeration, login-first native UI, binaural spatial-audio runtime, NVDA speech routing, and verified silent updates.",
+  "version": "0.3.5",
+  "releaseNotes": "Fixes File > Settings OK, Cancel, and Escape dismissal; saves settings reliably; restores keyboard and screen-reader focus after Settings and About close; includes the 0.3.4 connection and native speech fixes.",
   "platforms": {
     "windows": {
-      "url": "https://blind.software/chatgrid/downloads/ChatGridSetup-0.3.3.exe",
-      "fileName": "ChatGridSetup-0.3.3.exe",
-      "sha256": "57d6b6d7866f29bbe87437c08f9678e69443dd150ea656d7b954b31d712cfcb4",
+      "url": "https://blind.software/chatgrid/downloads/ChatGridSetup-0.3.5.exe",
+      "fileName": "ChatGridSetup-0.3.5.exe",
+      "sha256": "cc80f4b48c085b1a975daf357a5bd1ac0e6da3e7f834b544873a10a2034ede3f",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }
   }

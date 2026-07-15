@@ -72,13 +72,32 @@ class SettingsDialog(wx.Dialog):
         self.spatial_audio = wx.CheckBox(panel, label="Use binaural spatial audio for world sounds")
         self.spatial_audio.SetValue(settings.spatial_audio)
         layout.Add(self.spatial_audio, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
-        buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
-        layout.Add(buttons, 0, wx.EXPAND | wx.ALL, 8)
         panel.SetSizer(layout)
+
         outer = wx.BoxSizer(wx.VERTICAL)
         outer.Add(panel, 1, wx.EXPAND)
+        buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
+        outer.Add(buttons, 0, wx.EXPAND | wx.ALL, 8)
         self.SetSizerAndFit(outer)
+        self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
+        self.Bind(wx.EVT_BUTTON, self._on_cancel, id=wx.ID_CANCEL)
+        self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
         self.startup.SetFocus()
+
+    def _on_ok(self, _event: wx.CommandEvent) -> None:
+        """Apply values and close reliably for keyboard and screen-reader activation."""
+        self.apply()
+        self.EndModal(wx.ID_OK)
+
+    def _on_cancel(self, _event: wx.CommandEvent) -> None:
+        """Dismiss without changing the supplied settings object."""
+        self.EndModal(wx.ID_CANCEL)
+
+    def _on_char_hook(self, event: wx.KeyEvent) -> None:
+        if event.GetKeyCode() == wx.WXK_ESCAPE:
+            self.EndModal(wx.ID_CANCEL)
+            return
+        event.Skip()
 
     def apply(self) -> None:
         """Copy control state into settings."""
@@ -216,15 +235,9 @@ class MainFrame(wx.Frame):
         self.reconnect_timer.Stop()
         self.backoff.reset()
         self._announce("Chat Grid loaded. Session and reconnect monitoring are active.")
-        if self.settings.auto_connect:
-            self.web.RunScript(
-                "(()=>{if(window.chatGridNativeAutoConnect)return;"
-                "window.chatGridNativeAutoConnect=true;let attempts=0;"
-                "const timer=setInterval(()=>{attempts++;const button=document.getElementById('connectButton');"
-                "const login=document.getElementById('loginView');const authenticated=login?.classList.contains('hidden');"
-                "if(authenticated&&button&&!button.disabled&&!button.classList.contains('hidden')){"
-                "clearInterval(timer);button.click();}else if(attempts>=120)clearInterval(timer);},500);})();"
-            )
+        # The shared web client owns saved-session auto-connect. Injecting a
+        # second Connect click races its cookie/auth startup and can create a
+        # storm of short-lived websocket sessions.
         self.web.RunScript(
             "window.chatGridNativeSpeak=(text,options={})=>"
             "window.chrome?.webview?.postMessage(JSON.stringify({type:'speak',text:String(text),interrupt:!!options.interrupt}));"
@@ -262,13 +275,17 @@ class MainFrame(wx.Frame):
         self._open_grid(self.settings.grid_url)
 
     def _show_settings(self, _event: wx.CommandEvent) -> None:
+        saved = False
         with SettingsDialog(self, self.settings) as dialog:
-            if dialog.ShowModal() != wx.ID_OK:
-                return
-            dialog.apply()
+            saved = dialog.ShowModal() == wx.ID_OK
+        if saved:
             self.store.save(self.settings)
             set_start_with_windows(self.settings.start_with_windows)
             self._announce("Desktop settings saved.")
+        if self.web.IsShown():
+            self.web.SetFocus()
+        else:
+            self.default_login.SetFocus()
 
     def _check_updates_background(self, interactive: bool = False) -> None:
         if self.update_thread and self.update_thread.is_alive():
@@ -299,6 +316,10 @@ class MainFrame(wx.Frame):
             f"Chat Grid {__version__}\nOfficial accessible desktop client by Raywonder / TappedIn.",
             "About Chat Grid", wx.OK | wx.ICON_INFORMATION, self,
         )
+        if self.web.IsShown():
+            self.web.SetFocus()
+        else:
+            self.default_login.SetFocus()
 
     def _on_char_hook(self, event: wx.KeyEvent) -> None:
         if event.GetKeyCode() == wx.WXK_ESCAPE and self.IsIconized():

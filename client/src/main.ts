@@ -1183,6 +1183,17 @@ function updateStatus(message: string): void {
   lastAnnouncementText = normalized;
   lastAnnouncementAt = now;
 
+  // Native desktop clients route world narration directly to the active
+  // screen reader. The ARIA live region remains the browser fallback.
+  const nativeSpeak = (
+    window as Window & {
+      chatGridNativeSpeak?: (text: string, options?: { interrupt?: boolean }) => void;
+    }
+  ).chatGridNativeSpeak;
+  if (normalized && typeof nativeSpeak === 'function') {
+    nativeSpeak(normalized, { interrupt: true });
+  }
+
   if (statusTimeout !== null) {
     window.clearTimeout(statusTimeout);
   }
@@ -3200,6 +3211,14 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   await onAppMessage(message);
   if (message.type === 'welcome') {
     flushQueuedChatMessages();
+    // World admission is complete when welcome has been applied. Do not keep
+    // the UI at "Joining world" while microphone permission or device setup
+    // is waiting on the embedded browser.
+    if (connectedAnnouncement) {
+      setConnectionStatus(connectedAnnouncement);
+      pushChatMessage(connectedAnnouncement);
+      connectedAnnouncement = null;
+    }
     await setupMediaAfterAuth();
     if (playSelfLoginSound) {
       void audio.playSample(SYSTEM_SOUND_URLS.logon, 1);

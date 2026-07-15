@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chat-grid-desktop"
-version = "0.3.3"
+version = "0.3.5"
 description = "Official accessible wxPython desktop client for Chat Grid"
 requires-python = ">=3.11"
 dependencies = [
