@@ -2908,6 +2908,17 @@ class SignalingServer:
                 )
                 return
             old_nickname = client.nickname
+            if requested_nickname == old_nickname:
+                await self._send(
+                    client.websocket,
+                    NicknameResultPacket(
+                        type="nickname_result",
+                        accepted=True,
+                        requestedNickname=requested_nickname,
+                        effectiveNickname=client.nickname,
+                    ),
+                )
+                return
             if self._is_nickname_taken(requested_nickname, exclude_client_id=client.id):
                 await self._send(
                     client.websocket,
@@ -2917,17 +2928,6 @@ class SignalingServer:
                         requestedNickname=requested_nickname,
                         effectiveNickname=client.nickname,
                         reason="Nickname already in use.",
-                    ),
-                )
-                return
-            if requested_nickname == old_nickname:
-                await self._send(
-                    client.websocket,
-                    NicknameResultPacket(
-                        type="nickname_result",
-                        accepted=True,
-                        requestedNickname=requested_nickname,
-                        effectiveNickname=client.nickname,
                     ),
                 )
                 return

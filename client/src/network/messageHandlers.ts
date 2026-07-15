@@ -128,6 +128,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.setConnecting(false);
         deps.state.player.x = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.x));
         deps.state.player.y = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.y));
+        deps.state.player.nickname = deps.sanitizeName(message.player.nickname) || deps.state.player.nickname;
         deps.dom.connectButton.classList.add('hidden');
         deps.dom.disconnectButton.classList.remove('hidden');
         deps.dom.focusGridButton.classList.remove('hidden');
@@ -138,7 +139,6 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.dom.canvas.focus();
 
         deps.signalingSend({ type: 'update_position', x: deps.state.player.x, y: deps.state.player.y });
-        deps.signalingSend({ type: 'update_nickname', nickname: deps.state.player.nickname });
 
         for (const user of message.users) {
           deps.state.peers.set(user.id, { ...user });
