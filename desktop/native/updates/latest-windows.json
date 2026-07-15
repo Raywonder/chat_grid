@@ -1,11 +1,11 @@
 {
-  "version": "0.3.5",
-  "releaseNotes": "Fixes File > Settings OK, Cancel, and Escape dismissal; saves settings reliably; restores keyboard and screen-reader focus after Settings and About close; includes the 0.3.4 connection and native speech fixes.",
+  "version": "0.3.6",
+  "releaseNotes": "Moves desktop audio setup under File > Settings, removes the duplicate native status strip, hides non-navigation audio controls from the native world surface, and retains all connection, speech, and dialog fixes.",
   "platforms": {
     "windows": {
-      "url": "https://blind.software/chatgrid/downloads/ChatGridSetup-0.3.5.exe",
-      "fileName": "ChatGridSetup-0.3.5.exe",
-      "sha256": "cc80f4b48c085b1a975daf357a5bd1ac0e6da3e7f834b544873a10a2034ede3f",
+      "url": "https://blind.software/chatgrid/downloads/ChatGridSetup-0.3.6.exe",
+      "fileName": "ChatGridSetup-0.3.6.exe",
+      "sha256": "1f78207f7550b7909cf18fe733a6c5a61af9719f708436466fd4e9e86b35da5a",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }
   }

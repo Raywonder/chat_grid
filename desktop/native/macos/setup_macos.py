@@ -9,8 +9,8 @@ OPTIONS = {
         "CFBundleName": "Chat Grid",
         "CFBundleDisplayName": "Chat Grid",
         "CFBundleIdentifier": "fm.tappedin.chatgrid",
-        "CFBundleShortVersionString": "0.3.5",
-        "CFBundleVersion": "0.3.5",
+        "CFBundleShortVersionString": "0.3.6",
+        "CFBundleVersion": "0.3.6",
         "LSMinimumSystemVersion": "12.0",
         "CFBundleURLTypes": [{
             "CFBundleURLName": "Chat Grid Connect",
@@ -23,7 +23,7 @@ OPTIONS = {
 setup(
     app=["macos/macos_entry.py"],
     name="Chat Grid",
-    version="0.3.5",
+    version="0.3.6",
     options={"py2app": OPTIONS},
     setup_requires=["py2app"],
 )

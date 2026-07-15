@@ -124,8 +124,6 @@ class MainFrame(wx.Frame):
 
         panel = wx.Panel(self)
         layout = wx.BoxSizer(wx.VERTICAL)
-        self.status = wx.StaticText(panel, label="Starting Chat Grid.")
-        layout.Add(self.status, 0, wx.EXPAND | wx.ALL, 6)
 
         self.login_panel = wx.Panel(panel)
         login_layout = wx.BoxSizer(wx.VERTICAL)
@@ -177,8 +175,17 @@ class MainFrame(wx.Frame):
     def _build_menu(self) -> None:
         menu_bar = wx.MenuBar()
         file_menu = wx.Menu()
-        file_menu.Append(wx.ID_REFRESH, "&Reconnect\tCtrl+R")
-        file_menu.Append(wx.ID_PREFERENCES, "&Settings...\tCtrl+,")
+
+        connection_menu = wx.Menu()
+        connection_menu.Append(wx.ID_REFRESH, "&Reconnect\tCtrl+R")
+        file_menu.AppendSubMenu(connection_menu, "&Connection")
+
+        settings_menu = wx.Menu()
+        settings_menu.Append(wx.ID_PREFERENCES, "&Desktop settings...\tCtrl+,")
+        self.audio_settings_id = wx.NewIdRef()
+        settings_menu.Append(self.audio_settings_id, "&Audio setup...")
+        file_menu.AppendSubMenu(settings_menu, "&Settings")
+
         information_menu = wx.Menu()
         information_menu.Append(wx.ID_ABOUT, "&Credits and version")
         file_menu.AppendSubMenu(information_menu, "&Information")
@@ -188,11 +195,11 @@ class MainFrame(wx.Frame):
         self.SetMenuBar(menu_bar)
         self.Bind(wx.EVT_MENU, lambda _event: self._reload(), id=wx.ID_REFRESH)
         self.Bind(wx.EVT_MENU, self._show_settings, id=wx.ID_PREFERENCES)
+        self.Bind(wx.EVT_MENU, self._show_audio_settings, id=self.audio_settings_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.exit_application(), id=wx.ID_EXIT)
         self.Bind(wx.EVT_MENU, self._show_about, id=wx.ID_ABOUT)
 
     def _announce(self, text: str) -> None:
-        self.status.SetLabel(text)
         self.SetStatusText(text)
 
     @staticmethod
@@ -242,6 +249,12 @@ class MainFrame(wx.Frame):
             "window.chatGridNativeSpeak=(text,options={})=>"
             "window.chrome?.webview?.postMessage(JSON.stringify({type:'speak',text:String(text),interrupt:!!options.interrupt}));"
         )
+        self.web.RunScript(
+            "(()=>{document.documentElement.classList.add('chatgrid-native');"
+            "let style=document.getElementById('chatgridNativeChrome');"
+            "if(!style){style=document.createElement('style');style.id='chatgridNativeChrome';"
+            "style.textContent='#settingsButton{display:none!important}';document.head.appendChild(style);}})();"
+        )
         self.web.RunScript(spatial_audio_script(self.settings.spatial_audio))
 
     def _on_script_message(self, event: wx.html2.WebViewEvent) -> None:
@@ -286,6 +299,15 @@ class MainFrame(wx.Frame):
             self.web.SetFocus()
         else:
             self.default_login.SetFocus()
+
+    def _show_audio_settings(self, _event: wx.CommandEvent) -> None:
+        """Open the shared audio dialog from the native File menu."""
+        if not self.web.IsShown():
+            self._announce("Sign in to a Chat Grid server before opening audio setup.")
+            self.default_login.SetFocus()
+            return
+        self.web.RunScript("document.getElementById('settingsButton')?.click();")
+        self.web.SetFocus()
 
     def _check_updates_background(self, interactive: bool = False) -> None:
         if self.update_thread and self.update_thread.is_alive():
