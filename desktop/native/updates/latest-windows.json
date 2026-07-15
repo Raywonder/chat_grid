@@ -1,0 +1,12 @@
+{
+  "version": "0.1.0",
+  "releaseNotes": "Initial official accessible wxPython Windows client.",
+  "platforms": {
+    "windows": {
+      "url": "https://blind.software/chatgrid/downloads/ChatGridSetup-0.1.0.exe",
+      "fileName": "ChatGridSetup-0.1.0.exe",
+      "sha256": "5131fef5bad006eed8ff4763d335fde808b8087035af90e8d2a2ecfc2a2e73db",
+      "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
+    }
+  }
+}
