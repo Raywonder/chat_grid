@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import sys
 import threading
+from urllib.parse import urlsplit, urlunsplit
 
 import wx
 import wx.adv
@@ -101,11 +102,27 @@ class MainFrame(wx.Frame):
         layout = wx.BoxSizer(wx.VERTICAL)
         self.status = wx.StaticText(panel, label="Starting Chat Grid.")
         layout.Add(self.status, 0, wx.EXPAND | wx.ALL, 6)
+
+        self.login_panel = wx.Panel(panel)
+        login_layout = wx.BoxSizer(wx.VERTICAL)
+        self.default_login = wx.Button(self.login_panel, label="&Sign in to Blind Software")
+        login_layout.Add(self.default_login, 0, wx.EXPAND | wx.ALL, 8)
+        domain_label = wx.StaticText(self.login_panel, label="Other Chat Grid server domain:")
+        login_layout.Add(domain_label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
+        self.domain = wx.TextCtrl(self.login_panel, value="", style=wx.TE_PROCESS_ENTER)
+        self.domain.SetHint("example.com")
+        login_layout.Add(self.domain, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+        self.domain_login = wx.Button(self.login_panel, label="Sign in to this &server")
+        login_layout.Add(self.domain_login, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+        self.login_panel.SetSizer(login_layout)
+        layout.Add(self.login_panel, 0, wx.EXPAND | wx.ALL, 12)
+
         if sys.platform == "win32":
             self.web = wx.html2.WebView.New(panel, backend=wx.html2.WebViewBackendEdge)
         else:
             self.web = wx.html2.WebView.New(panel)
         layout.Add(self.web, 1, wx.EXPAND)
+        self.web.Hide()
         self.web.AddScriptMessageHandler("chatgridNative")
         panel.SetSizer(layout)
 
@@ -118,8 +135,15 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_TIMER, self._on_reconnect_timer, self.reconnect_timer)
         self.Bind(wx.EVT_CLOSE, self._on_close)
         self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
+        self.default_login.Bind(wx.EVT_BUTTON, self._login_default)
+        self.domain_login.Bind(wx.EVT_BUTTON, self._login_domain)
+        self.domain.Bind(wx.EVT_TEXT_ENTER, self._login_domain)
 
-        self.web.LoadURL(launch_url or self.settings.grid_url)
+        if launch_url:
+            self._open_grid(launch_url)
+        else:
+            self._announce("Choose a Chat Grid server and sign in.")
+            self.default_login.SetFocus()
         if autostart and self.settings.start_minimized:
             self.Iconize(True)
         else:
@@ -128,15 +152,15 @@ class MainFrame(wx.Frame):
 
     def _build_menu(self) -> None:
         menu_bar = wx.MenuBar()
-        app_menu = wx.Menu()
-        app_menu.Append(wx.ID_REFRESH, "&Reconnect\tCtrl+R")
-        app_menu.Append(wx.ID_PREFERENCES, "&Settings...\tCtrl+,")
-        app_menu.AppendSeparator()
-        app_menu.Append(wx.ID_EXIT, "E&xit\tAlt+F4")
-        menu_bar.Append(app_menu, "&Chat Grid")
-        help_menu = wx.Menu()
-        help_menu.Append(wx.ID_ABOUT, "&About Chat Grid")
-        menu_bar.Append(help_menu, "&Help")
+        file_menu = wx.Menu()
+        file_menu.Append(wx.ID_REFRESH, "&Reconnect\tCtrl+R")
+        file_menu.Append(wx.ID_PREFERENCES, "&Settings...\tCtrl+,")
+        information_menu = wx.Menu()
+        information_menu.Append(wx.ID_ABOUT, "&Credits and version")
+        file_menu.AppendSubMenu(information_menu, "&Information")
+        file_menu.AppendSeparator()
+        file_menu.Append(wx.ID_EXIT, "E&xit\tAlt+F4")
+        menu_bar.Append(file_menu, "&File")
         self.SetMenuBar(menu_bar)
         self.Bind(wx.EVT_MENU, lambda _event: self._reload(), id=wx.ID_REFRESH)
         self.Bind(wx.EVT_MENU, self._show_settings, id=wx.ID_PREFERENCES)
@@ -146,6 +170,42 @@ class MainFrame(wx.Frame):
     def _announce(self, text: str) -> None:
         self.status.SetLabel(text)
         self.SetStatusText(text)
+
+    @staticmethod
+    def _server_url(value: str) -> str:
+        """Return an HTTPS Chat Grid URL for a user-entered domain."""
+        candidate = value.strip()
+        if not candidate:
+            raise ValueError("Enter a server domain.")
+        if "://" not in candidate:
+            candidate = f"https://{candidate}"
+        parsed = urlsplit(candidate)
+        if parsed.scheme.lower() != "https" or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("Enter a valid HTTPS server domain.")
+        port = f":{parsed.port}" if parsed.port else ""
+        return urlunsplit(("https", f"{parsed.hostname}{port}", "/chatgrid/", "", ""))
+
+    def _open_grid(self, url: str) -> None:
+        self.settings.grid_url = url
+        self.store.save(self.settings)
+        self.login_panel.Hide()
+        self.web.Show()
+        self.web.GetParent().Layout()
+        self._announce("Opening secure browser sign-in.")
+        self.web.LoadURL(url)
+        self.web.SetFocus()
+
+    def _login_default(self, _event: wx.CommandEvent) -> None:
+        self._open_grid("https://blind.software/chatgrid/")
+
+    def _login_domain(self, _event: wx.CommandEvent) -> None:
+        try:
+            url = self._server_url(self.domain.GetValue())
+        except (ValueError, OverflowError):
+            self._announce("Enter a valid HTTPS server domain, such as example.com.")
+            self.domain.SetFocus()
+            return
+        self._open_grid(url)
 
     def _on_loaded(self, _event: wx.html2.WebViewEvent) -> None:
         self.reconnect_timer.Stop()
@@ -160,7 +220,9 @@ class MainFrame(wx.Frame):
 
     def _on_script_message(self, event: wx.html2.WebViewEvent) -> None:
         """Accept bounded speech requests only from the approved Chat Grid origin."""
-        if not self.web.GetCurrentURL().startswith("https://blind.software/chatgrid/"):
+        expected = urlsplit(self.settings.grid_url)
+        current = urlsplit(self.web.GetCurrentURL())
+        if current.scheme != "https" or current.netloc != expected.netloc:
             return
         try:
             message = json.loads(event.GetString())
@@ -184,7 +246,7 @@ class MainFrame(wx.Frame):
 
     def _reload(self) -> None:
         self.backoff.reset()
-        self.web.LoadURL(self.settings.grid_url)
+        self._open_grid(self.settings.grid_url)
 
     def _show_settings(self, _event: wx.CommandEvent) -> None:
         with SettingsDialog(self, self.settings) as dialog:
