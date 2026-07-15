@@ -56,9 +56,14 @@ export class SignalingClient {
     });
   }
 
-  send(payload: OutgoingMessage): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+  send(payload: OutgoingMessage): boolean {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
     this.ws.send(JSON.stringify(payload));
+    return true;
+  }
+
+  isOpen(): boolean {
+    return Boolean(this.ws && this.ws.readyState === WebSocket.OPEN);
   }
 
   disconnect(): void {

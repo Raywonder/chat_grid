@@ -13,8 +13,8 @@ def use_item(
 ) -> ItemUseResult:
     """Read current clock time based on item configuration."""
 
-    _display_time = clock_formatter(item.params)
+    display_time = clock_formatter(item.params)
     return ItemUseResult(
-        self_message="",
+        self_message=f"It's {display_time}.",
         others_message="",
     )

@@ -1,0 +1,1 @@
+"""Room item type."""

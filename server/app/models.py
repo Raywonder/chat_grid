@@ -25,6 +25,11 @@ class UpdatePositionPacket(BasePacket):
     y: int
 
 
+class ChangeLocationPacket(BasePacket):
+    type: Literal["change_location"]
+    locationId: str = Field(min_length=1, max_length=64)
+
+
 class TeleportCompletePacket(BasePacket):
     type: Literal["teleport_complete"]
     x: int
@@ -39,6 +44,61 @@ class UpdateNicknamePacket(BasePacket):
 class ChatMessagePacket(BasePacket):
     type: Literal["chat_message"]
     message: str = Field(min_length=1, max_length=500)
+
+
+class DirectMessagePacket(BasePacket):
+    type: Literal["direct_message"]
+    targetId: str = Field(min_length=1, max_length=128)
+    message: str = Field(min_length=1, max_length=500)
+
+
+class UserActionPacket(BasePacket):
+    """A contextual user-to-user action selected from the focused-user menu."""
+
+    type: Literal["user_action"]
+    actionId: Literal[
+        "hug",
+        "tap_shoulder",
+        "announce_focus",
+        "wave",
+        "high_five",
+        "fist_bump",
+        "cheer",
+        "clap",
+        "laugh",
+        "smile",
+        "wink",
+        "nod",
+        "shake_head",
+        "bow",
+        "dance",
+        "spin",
+        "jump",
+        "shrug",
+        "facepalm",
+        "gasp",
+        "sigh",
+        "comfort",
+        "pat_back",
+        "poke",
+        "boop",
+        "salute",
+        "point",
+        "thumbs_up",
+        "heart",
+        "sparkle",
+        "celebrate",
+        "tease",
+        "playful_smack",
+        "whisper",
+        "listen",
+        "sit_with",
+        "step_back",
+        "take_left_hand",
+        "take_right_hand",
+        "release_hand",
+    ]
+    targetId: str = Field(min_length=1, max_length=128)
 
 
 class AuthRegisterPacket(BasePacket):
@@ -66,6 +126,20 @@ class AuthExternalPacket(BasePacket):
 
 class AuthLogoutPacket(BasePacket):
     type: Literal["auth_logout"]
+
+
+class NtfyPreferencesGetPacket(BasePacket):
+    """Request the signed-in identity's ntfy preference metadata."""
+
+    type: Literal["ntfy_preferences_get"]
+
+
+class NtfyPreferencesUpdatePacket(BasePacket):
+    """Enable/disable ntfy delivery and optionally rotate the private topic."""
+
+    type: Literal["ntfy_preferences_update"]
+    enabled: bool
+    rotateTopic: bool = False
 
 
 class WelcomeReadyPacket(BasePacket):
@@ -96,6 +170,26 @@ class AdminRoleDeletePacket(BasePacket):
 class AdminUsersListPacket(BasePacket):
     type: Literal["admin_users_list"]
     action: Literal["set_role", "ban", "unban", "delete_account"] | None = None
+
+
+class AdminPlatformOverviewPacket(BasePacket):
+    type: Literal["admin_platform_overview"]
+    scope: Literal["platform", "owned_content"] = "platform"
+
+
+class AdminNotificationsListPacket(BasePacket):
+    type: Literal["admin_notifications_list"]
+    scope: Literal["own", "admin"] = "own"
+
+
+class AdminNotificationMarkReadPacket(BasePacket):
+    type: Literal["admin_notification_mark_read"]
+    scope: Literal["own", "admin"] = "own"
+    notificationId: str | None = Field(default=None, max_length=128)
+
+
+class AdminBlindSoftwareSyncPacket(BasePacket):
+    type: Literal["admin_blindsoftware_sync"]
 
 
 class AdminUserSetRolePacket(BasePacket):
@@ -132,6 +226,7 @@ class ItemAddPacket(BasePacket):
 class ItemPickupPacket(BasePacket):
     type: Literal["item_pickup"]
     itemId: str
+    moveAttached: bool = False
 
 
 class ItemDropPacket(BasePacket):
@@ -139,6 +234,7 @@ class ItemDropPacket(BasePacket):
     itemId: str
     x: int
     y: int
+    moveAttached: bool = False
 
 
 class ItemDeletePacket(BasePacket):
@@ -167,6 +263,31 @@ class ItemSecondaryUsePacket(BasePacket):
     itemId: str
 
 
+class ItemRemoteControlPacket(BasePacket):
+    type: Literal["item_remote_control"]
+    itemId: str
+    action: Literal[
+        "station_next",
+        "station_previous",
+        "volume_up",
+        "volume_down",
+    ]
+
+
+class ItemInteractPacket(BasePacket):
+    type: Literal["item_interact"]
+    itemId: str
+    targetItemId: str | None = None
+    action: Literal[
+        "place_on",
+        "shove_off",
+        "repair",
+        "replace",
+        "move_surface_left",
+        "move_surface_right",
+    ]
+
+
 class ItemPianoNotePacket(BasePacket):
     type: Literal["item_piano_note"]
     itemId: str
@@ -191,20 +312,29 @@ class ItemUpdatePacket(BasePacket):
 ClientPacket = (
     SignalPacket
     | UpdatePositionPacket
+    | ChangeLocationPacket
     | TeleportCompletePacket
     | UpdateNicknamePacket
     | ChatMessagePacket
+    | DirectMessagePacket
+    | UserActionPacket
     | AuthRegisterPacket
     | AuthLoginPacket
     | AuthResumePacket
     | AuthExternalPacket
     | AuthLogoutPacket
+    | NtfyPreferencesGetPacket
+    | NtfyPreferencesUpdatePacket
     | WelcomeReadyPacket
     | AdminRolesListPacket
     | AdminRoleCreatePacket
     | AdminRoleUpdatePermissionsPacket
     | AdminRoleDeletePacket
     | AdminUsersListPacket
+    | AdminPlatformOverviewPacket
+    | AdminNotificationsListPacket
+    | AdminNotificationMarkReadPacket
+    | AdminBlindSoftwareSyncPacket
     | AdminUserSetRolePacket
     | AdminUserBanPacket
     | AdminUserUnbanPacket
@@ -218,6 +348,8 @@ ClientPacket = (
     | ItemTransferTargetsPacket
     | ItemUsePacket
     | ItemSecondaryUsePacket
+    | ItemRemoteControlPacket
+    | ItemInteractPacket
     | ItemPianoNotePacket
     | ItemPianoRecordingPacket
     | ItemUpdatePacket
@@ -228,8 +360,13 @@ class RemoteUser(BaseModel):
     id: str
     userId: str | None = None
     nickname: str
+    locationId: str = "city"
     x: int
     y: int
+    posture: Literal["standing", "sitting", "lying"] = "standing"
+    seatedItemId: str | None = None
+    seatedOffset: float = 0.0
+    handHeldById: str | None = None
 
 
 class WelcomePacket(BasePacket):
@@ -268,6 +405,17 @@ class AuthResultPacket(BasePacket):
     authPolicy: dict | None = None
 
 
+class NtfyPreferencesResultPacket(BasePacket):
+    """Server-backed ntfy settings reusable by web and future native clients."""
+
+    type: Literal["ntfy_preferences"]
+    enabled: bool
+    configured: bool
+    topic: str = ""
+    subscriptionUrl: str = ""
+    message: str = ""
+
+
 class AuthPermissionsPacket(BasePacket):
     type: Literal["auth_permissions"]
     role: str
@@ -283,6 +431,22 @@ class UserLeftPacket(BasePacket):
 class BroadcastPositionPacket(BasePacket):
     type: Literal["update_position"]
     id: str
+    locationId: str | None = None
+    x: int
+    y: int
+    posture: Literal["standing", "sitting", "lying"] = "standing"
+    seatedItemId: str | None = None
+    seatedOffset: float = 0.0
+    handHeldById: str | None = None
+
+
+class LocationChangedPacket(BasePacket):
+    type: Literal["location_changed"]
+    id: str
+    userId: str | None = None
+    nickname: str | None = None
+    locationId: str
+    locationName: str
     x: int
     y: int
 
@@ -304,6 +468,7 @@ class ForwardSignalPacket(BasePacket):
     type: Literal["signal"]
     senderId: str
     senderNickname: str
+    locationId: str | None = None
     x: int
     y: int
     sdp: dict | None = None
@@ -317,6 +482,38 @@ class BroadcastChatMessagePacket(BasePacket):
     senderNickname: str | None = None
     system: bool = False
     action: bool = False
+
+
+class DirectMessageBroadcastPacket(BasePacket):
+    type: Literal["direct_message"]
+    message: str
+    senderId: str
+    senderNickname: str
+    targetId: str
+    targetNickname: str
+    outgoing: bool = False
+
+
+class SocialActionPacket(BasePacket):
+    type: Literal["social_action"]
+    actionId: str
+    actorId: str
+    actorNickname: str
+    targetId: str | None = None
+    targetNickname: str | None = None
+    message: str
+    sound: str | None = None
+    x: int
+    y: int
+    range: int | None = None
+
+
+class UserActionResultPacket(BasePacket):
+    type: Literal["user_action_result"]
+    ok: bool
+    actionId: str
+    message: str
+    targetId: str | None = None
 
 
 class PongPacket(BasePacket):
@@ -336,6 +533,7 @@ class WorldItem(BaseModel):
     id: str
     type: str = Field(min_length=1)
     title: str
+    locationId: str = "city"
     x: int
     y: int
     createdBy: str
@@ -358,6 +556,7 @@ class PersistedWorldItem(BaseModel):
     id: str
     type: str = Field(min_length=1)
     title: str
+    locationId: str = "city"
     x: int
     y: int
     createdBy: str
@@ -385,7 +584,15 @@ class ItemActionResultPacket(BasePacket):
     type: Literal["item_action_result"]
     ok: bool
     action: Literal[
-        "add", "pickup", "drop", "delete", "transfer", "use", "secondary_use", "update"
+        "add",
+        "pickup",
+        "drop",
+        "delete",
+        "transfer",
+        "use",
+        "secondary_use",
+        "interact",
+        "update",
     ]
     message: str
     itemId: str | None = None
@@ -410,6 +617,17 @@ class ItemUseSoundPacket(BasePacket):
     x: int
     y: int
     range: int | None = None
+
+
+class ItemGameLaunchPacket(BasePacket):
+    type: Literal["item_game_launch"]
+    itemId: str
+    title: str
+    url: str
+    actorId: str
+    actorNickname: str
+    x: int
+    y: int
 
 
 class ItemClockAnnouncePacket(BasePacket):
@@ -482,10 +700,55 @@ class AdminUsersListResultPacket(BasePacket):
     users: list[AdminUserSummary]
 
 
+class AdminPlatformLinkSummary(BaseModel):
+    itemId: str
+    title: str
+    kind: str
+    locationId: str
+    x: int
+    y: int
+    url: str | None = None
+    author: str | None = None
+    verificationStatus: str | None = None
+    ownerName: str | None = None
+    ownedByCurrentUser: bool = False
+
+
+class AdminPlatformOverviewResultPacket(BasePacket):
+    type: Literal["admin_platform_overview"]
+    scope: Literal["platform", "owned_content"] = "platform"
+    serverVersion: str
+    expectedClientRevision: str | None = None
+    connectedUsers: int
+    itemCount: int
+    serviceLinkCount: int
+    ownedContentCount: int = 0
+    links: list[AdminPlatformLinkSummary]
+
+
+class AdminNotificationSummary(BaseModel):
+    id: str
+    createdAt: int
+    kind: str
+    title: str
+    message: str
+    targetUserId: str | None = None
+    actorUserId: str | None = None
+    read: bool = False
+
+
+class AdminNotificationsListResultPacket(BasePacket):
+    type: Literal["admin_notifications_list"]
+    scope: Literal["own", "admin"] = "own"
+    unreadCount: int
+    notifications: list[AdminNotificationSummary]
+
+
 class AdminActionResultPacket(BasePacket):
     type: Literal["admin_action_result"]
     ok: bool
     action: Literal[
+        "platform_overview",
         "role_create",
         "role_update_permissions",
         "role_delete",
@@ -493,5 +756,7 @@ class AdminActionResultPacket(BasePacket):
         "user_ban",
         "user_unban",
         "user_delete",
+        "notifications_mark_read",
+        "blindsoftware_admin_sync",
     ]
     message: str

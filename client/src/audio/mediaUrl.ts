@@ -1,15 +1,11 @@
 const APP_BASE_PATH = import.meta.env.BASE_URL ?? '/';
 
-/** Returns whether a hostname belongs to Dropbox domains that often need proxy support. */
-function isDropboxHost(hostname: string): boolean {
-  const host = hostname.toLowerCase();
-  return host.endsWith('dropbox.com') || host.endsWith('dropboxusercontent.com');
-}
-
 /** Returns whether the URL already points at the local media proxy. */
 function isLocalMediaProxyUrl(parsed: URL): boolean {
   return parsed.origin === window.location.origin && parsed.pathname.toLowerCase().endsWith('/media_proxy.php');
 }
+
+const RADIO_PROXY_BUILD = '20260714-radio-proxy-all-external';
 
 /** Returns whether a direct radio stream URL should use the same-origin media proxy. */
 export function shouldProxyRadioStreamUrl(streamUrl: string): boolean {
@@ -18,12 +14,13 @@ export function shouldProxyRadioStreamUrl(streamUrl: string): boolean {
     if (isLocalMediaProxyUrl(parsed)) {
       return false;
     }
-    if (parsed.protocol === 'http:') return true;
-    if (parsed.protocol === 'https:' && isDropboxHost(parsed.hostname)) return true;
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return false;
+    }
+    return parsed.origin !== window.location.origin;
   } catch {
     return false;
   }
-  return false;
 }
 
 /** Returns whether an arbitrary external media URL should be proxied before Web Audio playback. */
@@ -63,5 +60,5 @@ export function freshRadioPlaybackUrl(streamUrl: string): string {
     // Leave non-URL strings to the generic cache-buster behavior below.
   }
   const separator = playbackSource.includes('?') ? '&' : '?';
-  return `${playbackSource}${separator}chgrid_start=${Date.now()}`;
+  return `${playbackSource}${separator}chgrid_start=${Date.now()}&chgrid_proxy=${RADIO_PROXY_BUILD}`;
 }

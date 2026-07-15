@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 import json
 import os
+import ctypes
 from pathlib import Path
 import sys
 import threading
-from urllib.parse import urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import webbrowser
 
 import wx
@@ -124,6 +125,8 @@ class MainFrame(wx.Frame):
         self.tray_icon: TrayIcon | None = None
         self.force_exit = False
         self.screen_reader = ScreenReaderSpeech()
+        self.world_hotkeys_registered = False
+        self.signed_in = False
 
         panel = wx.Panel(self)
         layout = wx.BoxSizer(wx.VERTICAL)
@@ -159,7 +162,9 @@ class MainFrame(wx.Frame):
         self.Bind(wx.html2.EVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED, self._on_script_message, self.web)
         self.Bind(wx.EVT_TIMER, self._on_reconnect_timer, self.reconnect_timer)
         self.Bind(wx.EVT_CLOSE, self._on_close)
+        self.Bind(wx.EVT_ACTIVATE, self._on_activate)
         self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
+        self.web.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
         self.default_login.Bind(wx.EVT_BUTTON, self._login_default)
         self.domain_login.Bind(wx.EVT_BUTTON, self._login_domain)
         self.domain.Bind(wx.EVT_TEXT_ENTER, self._login_domain)
@@ -173,14 +178,20 @@ class MainFrame(wx.Frame):
             self.Iconize(True)
         else:
             self.Show()
+        if sys.platform == "win32":
+            wx.CallAfter(self._set_world_hotkeys_active, True)
         wx.CallLater(5000, self._check_updates_background)
 
     def _build_menu(self) -> None:
         menu_bar = wx.MenuBar()
         file_menu = wx.Menu()
         self.browser_sign_in_id = wx.NewIdRef()
-        file_menu.Append(self.browser_sign_in_id, "Sign in with &browser\tCtrl+Shift+S")
+        self.browser_sign_in_item = file_menu.Append(
+            self.browser_sign_in_id, "Sign in with &browser\tCtrl+Shift+S"
+        )
         file_menu.Append(wx.ID_REFRESH, "&Reconnect\tCtrl+R")
+        self.focus_world_id = wx.NewIdRef()
+        file_menu.Append(self.focus_world_id, "&Focus world\tF6")
         file_menu.AppendSeparator()
         file_menu.Append(wx.ID_PREFERENCES, "&Desktop settings...\tCtrl+,")
         self.audio_settings_id = wx.NewIdRef()
@@ -192,10 +203,74 @@ class MainFrame(wx.Frame):
         self.SetMenuBar(menu_bar)
         self.Bind(wx.EVT_MENU, self._login_default, id=self.browser_sign_in_id)
         self.Bind(wx.EVT_MENU, lambda _event: self._reload(), id=wx.ID_REFRESH)
+        self.Bind(wx.EVT_MENU, lambda _event: self._focus_world(), id=self.focus_world_id)
         self.Bind(wx.EVT_MENU, self._show_settings, id=wx.ID_PREFERENCES)
         self.Bind(wx.EVT_MENU, self._show_audio_settings, id=self.audio_settings_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.exit_application(), id=wx.ID_EXIT)
         self.Bind(wx.EVT_MENU, self._show_about, id=wx.ID_ABOUT)
+
+        self.world_key_ids: dict[int, wx.WindowIDRef] = {
+            wx.WXK_LEFT: wx.NewIdRef(),
+            wx.WXK_RIGHT: wx.NewIdRef(),
+            wx.WXK_UP: wx.NewIdRef(),
+            wx.WXK_DOWN: wx.NewIdRef(),
+        }
+        accelerator_entries: list[wx.AcceleratorEntry] = []
+        for key_code, command_id in self.world_key_ids.items():
+            self.Bind(
+                wx.EVT_MENU,
+                lambda _event, forwarded=key_code: self._dispatch_world_arrow(forwarded),
+                id=command_id,
+            )
+            accelerator_entries.append(wx.AcceleratorEntry(wx.ACCEL_NORMAL, key_code, command_id))
+        if sys.platform != "win32":
+            self.SetAcceleratorTable(wx.AcceleratorTable(accelerator_entries))
+        else:
+            self.Bind(wx.EVT_HOTKEY, self._on_world_hotkey)
+
+    def _on_world_hotkey(self, event: wx.KeyEvent) -> None:
+        """Map a registered Windows hotkey event back to its world direction."""
+        event_id = event.GetId()
+        for key_code, command_id in self.world_key_ids.items():
+            if int(command_id) == event_id:
+                self._dispatch_world_arrow(key_code)
+                return
+
+    def _set_world_hotkeys_active(self, active: bool) -> None:
+        """Register arrows only while this foreground window owns the world."""
+        if sys.platform != "win32":
+            return
+        should_register = active and self.IsActive() and self.web.IsShown()
+        if should_register == self.world_hotkeys_registered:
+            return
+        if should_register:
+            registered: list[int] = []
+            windows_virtual_keys = {
+                wx.WXK_LEFT: 0x25,
+                wx.WXK_UP: 0x26,
+                wx.WXK_RIGHT: 0x27,
+                wx.WXK_DOWN: 0x28,
+            }
+            for key_code, command_id in self.world_key_ids.items():
+                command = int(command_id)
+                if ctypes.windll.user32.RegisterHotKey(
+                    int(self.GetHandle()), command, 0, windows_virtual_keys[key_code]
+                ):
+                    registered.append(command)
+                    continue
+                for registered_id in registered:
+                    ctypes.windll.user32.UnregisterHotKey(int(self.GetHandle()), registered_id)
+                LOGGER.warning("Unable to register native world arrow hotkeys")
+                return
+            self.world_hotkeys_registered = True
+            return
+        for command_id in self.world_key_ids.values():
+            ctypes.windll.user32.UnregisterHotKey(int(self.GetHandle()), int(command_id))
+        self.world_hotkeys_registered = False
+
+    def _on_activate(self, event: wx.ActivateEvent) -> None:
+        self._set_world_hotkeys_active(event.GetActive())
+        event.Skip()
 
     def _announce(self, text: str) -> None:
         self.SetStatusText(text)
@@ -215,16 +290,35 @@ class MainFrame(wx.Frame):
         return urlunsplit(("https", f"{parsed.hostname}{port}", "/chatgrid/", "", ""))
 
     def _open_grid(self, url: str) -> None:
-        self.settings.grid_url = url
+        parsed = urlsplit(url)
+        incoming_query = parse_qsl(parsed.query, keep_blank_values=True)
+        persisted_query = [
+            (key, value)
+            for key, value in incoming_query
+            if key not in {"external_auth", "native_client"}
+        ]
+        self.settings.grid_url = urlunsplit(
+            (parsed.scheme, parsed.netloc, parsed.path, urlencode(persisted_query), "")
+        )
         self.store.save(self.settings)
         self.login_panel.Hide()
         self.web.Show()
         self.web.GetParent().Layout()
         self._announce("Opening secure browser sign-in.")
-        self.web.LoadURL(url)
+        navigation_query = [
+            (key, value) for key, value in incoming_query if key != "native_client"
+        ]
+        navigation_query.append(("native_client", __version__))
+        navigation_url = urlunsplit(
+            (parsed.scheme, parsed.netloc, parsed.path, urlencode(navigation_query), "")
+        )
+        self.web.LoadURL(navigation_url)
         self.web.SetFocus()
 
     def _login_default(self, _event: wx.CommandEvent) -> None:
+        if self.signed_in:
+            self.web.RunScript("document.getElementById('logoutButton')?.click();")
+            return
         self._start_browser_auth("https://blind.software", "https://blind.software/chatgrid/")
 
     def _login_domain(self, _event: wx.CommandEvent) -> None:
@@ -291,12 +385,24 @@ class MainFrame(wx.Frame):
             "if(!style){style=document.createElement('style');style.id='chatgridNativeChrome';"
             "style.textContent='#gridTitle,#connectionStatus,#authSessionView,#button-container,"
             "#deviceSummary,#joinGuide,#appFooter{display:none!important}';"
-            "document.head.appendChild(style);}})();"
+            "document.head.appendChild(style);}"
+            "const canvas=document.getElementById('gameCanvas');"
+            "if(canvas){canvas.setAttribute('role','application');"
+            "canvas.setAttribute('aria-roledescription','interactive audio world');"
+            "const focusWorld=()=>{if(!canvas.classList.contains('hidden')){"
+            "canvas.focus({preventScroll:true});}};focusWorld();"
+            "new MutationObserver(focusWorld).observe(canvas,{attributes:true,attributeFilter:['class']});}"
+            "const logout=document.getElementById('logoutButton');"
+            "if(logout){const notifyAuth=()=>window.chrome?.webview?.postMessage(JSON.stringify({"
+            "type:'authState',signedIn:!logout.classList.contains('hidden')&&!logout.disabled}));"
+            "notifyAuth();new MutationObserver(notifyAuth).observe(logout,{attributes:true,"
+            "attributeFilter:['class','disabled']});}})();"
         )
         self.web.RunScript(spatial_audio_script(self.settings.spatial_audio))
+        self._set_world_hotkeys_active(True)
 
     def _on_script_message(self, event: wx.html2.WebViewEvent) -> None:
-        """Accept bounded speech requests only from the approved Chat Grid origin."""
+        """Accept bounded native integration messages from the approved origin."""
         expected = urlsplit(self.settings.grid_url)
         current = urlsplit(self.web.GetCurrentURL())
         if current.scheme != "https" or current.netloc != expected.netloc:
@@ -305,9 +411,18 @@ class MainFrame(wx.Frame):
             message = json.loads(event.GetString())
         except (TypeError, ValueError):
             return
+        if message.get("type") == "authState":
+            self._set_signed_in(bool(message.get("signedIn")))
+            return
         if message.get("type") != "speak" or not isinstance(message.get("text"), str):
             return
         self.screen_reader.speak(message["text"], bool(message.get("interrupt")))
+
+    def _set_signed_in(self, signed_in: bool) -> None:
+        """Keep the File menu authentication action aligned with web session state."""
+        self.signed_in = signed_in
+        label = "Sign &out\tCtrl+Shift+S" if signed_in else "Sign in with &browser\tCtrl+Shift+S"
+        self.browser_sign_in_item.SetItemLabel(label)
 
     def _on_error(self, event: wx.html2.WebViewEvent) -> None:
         LOGGER.warning("WebView load error: %s", event.GetString())
@@ -347,6 +462,36 @@ class MainFrame(wx.Frame):
         self.web.RunScript("document.getElementById('settingsButton')?.click();")
         self.web.SetFocus()
 
+    def _focus_world(self) -> None:
+        """Place browser and DOM focus on the interactive world surface."""
+        if not self.web.IsShown():
+            self._announce("Sign in before focusing the world.")
+            self.default_login.SetFocus()
+            return
+        self.web.SetFocus()
+        self.web.RunScript(
+            "document.getElementById('gameCanvas')?.focus({preventScroll:true});"
+        )
+        self._announce("World focused. Arrow keys move your character.")
+
+    def _dispatch_world_arrow(self, key_code: int) -> None:
+        """Forward one native arrow-key step into the embedded world."""
+        world_keys = {
+            wx.WXK_LEFT: ("ArrowLeft", "ArrowLeft"),
+            wx.WXK_RIGHT: ("ArrowRight", "ArrowRight"),
+            wx.WXK_UP: ("ArrowUp", "ArrowUp"),
+            wx.WXK_DOWN: ("ArrowDown", "ArrowDown"),
+        }
+        mapped = world_keys.get(key_code)
+        if not mapped or not self.web.IsShown():
+            return
+        key, code = mapped
+        LOGGER.info("Forwarding native world key %s", code)
+        success, result = self.web.RunScript(
+            f"window.chatGridNativeKey?.({json.dumps(code)});"
+        )
+        LOGGER.info("Native world key result success=%s result=%s", success, result)
+
     def _check_updates_background(self, interactive: bool = False) -> None:
         if self.update_thread and self.update_thread.is_alive():
             return
@@ -382,6 +527,11 @@ class MainFrame(wx.Frame):
             self.default_login.SetFocus()
 
     def _on_char_hook(self, event: wx.KeyEvent) -> None:
+        if event.GetKeyCode() in self.world_key_ids and not (
+            event.ControlDown() or event.AltDown() or event.MetaDown()
+        ):
+            self._dispatch_world_arrow(event.GetKeyCode())
+            return
         if event.GetKeyCode() == wx.WXK_ESCAPE and self.IsIconized():
             self.Iconize(False)
             self.Raise()
@@ -391,12 +541,14 @@ class MainFrame(wx.Frame):
     def _on_close(self, event: wx.CloseEvent) -> None:
         if self.settings.keep_in_tray and not self.force_exit and event.CanVeto():
             event.Veto()
+            self._set_world_hotkeys_active(False)
             self.Hide()
             if self.tray_icon is None:
                 self.tray_icon = TrayIcon(self)
             self._announce("Chat Grid is still connected and running in the background.")
             return
         self.reconnect_timer.Stop()
+        self._set_world_hotkeys_active(False)
         if self.tray_icon is not None:
             self.tray_icon.RemoveIcon()
             self.tray_icon.Destroy()
@@ -409,6 +561,7 @@ class MainFrame(wx.Frame):
         self.Iconize(False)
         self.Raise()
         self.web.SetFocus()
+        wx.CallAfter(self._set_world_hotkeys_active, True)
         self._announce("Chat Grid window restored. You remained signed in.")
 
     def exit_application(self) -> None:

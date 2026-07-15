@@ -1,4 +1,4 @@
-import type { AudioLayerState } from '../types/audio';
+import type { AudioAnnouncementSettings, AudioLayerState, AnnouncementMode } from '../types/audio';
 
 const EFFECT_LEVELS_STORAGE_KEY = 'chatGridEffectLevels';
 const AUDIO_INPUT_STORAGE_KEY = 'chatGridAudioInputDeviceId';
@@ -7,6 +7,7 @@ const AUDIO_INPUT_NAME_STORAGE_KEY = 'chatGridAudioInputDeviceName';
 const AUDIO_OUTPUT_NAME_STORAGE_KEY = 'chatGridAudioOutputDeviceName';
 const AUDIO_OUTPUT_MODE_STORAGE_KEY = 'chatGridAudioOutputMode';
 const AUDIO_LAYER_STATE_STORAGE_KEY = 'chatGridAudioLayers';
+const AUDIO_ANNOUNCEMENT_SETTINGS_STORAGE_KEY = 'chatGridAudioAnnouncementSettings';
 const MIC_INPUT_GAIN_STORAGE_KEY = 'chatGridMicInputGain';
 const MASTER_VOLUME_STORAGE_KEY = 'chatGridMasterVolume';
 const PEER_LISTEN_GAINS_STORAGE_KEY = 'chatGridPeerListenGains';
@@ -23,6 +24,15 @@ type AudioDevicePreferences = {
   input: DevicePreference;
   output: DevicePreference;
 };
+
+const DEFAULT_AUDIO_ANNOUNCEMENT_SETTINGS: AudioAnnouncementSettings = {
+  mode: 'full',
+  itemBeacons: true,
+};
+
+function normalizeAnnouncementMode(raw: unknown): AnnouncementMode {
+  return raw === 'sounds_only' || raw === 'required_only' || raw === 'full' ? raw : 'full';
+}
 
 /**
  * Wraps localStorage reads/writes for client user settings.
@@ -62,6 +72,30 @@ export class SettingsStore {
 
   saveAudioLayers(layers: AudioLayerState): void {
     localStorage.setItem(AUDIO_LAYER_STATE_STORAGE_KEY, JSON.stringify(layers));
+  }
+
+  loadAudioAnnouncementSettings(): AudioAnnouncementSettings {
+    const raw = localStorage.getItem(AUDIO_ANNOUNCEMENT_SETTINGS_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_AUDIO_ANNOUNCEMENT_SETTINGS };
+    try {
+      const parsed = JSON.parse(raw) as Partial<AudioAnnouncementSettings>;
+      return {
+        mode: normalizeAnnouncementMode(parsed.mode),
+        itemBeacons: parsed.itemBeacons !== false,
+      };
+    } catch {
+      return { ...DEFAULT_AUDIO_ANNOUNCEMENT_SETTINGS };
+    }
+  }
+
+  saveAudioAnnouncementSettings(settings: AudioAnnouncementSettings): void {
+    localStorage.setItem(
+      AUDIO_ANNOUNCEMENT_SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        mode: normalizeAnnouncementMode(settings.mode),
+        itemBeacons: settings.itemBeacons !== false,
+      }),
+    );
   }
 
   loadMicInputGain(): number | null {

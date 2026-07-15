@@ -1,0 +1,1 @@
+"""eCrypto bank item type."""

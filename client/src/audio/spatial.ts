@@ -6,6 +6,8 @@ export type SpatialMixOptions = {
   nearFieldDistance?: number;
   nearFieldGain?: number;
   nearFieldCenterPan?: boolean;
+  farFieldRangeMultiplier?: number;
+  farFieldFloorGain?: number;
   directional?: {
     enabled: boolean;
     facingDeg: number;
@@ -32,6 +34,7 @@ type ApplySpatialNodeOptions = {
   mix: SpatialMixResult | null;
   outputMode: SpatialOutputMode;
   transition: 'linear' | 'target';
+  transitionSeconds?: number;
 };
 
 /**
@@ -39,23 +42,27 @@ type ApplySpatialNodeOptions = {
  */
 export function applySpatialMixToNodes(options: ApplySpatialNodeOptions): void {
   const { audioCtx, gainNode, pannerNode, mix, outputMode, transition } = options;
+  const transitionSeconds =
+    typeof options.transitionSeconds === 'number' && Number.isFinite(options.transitionSeconds)
+      ? Math.max(0.01, options.transitionSeconds)
+      : SPATIAL_RAMP_SECONDS;
   const gainValue = mix?.gain ?? 0;
   const panValue = mix?.pan ?? 0;
   const resolvedPan = outputMode === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
 
   if (transition === 'linear') {
     gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
-    gainNode.gain.linearRampToValueAtTime(gainValue, audioCtx.currentTime + SPATIAL_RAMP_SECONDS);
+    gainNode.gain.linearRampToValueAtTime(gainValue, audioCtx.currentTime + transitionSeconds);
     if (pannerNode) {
       pannerNode.pan.cancelScheduledValues(audioCtx.currentTime);
-      pannerNode.pan.linearRampToValueAtTime(resolvedPan, audioCtx.currentTime + SPATIAL_RAMP_SECONDS);
+      pannerNode.pan.linearRampToValueAtTime(resolvedPan, audioCtx.currentTime + transitionSeconds);
     }
     return;
   }
 
-  gainNode.gain.setTargetAtTime(gainValue, audioCtx.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
+  gainNode.gain.setTargetAtTime(gainValue, audioCtx.currentTime, transitionSeconds / 3);
   if (pannerNode) {
-    pannerNode.pan.setTargetAtTime(resolvedPan, audioCtx.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
+    pannerNode.pan.setTargetAtTime(resolvedPan, audioCtx.currentTime, transitionSeconds / 3);
   }
 }
 
@@ -73,16 +80,19 @@ export function resolveSpatialMix(options: SpatialMixOptions): SpatialMixResult 
     nearFieldDistance,
     nearFieldGain = 1,
     nearFieldCenterPan = false,
+    farFieldRangeMultiplier = 1,
+    farFieldFloorGain = 0,
   } = options;
   if (!(range > 0)) {
     return null;
   }
 
   const distance = Math.hypot(dx, dy);
-  let effectiveRange = range;
+  const audibleRange = range * Math.max(1, Math.min(3, farFieldRangeMultiplier));
+  let effectiveRange = audibleRange;
   if (options.directional?.enabled) {
     const directionalProfile = resolveDirectionalProfile(dx, dy, options.directional);
-    effectiveRange = Math.max(0.01, range * directionalProfile.attenuationFactor);
+    effectiveRange = Math.max(0.01, audibleRange * directionalProfile.attenuationFactor);
   }
 
   if (distance > effectiveRange) {
@@ -90,7 +100,9 @@ export function resolveSpatialMix(options: SpatialMixOptions): SpatialMixResult 
   }
 
   const volumeRatio = Math.max(0, 1 - distance / effectiveRange);
-  const shapedVolume = volumeRatio * volumeRatio * (3 - 2 * volumeRatio);
+  const slowRolloff = Math.pow(volumeRatio, 1.35);
+  const floor = Math.max(0, Math.min(0.25, farFieldFloorGain));
+  const shapedVolume = floor + (1 - floor) * slowRolloff;
   let gain = baseGain * shapedVolume;
   const clampedX = Math.max(-range, Math.min(range, dx));
   let pan = Math.sin((clampedX / range) * (Math.PI / 2));

@@ -40,13 +40,13 @@ async def test_same_nickname_same_case_is_noop(monkeypatch: pytest.MonkeyPatch) 
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
         sent_packets.append(packet)
 
-    async def fake_broadcast(
-        packet: object, exclude: ServerConnection | None = None
+    async def fake_broadcast_location(
+        location_id: str, packet: object, exclude: ServerConnection | None = None
     ) -> None:
         broadcast_packets.append(packet)
 
     monkeypatch.setattr(server, "_send", fake_send)
-    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+    monkeypatch.setattr(server, "_broadcast_location", fake_broadcast_location)
 
     await server._handle_message(
         client, json.dumps({"type": "update_nickname", "nickname": "Jage"})
@@ -120,13 +120,13 @@ async def test_case_only_change_is_allowed_and_broadcast(
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
         sent_packets.append(packet)
 
-    async def fake_broadcast(
-        packet: object, exclude: ServerConnection | None = None
+    async def fake_broadcast_location(
+        location_id: str, packet: object, exclude: ServerConnection | None = None
     ) -> None:
         broadcast_packets.append(packet)
 
     monkeypatch.setattr(server, "_send", fake_send)
-    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+    monkeypatch.setattr(server, "_broadcast_location", fake_broadcast_location)
 
     await server._handle_message(
         client, json.dumps({"type": "update_nickname", "nickname": "Jage"})

@@ -15,11 +15,13 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `auth_resume`: resume prior session via stored session token.
 - `auth_logout`: revoke current session and disconnect.
 - `welcome_ready`: client confirms it accepted `welcome` preflight and is ready to join active roster.
+- `change_location`: move to another server-defined location by id/name. `/go <location>` uses the same server handler. House rooms are regular server-defined locations.
 - `admin_roles_list`: request server role list (with user counts + permission sets).
 - `admin_role_create`: create role.
 - `admin_role_update_permissions`: replace one role permission set.
 - `admin_role_delete`: delete role with replacement role reassignment.
 - `admin_users_list`: request user list for admin actions (`action`: `set_role | ban | unban | delete_account`).
+- `admin_platform_overview`: request platform or owned-content summaries. `scope="platform"` requires server settings permission; `scope="owned_content"` is available to signed-in users and lists only their own items.
 - `admin_user_set_role`: set target user role.
 - `admin_user_ban` / `admin_user_unban`: disable/enable user account.
 - `admin_user_delete`: permanently delete target account.
@@ -27,6 +29,8 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `teleport_complete`: client signals teleport landing; server rebroadcasts spatial landing cue.
 - `update_nickname`: nickname change request (server enforces uniqueness).
 - `chat_message`: player chat.
+  - Slash commands include social reactions (`/hug`, `/tap`, `/hi`, `/chat`, `/self`, `/user`, `/highfive`, `/fistbump`, `/cheer`, `/clap`, `/laugh`, `/smile`, `/wink`, `/nod`, `/bow`, `/dance`, `/comfort`, `/pat`, `/poke`, `/boop`, `/salute`, `/thumbsup`, `/heart`, `/sparkle`, `/celebrate`, `/tease`, `/smack`, `/whisper`, `/listen`) and user movement helpers (`/walkto`, `/teleportto`, `/join`).
+- `direct_message`: private player chat to a visible peer. The browser queues unsent direct messages across reconnect and re-resolves the target by nickname before retrying.
 - `ping`: latency measurement.
 - `item_add`, `item_pickup`, `item_drop`, `item_delete`, `item_use`, `item_update`: item actions.
 - `item_transfer_targets`: request transfer target accounts for one item (includes online + offline active users, excluding current owner).
@@ -43,14 +47,16 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `auth_permissions`: server-pushed live role/permission refresh for current session.
 - `admin_roles_list`: role list response payload.
 - `admin_users_list`: user list response payload.
+- `admin_platform_overview`: platform or owned-content summary payload. Link summaries include author, verification status, owner, item id, location id, and grid coordinates where available.
 - `admin_action_result`: structured result for admin actions.
   - admin mutations include `user_delete` for account deletion.
 - `welcome`: initial snapshot with users/items plus server UI/world metadata.
   - Server delays roster activation/login broadcast until `welcome_ready` is received.
 - `signal`: forwarded WebRTC offer/answer/ICE.
-- `update_position`, `update_nickname`, `user_left`: presence updates.
+- `update_position`, `location_changed`, `update_nickname`, `user_left`: presence updates.
 - `teleport_complete`: peer teleport landing event with spatial coordinates.
 - `chat_message`: system and user chat stream.
+- `social_action`: structured social/reaction event with action id, actor, optional target, readable message, sound path, and spatial source coordinates.
 - `pong`: ping response.
 - `nickname_result`: accepted/rejected nickname result.
 - `item_upsert`: full item replacement after mutation.
@@ -58,7 +64,8 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_action_result`: action success/failure and user-facing message.
 - `item_transfer_targets`: transfer target account list for one item.
 - `item_use_sound`: spatial one-shot sound on successful item use (if `useSound` configured).
-- `item_clock_announce`: ordered list of clock speech samples to play sequentially as spatial audio.
+- `item_game_launch`: game service-link launch from a grid square; clients only auto-open it for players currently on that same square.
+- `item_clock_announce`: ordered list of clock speech samples to play sequentially as item-layer spatial audio.
 - `item_piano_note`: broadcast piano note on/off with resolved instrument/envelope/spatial params.
 - `item_piano_status`: structured piano mode/record/playback state events for client runtime control.
 
@@ -72,13 +79,22 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - Item transfer ownership is account-based; target accounts do not need to be currently connected.
 - Piano runtime control no longer depends on parsing `item_action_result.message` text.
 - `item_piano_status` carries machine-readable piano events (`use_mode_entered`, record/playback transitions).
+- eCrypto bank and wallet actions currently use existing chat and item packets.
+  Bank items are stationary, non-carryable service counters seeded across map
+  locations; `ecrypto_wallet` items are carryable wallet markers users can keep
+  on them while navigating. Logged-in
+  users can run `/ecrypto ...` commands for balance, wallet links, test deposits,
+  and test transfers; using an `ecrypto_bank` item returns account-specific
+  status through `item_action_result`.
 - `item_use_sound` contains absolute item world coordinates (`x`, `y`) and sound path.
   - For carried items, source coordinates resolve to the carrier's current position.
+- `social_action` contains absolute world coordinates for the reaction sound source. Its sound path is played as a world-layer one-shot.
 - `item_clock_announce` contains:
   - `itemId`
   - `sounds`: ordered sample URLs (EL640 phrase parts)
   - absolute source coordinates `x`, `y`
   - generated by server for manual clock `use`, top-of-hour auto announce, and alarm auto announce (when enabled)
+  - clients play these built-in clock voice samples by default, independent of optional browser TTS announcement mode
 - `teleport_complete` contains absolute player world coordinates (`x`, `y`) at teleport landing.
 - Radio metadata (`params.stationName`, `params.nowPlaying`) is server-managed and delivered through normal `item_upsert` updates.
 - `item_piano_note` contains:
@@ -104,6 +120,9 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `welcome.worldConfig.gridSize`: server-authoritative grid size used by clients for bounds/drawing.
 - `welcome.worldConfig.movementTickMs`: server movement-rate window used for client movement pacing.
 - `welcome.worldConfig.movementMaxStepsPerTick`: max allowed grid steps per movement window.
+- `welcome.worldConfig.locationId` / `locationName` / `locationDescription`: current location metadata for this session.
+- `welcome.worldConfig.locations`: available location list, including the Arcade game area and house interior rooms.
+- Location metadata is part of the spatial browsing model: guests and signed-in users can discover public-safe BlindSoftware areas, forum-like squares, billboards, showcases, and software links by moving through the grid and interacting with nearby items.
 - `welcome.player`: server-assigned spawn/current self position at connect time.
 - `welcome.serverInfo`: server process identity/version metadata:
   - `instanceId`: unique id generated at server startup

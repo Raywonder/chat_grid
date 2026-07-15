@@ -8,13 +8,17 @@ export type MainModeCommandAvailabilityContext = {
   itemTypeCount: number;
   visibleItemCount: number;
   userCount: number;
+  hasDirectMessageTarget: boolean;
+  locationCount: number;
   chatMessageCount: number;
   hasCarriedItem: boolean;
+  hasCarriedRadioRemote: boolean;
   squareItemCount: number;
   usableItemCount: number;
   manageableItemCount: number;
   hasEditableItemTarget: boolean;
   hasInspectableItemTarget: boolean;
+  hasFocusedUserTarget: boolean;
 };
 
 type MainModeCommandDescriptor = CommandDescriptor<MainModeCommand> & {
@@ -33,7 +37,7 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
   {
     id: 'toggleMute',
     label: 'Mute or unmute microphone',
-    shortcut: 'M',
+    shortcut: 'M / 8 / Shift+8',
     tooltip: 'Toggle local microphone mute.',
     section: 'Audio',
     isAvailable: () => true,
@@ -41,7 +45,7 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
   {
     id: 'toggleOutputMode',
     label: 'Toggle stereo or mono output',
-    shortcut: 'Shift+M',
+    shortcut: 'Shift+M / 7 / Shift+7',
     tooltip: 'Switch between stereo and mono output.',
     section: 'Audio',
     isAvailable: () => true,
@@ -57,7 +61,7 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
   {
     id: 'toggleVoiceLayer',
     label: 'Toggle voice layer',
-    shortcut: '1',
+    shortcut: '1 / 9 / Shift+9',
     tooltip: 'Enable or disable voice audio.',
     section: 'Audio',
     isAvailable: () => true,
@@ -65,7 +69,7 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
   {
     id: 'toggleItemLayer',
     label: 'Toggle item layer',
-    shortcut: '2',
+    shortcut: '2 / Shift+2',
     tooltip: 'Enable or disable item sounds.',
     section: 'Audio',
     isAvailable: () => true,
@@ -73,7 +77,7 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
   {
     id: 'toggleMediaLayer',
     label: 'Toggle media layer',
-    shortcut: '3',
+    shortcut: '3 / Shift+3',
     tooltip: 'Enable or disable media audio such as radio.',
     section: 'Audio',
     isAvailable: () => true,
@@ -81,8 +85,24 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
   {
     id: 'toggleWorldLayer',
     label: 'Toggle world layer',
-    shortcut: '4',
+    shortcut: '4 / Shift+4',
     tooltip: 'Enable or disable other world sounds.',
+    section: 'Audio',
+    isAvailable: () => true,
+  },
+  {
+    id: 'cycleAnnouncementMode',
+    label: 'Cycle TTS announcements',
+    shortcut: '5 / Shift+5',
+    tooltip: 'Switch between full announcements, alert sounds only, and required announcements only.',
+    section: 'Audio',
+    isAvailable: () => true,
+  },
+  {
+    id: 'toggleItemBeacons',
+    label: 'Toggle item beacons',
+    shortcut: '6 / Shift+6',
+    tooltip: 'Turn optional nearby item beacon pings on or off. Required item alerts remain active.',
     section: 'Audio',
     isAvailable: () => true,
   },
@@ -151,20 +171,76 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
     isAvailable: (context) => context.voiceSendAllowed,
   },
   {
+    id: 'cycleFocusedItem',
+    label: 'Cycle item focus',
+    shortcut: 'Tab / Shift+Tab',
+    tooltip: 'Cycle through carried items and items on your current square.',
+    section: 'Items',
+    isAvailable: (context) => context.hasCarriedItem || context.squareItemCount > 0,
+  },
+  {
     id: 'useItem',
     label: 'Use item',
-    shortcut: 'Enter',
-    tooltip: 'Use the carried item or a usable item on your current square.',
+    shortcut: 'Enter / Space / Shift+J',
+    tooltip: 'Use the focused, carried, current doorway, or portal-style item on your square.',
     section: 'Items',
     isAvailable: (context) => context.hasCarriedItem || context.usableItemCount > 0,
   },
   {
     id: 'secondaryUseItem',
     label: 'Secondary item action',
-    shortcut: 'Shift+Enter',
-    tooltip: 'Run the secondary action for the carried item or a usable item on your current square.',
+    shortcut: 'Shift+Enter / Shift+J',
+    tooltip: 'Run the secondary action for the focused, carried, or usable item on your current square.',
     section: 'Items',
     isAvailable: (context) => context.hasCarriedItem || context.usableItemCount > 0,
+  },
+  {
+    id: 'radioRemoteStationPrevious',
+    label: 'Radio remote previous station',
+    shortcut: 'Shift+Space / Left / Comma / Ctrl+Comma',
+    tooltip: 'Tune connected radios to the previous station while holding a radio remote.',
+    section: 'Radio',
+    isAvailable: (context) => context.hasCarriedRadioRemote,
+  },
+  {
+    id: 'radioRemoteStationNext',
+    label: 'Radio remote next station',
+    shortcut: 'Space / Right / Period / Ctrl+Period',
+    tooltip: 'Tune connected radios to the next station while holding a radio remote.',
+    section: 'Radio',
+    isAvailable: (context) => context.hasCarriedRadioRemote,
+  },
+  {
+    id: 'radioRemoteVolumeUp',
+    label: 'Radio remote volume up',
+    shortcut: 'Up / Ctrl+Shift+Up / Ctrl+Shift+U',
+    tooltip: 'Raise connected radio volume while holding a radio remote.',
+    section: 'Radio',
+    isAvailable: (context) => context.hasCarriedRadioRemote,
+  },
+  {
+    id: 'radioRemoteVolumeDown',
+    label: 'Radio remote volume down',
+    shortcut: 'Down / Ctrl+Shift+Down / Ctrl+Shift+D',
+    tooltip: 'Lower connected radio volume while holding a radio remote.',
+    section: 'Radio',
+    isAvailable: (context) => context.hasCarriedRadioRemote,
+  },
+  {
+    id: 'openUserActionMenu',
+    label: 'User action menu',
+    shortcut: 'Shift+Enter',
+    tooltip: 'Open contextual actions for the selected, focused, or nearest user.',
+    section: 'Users',
+    isAvailable: (context) => context.hasFocusedUserTarget,
+  },
+  {
+    id: 'interactItem',
+    label: 'Interact with object',
+    shortcut: 'J',
+    tooltip: 'Place a carried small item on furniture, shove an object off furniture, or repair a damaged object.',
+    section: 'Items',
+    isAvailable: (context) => context.hasCarriedItem || context.squareItemCount > 0,
   },
   {
     id: 'speakUsers',
@@ -202,7 +278,15 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
     id: 'pickupDropItem',
     label: 'Pick up or drop item',
     shortcut: 'D',
-    tooltip: 'Pick up an item on your square or drop your carried item.',
+    tooltip: 'Pick up an item, place a carried small item on the focused open surface, or drop it on the floor.',
+    section: 'Items',
+    isAvailable: (context) => context.hasCarriedItem || context.squareItemCount > 0,
+  },
+  {
+    id: 'pickupDropAttachedItems',
+    label: 'Pick up or drop attached group',
+    shortcut: 'Shift+D',
+    tooltip: 'Move the selected item together with attached, surfaced, or linked parts such as a room with its door and included objects.',
     section: 'Items',
     isAvailable: (context) => context.hasCarriedItem || context.squareItemCount > 0,
   },
@@ -255,6 +339,14 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
     isAvailable: (context) => context.userCount > 0,
   },
   {
+    id: 'listLocations',
+    label: 'Go to location',
+    shortcut: 'G / Ctrl+G / Shift+G',
+    tooltip: 'Open the location list; Enter travels to the selected place.',
+    section: 'Navigation',
+    isAvailable: (context) => context.locationCount > 0,
+  },
+  {
     id: 'openHelp',
     label: 'Open help',
     shortcut: '?',
@@ -265,10 +357,18 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
   {
     id: 'openChat',
     label: 'Open chat',
-    shortcut: '/',
-    tooltip: 'Start typing a chat message.',
+    shortcut: '/ / H',
+    tooltip: 'Start typing a room chat message.',
     section: 'Chat',
     isAvailable: () => true,
+  },
+  {
+    id: 'openDirectMessage',
+    label: 'Direct message user',
+    shortcut: 'Ctrl+M',
+    tooltip: 'Start a private message to the selected or nearest user.',
+    section: 'Chat',
+    isAvailable: (context) => context.hasDirectMessageTarget,
   },
   {
     id: 'openAdminMenu',

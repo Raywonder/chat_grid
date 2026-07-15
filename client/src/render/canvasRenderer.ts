@@ -1,4 +1,4 @@
-import { GRID_SIZE, type GameState, type PeerState, type WorldItem } from '../state/gameState';
+import { GRID_SIZE, isItemQuiet, type GameState, type PeerState, type WorldItem } from '../state/gameState';
 
 export class CanvasRenderer {
   private readonly ctx: CanvasRenderingContext2D;
@@ -39,13 +39,20 @@ export class CanvasRenderer {
     }
     for (const item of state.items.values()) {
       if (item.carrierId) continue;
+      if (isItemQuiet(item)) continue;
       this.drawItem(item);
     }
     this.drawObject(state.player, '#34d399', state.player.nickname);
 
     if (state.mode === 'nickname' || state.mode === 'chat' || state.mode === 'itemPropertyEdit') {
       const label =
-        state.mode === 'nickname' ? 'New Nickname' : state.mode === 'chat' ? 'Message' : 'Property Value';
+        state.mode === 'nickname'
+          ? 'New Nickname'
+          : state.mode === 'chat'
+            ? state.directMessageTargetName
+              ? `DM to ${state.directMessageTargetName}`
+              : 'Message'
+            : 'Property Value';
       this.drawTextOverlay(state, label);
     }
   }
@@ -87,6 +94,14 @@ export class CanvasRenderer {
     this.ctx.fillStyle =
       item.type === 'radio_station'
         ? '#fbbf24'
+        : item.type === 'house'
+          ? '#fb7185'
+          : item.type === 'house_alarm'
+            ? '#ef4444'
+          : item.type === 'house_keeper'
+            ? '#34d399'
+          : item.type === 'billboard'
+            ? '#38bdf8'
         : item.type === 'wheel'
           ? '#f97316'
           : item.type === 'piano'
@@ -103,6 +118,14 @@ export class CanvasRenderer {
     this.ctx.fillText(
       item.type === 'radio_station'
         ? 'R'
+        : item.type === 'house'
+          ? 'H'
+          : item.type === 'house_alarm'
+            ? 'A'
+          : item.type === 'house_keeper'
+            ? 'K'
+          : item.type === 'billboard'
+            ? 'B'
         : item.type === 'wheel'
           ? 'W'
           : item.type === 'piano'
@@ -110,7 +133,7 @@ export class CanvasRenderer {
           : item.type === 'clock'
             ? 'C'
             : item.type === 'widget'
-              ? 'B'
+              ? 'I'
               : 'D',
       drawX + this.squarePixelSize / 2,
       drawY + 13,

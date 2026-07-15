@@ -9,6 +9,8 @@ type UiDom = {
   closeSettingsButton: HTMLButtonElement;
   audioInputSelect: HTMLSelectElement;
   audioOutputSelect: HTMLSelectElement;
+  announcementModeSelect: HTMLSelectElement;
+  itemBeaconsToggle: HTMLInputElement;
   settingsModal: HTMLDivElement;
   canvas: HTMLCanvasElement;
 };
@@ -31,6 +33,8 @@ type UiBindingsDeps = {
   setPreferredOutput: (id: string, name: string) => void;
   updateDeviceSummary: () => void;
   setOutputDevice: (id: string) => Promise<void>;
+  setAnnouncementMode: (mode: string) => void;
+  setItemBeacons: (enabled: boolean) => void;
 };
 
 /**
@@ -74,9 +78,19 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
     void deps.setOutputDevice(target.value);
   });
 
+  deps.dom.announcementModeSelect.addEventListener('change', (event) => {
+    const target = event.target as HTMLSelectElement;
+    deps.setAnnouncementMode(target.value);
+  });
+
+  deps.dom.itemBeaconsToggle.addEventListener('change', (event) => {
+    const target = event.target as HTMLInputElement;
+    deps.setItemBeacons(target.checked);
+  });
+
   deps.dom.settingsModal.addEventListener('keydown', (event) => {
     if (event.key !== 'Tab') return;
-    const focusable = Array.from(deps.dom.settingsModal.querySelectorAll<HTMLElement>('select, button'));
+    const focusable = Array.from(deps.dom.settingsModal.querySelectorAll<HTMLElement>('select, input, button'));
     if (focusable.length === 0) return;
     const first = focusable[0];
     const last = focusable[focusable.length - 1];

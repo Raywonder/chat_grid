@@ -18,6 +18,15 @@ def test_ui_definitions_are_complete_for_all_item_types() -> None:
     assert item_type_order
     assert len(item_types) == len(item_type_order)
     assert [entry.get("type") for entry in item_types] == item_type_order
+    assert {
+        "qr_code",
+        "room",
+        "shack",
+        "shed",
+        "cabin",
+        "ecrypto_bank",
+        "ecrypto_wallet",
+    }.issubset(set(item_type_order))
 
     required_global_property_keys = {
         "useSound",
@@ -67,6 +76,19 @@ def test_ui_definitions_are_complete_for_all_item_types() -> None:
                 options = metadata.get("options")
                 assert isinstance(options, list)
                 assert options
+
+    by_type = {entry["type"]: entry for entry in item_types}
+    assert "single_room_studio" in by_type["room"]["propertyMetadata"]["roomLayout"]["options"]
+    assert "ecrypto" in by_type["qr_code"]["propertyMetadata"]["payloadKind"]["options"]
+    assert "wallets_transfers" in by_type["ecrypto_bank"]["propertyMetadata"]["serviceScope"]["options"]
+    assert "enabled" not in by_type["ecrypto_bank"]["editableProperties"]
+    assert "emitSound" not in by_type["ecrypto_bank"]["editableProperties"]
+    assert "emitVolume" not in by_type["ecrypto_bank"]["editableProperties"]
+    assert "targetLocation" in by_type["ecrypto_bank"]["editableProperties"]
+    assert "carryable" not in by_type["ecrypto_bank"]["capabilities"]
+    assert "carryable" in by_type["ecrypto_wallet"]["capabilities"]
+    assert "enabled" not in by_type["ecrypto_wallet"]["editableProperties"]
+    assert "real" in by_type["ecrypto_wallet"]["propertyMetadata"]["networkMode"]["options"]
 
 
 @pytest.mark.asyncio

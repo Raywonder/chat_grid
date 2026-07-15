@@ -1,6 +1,12 @@
 import { HEARING_RADIUS, type WorldItem } from '../state/gameState';
 import { getItemTypeGlobalProperties } from '../items/itemRegistry';
 import { AudioEngine } from './audioEngine';
+import {
+  connectDistanceReflections,
+  disconnectDistanceReflections,
+  updateDistanceReflections,
+  type DistanceReflectionRuntime,
+} from './distanceReflections';
 import { connectEffectChain, disconnectEffectRuntime, type EffectId, type EffectRuntime } from './effects';
 import { normalizeRadioEffect, normalizeRadioEffectValue } from './radioStationRuntime';
 import { applySpatialMixToNodes, resolveSpatialMix } from './spatial';
@@ -19,6 +25,7 @@ type EmitOutput = {
   loopDelaySeconds: number;
   gain: GainNode;
   panner: StereoPannerNode | null;
+  reflections: DistanceReflectionRuntime;
 };
 
 type EmitResumeState = {
@@ -38,8 +45,9 @@ type EmitSpatialConfig = {
 };
 
 const ITEM_EMIT_BASE_GAIN = 1;
-const SUBSCRIBE_PRELOAD_SQUARES = 5;
-const UNSUBSCRIBE_HYSTERESIS_SQUARES = 8;
+const SUBSCRIBE_PRELOAD_SQUARES = 7;
+const UNSUBSCRIBE_HYSTERESIS_SQUARES = 10;
+const PORTAL_PRELOAD_EXTRA_SQUARES = 8;
 const STREAM_PLAY_RETRY_MS = 5000;
 const STREAM_PLAY_MAX_RETRIES = 6;
 const STREAM_PLAY_RESET_COOLDOWN_MS = 60000;
@@ -92,6 +100,39 @@ function resolveEmitInitialDelaySeconds(item: WorldItem): number {
   return Math.round(clamped * 10) / 10;
 }
 
+/** Returns true for packaged sounds that should be decoded before the listener reaches them. */
+function isLocalPackagedSound(soundUrl: string): boolean {
+  try {
+    const parsed = new URL(soundUrl, window.location.href);
+    return parsed.origin === window.location.origin && parsed.pathname.includes('/sounds/');
+  } catch {
+    return soundUrl.includes('/sounds/') || soundUrl.startsWith('sounds/');
+  }
+}
+
+/** Returns whether this item is an always-near travel threshold whose loop must stay warm. */
+function isPortalLikeEmitter(item: WorldItem): boolean {
+  const kind = String(item.params.serviceKind ?? '').trim().toLowerCase();
+  const emitSound = String(item.params.emitSound ?? item.emitSound ?? '').trim();
+  return (
+    item.type === 'service_link'
+    && ['portal', 'door', 'house', 'room'].includes(kind)
+    && (
+      emitSound.includes('portal_spatial_loop')
+      || emitSound.includes('teleport_pad_loop')
+      || emitSound.includes('house_threshold_loop')
+      || emitSound.includes('door_soft_loop')
+    )
+  );
+}
+
+/** Returns true when this widget should not run as a tile emitter. */
+function suppressTileEmitterForAmbienceScope(item: WorldItem): boolean {
+  if (item.type !== 'widget') return false;
+  const scope = String(item.params.ambienceScope ?? 'tile').trim().toLowerCase();
+  return scope === 'location' || scope === 'off';
+}
+
 export class ItemEmitRuntime {
   private readonly outputs = new Map<string, EmitOutput>();
   private readonly resumeStateByItemId = new Map<string, EmitResumeState>();
@@ -133,6 +174,7 @@ export class ItemEmitRuntime {
       disconnectEffectRuntime(output.effectRuntime);
       output.gain.disconnect();
       output.panner?.disconnect();
+      disconnectDistanceReflections(output.reflections);
       this.outputs.delete(itemId);
     }
     this.pendingEmitStarts.delete(itemId);
@@ -146,6 +188,17 @@ export class ItemEmitRuntime {
     for (const itemId of Array.from(this.outputs.keys())) {
       this.cleanup(itemId);
     }
+  }
+
+  /**
+   * Clears local emitted-audio runtimes and retry backoff before a reconnect
+   * rebuilds nearby stream subscriptions from the latest world snapshot.
+   */
+  resetPlaybackRecovery(): void {
+    this.cleanupAll();
+    this.pendingEmitStarts.clear();
+    this.nextEmitStartAtMs.clear();
+    this.emitStartFailureCount.clear();
   }
 
   async setLayerEnabled(
@@ -182,6 +235,10 @@ export class ItemEmitRuntime {
 
     for (const item of items) {
       seenItemIds.add(item.id);
+      if (suppressTileEmitterForAmbienceScope(item)) {
+        this.cleanup(item.id);
+        continue;
+      }
       const emitSound = String(item.params.emitSound ?? item.emitSound ?? '').trim();
       const enabled = item.params.enabled !== false;
       const soundUrl = enabled ? this.resolveSoundUrl(emitSound) : '';
@@ -197,6 +254,7 @@ export class ItemEmitRuntime {
       const existing = this.outputs.get(item.id);
       if (existing && existing.soundUrl === soundUrl) {
         this.resumeStateByItemId.delete(item.id);
+        this.tryStartEmitPlayback(item.id, existing.element);
         continue;
       }
       if (existing) {
@@ -211,8 +269,9 @@ export class ItemEmitRuntime {
       }
       const element = new Audio(soundUrl);
       element.loop = false;
-      element.preload = 'none';
+      element.preload = isLocalPackagedSound(soundUrl) ? 'auto' : 'metadata';
       element.crossOrigin = 'anonymous';
+      element.load();
       const source = audioCtx.createMediaElementSource(element);
       const effectInput = audioCtx.createGain();
       const gain = audioCtx.createGain();
@@ -327,6 +386,7 @@ export class ItemEmitRuntime {
       } else {
         gain.connect(destination);
       }
+      const reflections = connectDistanceReflections(audioCtx, gain, destination, this.audio.supportsStereoPanner());
       this.outputs.set(item.id, {
         soundUrl,
         element,
@@ -340,6 +400,7 @@ export class ItemEmitRuntime {
         loopDelaySeconds,
         gain,
         panner,
+        reflections,
       });
       if (!matchingResumeState && !this.nextEmitStartAtMs.has(item.id) && initialDelaySeconds > 0) {
         this.nextEmitStartAtMs.set(item.id, Date.now() + initialDelaySeconds * 1000);
@@ -387,6 +448,7 @@ export class ItemEmitRuntime {
         output.effectValue = effectValue;
       }
       const nextRates = resolveEmitRates(item);
+      const portalLike = isPortalLikeEmitter(item);
       output.initialDelaySeconds = resolveEmitInitialDelaySeconds(item);
       const nextLoopDelaySeconds = resolveEmitLoopDelaySeconds(item);
       output.loopDelaySeconds = nextLoopDelaySeconds;
@@ -399,20 +461,25 @@ export class ItemEmitRuntime {
           this.tryStartEmitPlayback(itemId, output.element);
         }
       }
-      setElementPreservesPitch(output.element, nextRates.preservePitch);
-      const nextPlaybackRate = nextRates.playbackRate;
+      const spatialConfig = this.getSpatialConfig(item);
+      const spatialRange = Math.max(1, spatialConfig.range || HEARING_RADIUS);
+      const distance = Math.hypot(item.x - playerPosition.x, item.y - playerPosition.y);
+      const portalProximity = portalLike ? Math.max(0, Math.min(1, 1 - distance / spatialRange)) : 0;
+      setElementPreservesPitch(output.element, portalLike ? false : nextRates.preservePitch);
+      const nextPlaybackRate = nextRates.playbackRate * (portalLike ? 0.92 + portalProximity * 0.16 : 1);
       if (Math.abs(output.element.playbackRate - nextPlaybackRate) > 0.001) {
         output.element.playbackRate = nextPlaybackRate;
       }
-      const spatialConfig = this.getSpatialConfig(item);
       const mix = resolveSpatialMix({
         dx: item.x - playerPosition.x,
         dy: item.y - playerPosition.y,
-        range: Math.max(1, spatialConfig.range || HEARING_RADIUS),
+        range: spatialRange,
         baseGain: ITEM_EMIT_BASE_GAIN,
         nearFieldDistance: 1,
         nearFieldGain: 1,
         nearFieldCenterPan: true,
+        farFieldRangeMultiplier: 1.6,
+        farFieldFloorGain: 0.08,
         directional: {
           enabled: spatialConfig.directional,
           facingDeg: spatialConfig.facingDeg,
@@ -430,6 +497,15 @@ export class ItemEmitRuntime {
         outputMode: this.audio.getOutputMode(),
         transition: 'target',
       });
+      updateDistanceReflections({
+        audioCtx,
+        runtime: output.reflections,
+        mix: scaledMix,
+        range: spatialRange,
+        outputMode: this.audio.getOutputMode(),
+        maxWetGain: portalLike ? 0.28 : 0.12,
+        proximityEffect: portalLike,
+      });
       this.tryStartEmitPlayback(itemId, output.element);
     }
   }
@@ -442,7 +518,10 @@ export class ItemEmitRuntime {
     if (listenerPositions.length === 0) return false;
     const spatialConfig = this.getSpatialConfig(item);
     const baseRange = Math.max(1, spatialConfig.range || HEARING_RADIUS);
-    const threshold = baseRange + (currentlyActive ? UNSUBSCRIBE_HYSTERESIS_SQUARES : SUBSCRIBE_PRELOAD_SQUARES);
+    const audibleRange = baseRange * 1.6;
+    const threshold = audibleRange
+      + (currentlyActive ? UNSUBSCRIBE_HYSTERESIS_SQUARES : SUBSCRIBE_PRELOAD_SQUARES)
+      + (isPortalLikeEmitter(item) ? PORTAL_PRELOAD_EXTRA_SQUARES : 0);
     return listenerPositions.some((listenerPosition) =>
       Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold,
     );

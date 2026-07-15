@@ -1,0 +1,2 @@
+"""House keeper item type."""
+

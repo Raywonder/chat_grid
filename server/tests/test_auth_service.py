@@ -46,6 +46,57 @@ def test_register_and_resume_session(tmp_path: Path) -> None:
         service.close()
 
 
+def test_ecrypto_account_autolinks_wallets_and_test_balance(tmp_path: Path) -> None:
+    service = make_auth_service(tmp_path)
+    try:
+        session = service.register("alpha", "password99")
+
+        summary = service.ensure_ecrypto_account(session.user.id)
+        assert summary.username == "alpha"
+        assert summary.test_balance == 0
+        assert summary.wallet_count == 0
+
+        wallet = service.connect_ecrypto_wallet(
+            session.user.id,
+            chain="ecrypto-test",
+            address="test:alpha-wallet",
+            network_mode="test",
+            label="grid wallet",
+            source_label="dom-windows",
+        )
+        assert wallet.chain == "ecrypto-test"
+        assert wallet.network_mode == "test"
+        assert wallet.source_label == "dom-windows"
+
+        credited = service.ecrypto_test_deposit(session.user.id, 250)
+        assert credited.test_balance == 250
+        assert credited.wallet_count == 1
+        assert credited.test_wallet_count == 1
+        inventory = service.list_ecrypto_account_summaries()
+        assert [entry.username for entry in inventory] == ["alpha"]
+        assert inventory[0].wallet_count == 1
+    finally:
+        service.close()
+
+
+def test_ecrypto_test_transfer_moves_between_users(tmp_path: Path) -> None:
+    service = make_auth_service(tmp_path)
+    try:
+        alpha = service.register("alpha", "password99")
+        beta = service.register("beta", "password99")
+        service.ecrypto_test_deposit(alpha.user.id, 500)
+
+        sender, recipient = service.ecrypto_test_transfer(alpha.user.id, beta.user.id, 125)
+
+        assert sender.test_balance == 375
+        assert recipient.username == "beta"
+        assert recipient.test_balance == 125
+        with pytest.raises(AuthError, match="Insufficient"):
+            service.ecrypto_test_transfer(alpha.user.id, beta.user.id, 999)
+    finally:
+        service.close()
+
+
 def test_login_external_assertion_creates_user_and_session(tmp_path: Path) -> None:
     service = make_auth_service(tmp_path)
     try:

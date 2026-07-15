@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from ....models import WorldItem
 from ...helpers import keep_only_known_params, parse_bool_like_or_none
-from .definition import DEFAULT_TIME_ZONE, PARAM_KEYS, TIME_ZONE_OPTIONS
+from .definition import (
+    DEFAULT_ANNOUNCE_INTERVAL_MINUTES,
+    DEFAULT_TIME_ZONE,
+    PARAM_KEYS,
+    TIME_ZONE_OPTIONS,
+)
 from .time_format import format_alarm_time_for_mode, parse_alarm_time_flexible
 
 
@@ -20,6 +25,18 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     top_of_hour_announce = parse_bool_like_or_none(next_params.get("topOfHourAnnounce"))
     if top_of_hour_announce is None:
         raise ValueError("topOfHourAnnounce must be on/off.")
+    try:
+        announce_interval_minutes = int(
+            str(
+                next_params.get(
+                    "announceIntervalMinutes", DEFAULT_ANNOUNCE_INTERVAL_MINUTES
+                )
+            ).strip()
+        )
+    except (TypeError, ValueError):
+        raise ValueError("announceIntervalMinutes must be a number from 1 to 60.") from None
+    if not 1 <= announce_interval_minutes <= 60:
+        raise ValueError("announceIntervalMinutes must be from 1 to 60.")
     alarm_enabled = parse_bool_like_or_none(next_params.get("alarmEnabled"))
     if alarm_enabled is None:
         raise ValueError("alarmEnabled must be on/off.")
@@ -39,6 +56,7 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     next_params["timeZone"] = time_zone
     next_params["use24Hour"] = use_24_hour
     next_params["topOfHourAnnounce"] = top_of_hour_announce
+    next_params["announceIntervalMinutes"] = announce_interval_minutes
     next_params["alarmEnabled"] = alarm_enabled
     if parsed_alarm is not None:
         next_params["alarmTime"] = format_alarm_time_for_mode(

@@ -9,7 +9,7 @@ type DispatchOptions = {
   mode: GameMode;
   input: ModeInput;
   handlers: ModeHandlers;
-  onNormalMode: (code: string, shiftKey: boolean) => void;
+  onNormalMode: (code: string, shiftKey: boolean, ctrlKey: boolean) => void;
 };
 
 /**
@@ -21,5 +21,5 @@ export function dispatchModeInput(options: DispatchOptions): void {
     modeHandler(options.input);
     return;
   }
-  options.onNormalMode(options.input.code, options.input.shiftKey);
+  options.onNormalMode(options.input.code, options.input.shiftKey, options.input.ctrlKey);
 }

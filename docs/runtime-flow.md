@@ -20,7 +20,9 @@
    - applies `welcome.worldConfig.gridSize` for authoritative grid bounds/rendering
    - applies `welcome.worldConfig.movementTickMs` as movement pacing guidance
    - applies `welcome.worldConfig.movementMaxStepsPerTick` for movement-rate parity
-  - uses `welcome.player` as authoritative starting position (restored from server-side account state when available)
+  - receives current location metadata and the server-defined location list
+  - starts the current location's procedural ambience when the world audio layer is enabled
+   - uses `welcome.player` as authoritative starting position (restored from server-side account state when available)
    - records `welcome.serverInfo` (`instanceId`, `releaseVersion`, `serverVersion`, `expectedClientRevision`, `gridName`, `welcomeMessage`) for restart detection and client branding
    - if `welcome.serverInfo.expectedClientRevision` differs from the running client revision, auto-reloads the page
    - applies `welcome.uiDefinitions` for item menus/properties/options, server-backed command metadata, item-management metadata, and admin menu labels/order
@@ -38,6 +40,8 @@ Each frame:
 
 - Handle local movement input.
 - Send movement intents; server remains authoritative on accepted movement updates.
+- Open shared game launches only when the server launch packet matches the player's current grid square.
+- Keep the current location ambience in sync with the world audio layer and active location.
 - Update spatial voice audio.
 - Update spatial radio audio.
 - Update spatial item emit audio.
@@ -55,9 +59,13 @@ Core incoming message effects:
 - `admin_users_list`: user metadata list for role/ban admin flows.
 - `admin_action_result`: success/error for role/user admin mutations.
 - `update_position`: update peer position; may play movement/teleport world sound.
+- `location_changed`: reset local room state for the new location, switch the local ambience bed, or add a peer arrival.
+  House interiors and their rooms use the same server-owned location flow as city, town, arcade, and offices.
 - `teleport_complete`: play peer teleport landing sound at final tile.
 - `update_nickname`: update peer display name.
 - `chat_message`: append/readable status; optional system sound class.
+- Outbound room chat and direct messages use a bounded browser outbox. If the websocket is closed during a send, the message is kept in local storage and retried after the next `welcome`. Direct messages keep the intended target name so reconnect can resolve the target's current peer id when that user is visible again.
+- `social_action`: append/readable structured reaction text and play the configured spatial reaction sound.
 - `item_upsert`: replace item snapshot and resync item runtimes.
 - `item_remove`: remove item and cleanup runtimes.
 - `item_action_result`: success/error status for actions.
@@ -76,7 +84,10 @@ Core incoming message effects:
 - Reconnect flow waits 5 seconds and retries up to 3 times.
 - If reconnect lands on a different `welcome.serverInfo.instanceId`, client announces server restart.
 - Connect/reconnect status message is emitted from `welcome` and includes server version.
+- On a valid `welcome`, the client sends `welcome_ready` before doing heavier app-level world/audio setup so the server can activate the authenticated session immediately.
 - Server-only deploys no longer force browser reloads unless `expectedClientRevision` changes.
+- Pending room/direct chat messages are flushed after the new `welcome` snapshot arrives. Messages whose direct-message target is not visible remain queued instead of being discarded.
+- A reconnect `welcome` clears stale WebRTC peer connections, local radio stream runtimes, item emit runtimes, and media retry cooldowns before rebuilding from the fresh world snapshot. After microphone/audio setup returns, nearby stream subscriptions are forced again so shared radios/items do not stay half-recovered. Forced media syncs also nudge existing paused/errored shared radio and item-loop elements back into playback instead of leaving them in an old retry state.
 
 ## Authorization Runtime
 
@@ -92,6 +103,7 @@ On disconnect:
 - Stop heartbeat monitor.
 - Stop local media tracks.
 - Cleanup peers and all audio runtimes.
+- Drop any carried items on the user's last tile without changing shared item power state. Active radios and TV objects remain on unless a user explicitly switches them off.
 - Reset UI/mode state and lists.
 
 ## Runtime Components
@@ -100,3 +112,6 @@ On disconnect:
 - `RadioStationRuntime`: shared stream sources + per-item output/effects/spatialization.
 - `ItemEmitRuntime`: per-item looping emit source + spatialization.
 - `AudioEngine`: shared audio context, samples, effects, voice graph.
+## Client update freshness
+
+The browser client loads `/version.js` as the shared release metadata source and also polls it while the page is open. The poll uses timestamped `no-store` requests so Chrome does not keep an old entrypoint after rapid deploys. The watcher checks both the live `CHGRID_CLIENT_REVISION` and the live HTML module asset URL; this catches stale tabs where an old hashed bundle sees a fresh `version.js` value and would otherwise think it is current. When either value differs from the running client, the client announces the update, reloads through a cache-busted URL, and the refreshed page automatically starts the normal connect flow.

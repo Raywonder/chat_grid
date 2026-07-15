@@ -19,6 +19,8 @@ export type ItemBehaviorDeps = {
   signalingSend: (message: OutgoingMessage) => void;
   updateStatus: (message: string) => void;
   openHelpViewer: (lines: string[], returnMode: GameMode) => void;
+  requestMidiAccess?: (reason?: 'manual' | 'piano') => Promise<boolean>;
+  setMidiControlVisible?: (visible: boolean) => void;
   withBase: (path: string) => string;
 };
 
@@ -32,6 +34,8 @@ export type ItemBehavior = {
   onWorldUpdate?: () => void;
   handleModeInput?: (mode: GameMode, input: ModeInput) => boolean;
   handleModeKeyUp?: (mode: GameMode, input: Pick<ModeInput, 'code' | 'shiftKey'>) => boolean;
+  handleMidiNoteOn?: (mode: GameMode, midi: number, velocity: number) => boolean;
+  handleMidiNoteOff?: (mode: GameMode, midi: number) => boolean;
   canOpenModeCommandPalette?: (mode: GameMode) => boolean;
   getModeKeyUpTarget?: (activeMode: GameMode, returnMode: GameMode) => GameMode | null;
   getModeCommands?: (mode: GameMode) => CommandDescriptor[];

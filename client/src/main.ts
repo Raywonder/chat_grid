@@ -37,6 +37,7 @@ import { SignalingClient } from './network/signalingClient';
 import { CanvasRenderer } from './render/canvasRenderer';
 import {
   GRID_SIZE,
+  HEARING_RADIUS,
   MOVE_COOLDOWN_MS,
   createInitialState,
   getDirection,
@@ -373,6 +374,7 @@ const APP_RELEASE_VERSION = String(window.CHGRID_RELEASE_VERSION ?? '').trim();
 const APP_CLIENT_REVISION = String(window.CHGRID_CLIENT_REVISION ?? '').trim();
 const APP_DISPLAY_VERSION = [APP_RELEASE_VERSION, APP_CLIENT_REVISION].filter((value) => value.length > 0).join(' ').trim();
 const STARTED_FROM_VERSION_RELOAD = isVersionReloadedSession();
+const IS_NATIVE_CLIENT = new URLSearchParams(window.location.search).has('native_client');
 dom.appVersion.textContent = APP_DISPLAY_VERSION
   ? `Another AI experiment with Jage. Version ${APP_DISPLAY_VERSION}`
   : 'Another AI experiment with Jage. Version unknown';
@@ -416,6 +418,7 @@ const LOCATION_AMBIENCE_PROFILES: Record<string, Omit<LocationAmbienceProfile, '
   city_plaza: { loopUrl: withBase('sounds/ambience/city_plaza.ogg'), loopGain: 0.5, rootHz: 110, colorHz: 165, airHz: 330, noiseHz: 950, noiseQ: 0.8, gain: 0.06, noiseGain: 0.018, wave: 'sine' },
   forest_canopy: { loopUrl: withBase('sounds/ambience/forest_canopy.ogg'), loopGain: 0.45, rootHz: 82, colorHz: 123, airHz: 246, noiseHz: 1450, noiseQ: 1.2, gain: 0.055, noiseGain: 0.032, wave: 'triangle' },
   town_square: { loopUrl: withBase('sounds/ambience/town_square.ogg'), loopGain: 0.48, rootHz: 98, colorHz: 147, airHz: 294, noiseHz: 720, noiseQ: 0.7, gain: 0.052, noiseGain: 0.018, wave: 'sine' },
+  town_cafe: { loopUrl: withBase('sounds/ambience/town_cafe.ogg?v=20260715-world-cup-cafe'), loopGain: 0.38, rootHz: 92, colorHz: 184, airHz: 368, noiseHz: 1050, noiseQ: 1.1, gain: 0.044, noiseGain: 0.022, wave: 'triangle' },
   arcade_glow: { loopUrl: withBase('sounds/ambience/arcade_glow.ogg?v=20260714-arcade-loop'), loopGain: 0.5, rootHz: 130.81, colorHz: 196, airHz: 392, noiseHz: 1800, noiseQ: 2.4, gain: 0.052, noiseGain: 0.012, wave: 'square' },
   office_focus: { loopUrl: withBase('sounds/ambience/office_focus.ogg'), loopGain: 0.42, rootHz: 73.42, colorHz: 146.83, airHz: 293.66, noiseHz: 560, noiseQ: 0.9, gain: 0.047, noiseGain: 0.014, wave: 'sine' },
   neighborhood_evening: { loopUrl: withBase('sounds/ambience/neighborhood_evening.ogg'), loopGain: 0.48, rootHz: 87.31, colorHz: 130.81, airHz: 261.63, noiseHz: 820, noiseQ: 0.9, gain: 0.049, noiseGain: 0.02, wave: 'triangle' },
@@ -2639,7 +2642,7 @@ function handleMovement(): void {
   if (state.mode !== 'normal') return;
   if (activeTeleport) return;
   if (
-    getCarriedRadioRemote() &&
+    getCarriedMediaRemote() &&
     (state.keysPressed.ArrowUp || state.keysPressed.ArrowDown || state.keysPressed.ArrowLeft || state.keysPressed.ArrowRight)
   ) {
     return;
@@ -2733,7 +2736,7 @@ async function checkMicPermission(): Promise<boolean> {
 /** Starts local microphone capture and rebuilds the outbound track pipeline. */
 async function setupLocalMedia(audioDeviceId = ''): Promise<void> {
   await mediaSession.setupLocalMedia(audioDeviceId);
-  applyVoiceSendPermission();
+  authController.reapplyVoiceSendPermission();
 }
 
 /** Runs a short RMS sample to estimate and apply a usable microphone input gain. */
@@ -3826,6 +3829,12 @@ function runDynamicUserAction(target: PeerState): void {
 }
 
 function escapeCommand(): void {
+  if (IS_NATIVE_CLIENT) {
+    pendingEscapeDisconnect = false;
+    updateStatus('Escape does not disconnect the desktop client. Use File, Sign out or Exit.');
+    audio.sfxUiCancel();
+    return;
+  }
   if (pendingEscapeDisconnect) {
     pendingEscapeDisconnect = false;
     disconnect();
@@ -3901,7 +3910,7 @@ function getAvailableCommandPaletteEntriesForMode(mode: GameMode): Array<Command
       locationCount: worldLocationOptions.length,
       chatMessageCount: messageBuffer.length,
       hasCarriedItem: Boolean(getCarriedItem()),
-      hasCarriedRadioRemote: Boolean(getCarriedRadioRemote()),
+      hasCarriedRadioRemote: Boolean(getCarriedMediaRemote()),
       squareItemCount: getCurrentSquareItems().length,
       usableItemCount: getUsableItemsOnCurrentSquare().length,
       manageableItemCount: getManageableItemsOnCurrentSquare().length,
@@ -3965,7 +3974,7 @@ function handleNormalModeInput(code: string, shiftKey: boolean, ctrlKey: boolean
     moveFocusedSurfaceItemCommand(code === 'KeyJ' ? 'left' : 'right');
     return;
   }
-  if (getCarriedRadioRemote()) {
+  if (getCarriedMediaRemote()) {
     if (code === 'Tab') {
       cycleFocusedItemCommand(shiftKey);
       return;

@@ -15,6 +15,7 @@ type KeyboardControllerDeps = {
   };
   isTextEditingMode: (mode: GameMode) => boolean;
   closeSettings: () => void;
+  closeInteractiveItem: () => boolean;
   hasBlockedArrowTeleport: (code: string) => boolean;
   handleModeInput: (input: ModeInput) => void;
   canOpenCommandPaletteInMode: (mode: GameMode) => boolean;
@@ -31,6 +32,30 @@ type KeyboardControllerDeps = {
  */
 export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
   let internalClipboardText = '';
+  const nativeArrowReleaseTimers = new Map<string, number>();
+
+  const nativeWindow = window as Window & {
+    chatGridNativeKey?: (code: string) => boolean;
+  };
+  nativeWindow.chatGridNativeKey = (code: string): boolean => {
+    if (!deps.state.running || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(code)) {
+      return false;
+    }
+    if (deps.hasBlockedArrowTeleport(code)) return false;
+    deps.dom.canvas.focus({ preventScroll: true });
+    deps.state.keysPressed[code] = true;
+    deps.handleModeInput({ code, key: code, ctrlKey: false, shiftKey: false });
+    const previousTimer = nativeArrowReleaseTimers.get(code);
+    if (previousTimer !== undefined) window.clearTimeout(previousTimer);
+    nativeArrowReleaseTimers.set(
+      code,
+      window.setTimeout(() => {
+        deps.state.keysPressed[code] = false;
+        nativeArrowReleaseTimers.delete(code);
+      }, 250),
+    );
+    return true;
+  };
 
   function isTypingKey(code: string): boolean {
     return code.startsWith('Key') || code === 'Space';
@@ -87,6 +112,34 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     return codeFromKey(event.key, event.location) ?? event.code ?? '';
   }
 
+  function isEditableElement(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    if (target.isContentEditable) return true;
+    const tagName = target.tagName.toLowerCase();
+    if (tagName === 'textarea' || tagName === 'select') return true;
+    if (tagName !== 'input') return false;
+    const input = target as HTMLInputElement;
+    return !['button', 'checkbox', 'radio', 'range', 'submit', 'reset'].includes(input.type);
+  }
+
+  function shouldMoveFocusToCanvas(event: KeyboardEvent, code: string): boolean {
+    if (code === 'Tab') return false;
+    if (event.altKey || event.ctrlKey || event.metaKey) return false;
+    if (isEditableElement(event.target)) return false;
+    if (deps.isTextEditingMode(deps.state.mode)) return false;
+    if (deps.dom.settingsModal.contains(event.target as Node | null)) return false;
+    return (
+      code.startsWith('Arrow') ||
+      code === 'Enter' ||
+      code === 'Space' ||
+      code === 'Slash' ||
+      code === 'Backslash' ||
+      code === 'Escape' ||
+      /^Key[A-Z]$/.test(code) ||
+      /^Digit[0-9]$/.test(code)
+    );
+  }
+
   document.addEventListener('keydown', (event) => {
     const code = normalizeInputCode(event);
     if (!code) return;
@@ -102,11 +155,19 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
       deps.closeSettings();
       return;
     }
+    if (code === 'Escape' && deps.closeInteractiveItem()) {
+      event.preventDefault();
+      return;
+    }
 
     if (!deps.state.running) return;
-    if (document.activeElement !== deps.dom.canvas) return;
+    if (document.activeElement !== deps.dom.canvas) {
+      if (!shouldMoveFocusToCanvas(event, code)) return;
+      deps.dom.canvas.focus();
+    }
     if (event.altKey) return;
-    if (hasShortcutModifier && !deps.isTextEditingMode(deps.state.mode)) return;
+    const allowedModifiedNormalShortcut = deps.state.mode === 'normal' && (code === 'KeyG' || code === 'KeyM');
+    if (hasShortcutModifier && !deps.isTextEditingMode(deps.state.mode) && !allowedModifiedNormalShortcut) return;
     if (deps.hasBlockedArrowTeleport(code)) {
       event.preventDefault();
       return;

@@ -60,20 +60,28 @@ type InstrumentPreset = {
   heldDecayScale?: number;
   releaseScale?: number;
   vibrato?: { rateHz: number; depthCents: number };
+  hammerNoise?: boolean;
+  attackScale?: number;
+  keyBrightness?: boolean;
 };
 
 const PRESETS: Record<Exclude<PianoInstrumentId, 'drum_kit'>, InstrumentPreset> = {
   piano: {
     oscillators: [
-      { type: 'triangle', gain: 1 },
-      { type: 'sine', ratio: 2, gain: 0.28 },
+      { type: 'sine', gain: 1 },
+      { type: 'triangle', ratio: 2.003, gain: 0.42 },
+      { type: 'sine', ratio: 3.01, gain: 0.2 },
+      { type: 'sine', ratio: 4.02, gain: 0.09 },
     ],
-    filter: { type: 'lowpass', frequency: 5200, q: 0.7 },
-    gain: 0.32,
-    sustainRatio: 0.5,
+    filter: { type: 'lowpass', frequency: 6200, q: 0.75 },
+    gain: 0.34,
+    sustainRatio: 0.38,
     holdSustain: false,
-    heldDecayScale: 2.0,
-    releaseScale: 0.9,
+    heldDecayScale: 2.8,
+    releaseScale: 1.05,
+    hammerNoise: true,
+    attackScale: 0.18,
+    keyBrightness: true,
   },
   electric_piano: {
     oscillators: [
@@ -175,7 +183,7 @@ export const DEFAULT_PIANO_SETTINGS_BY_INSTRUMENT: Record<
   PianoInstrumentId,
   { attack: number; decay: number; release: number; brightness: number }
 > = {
-  piano: { attack: 15, decay: 45, release: 35, brightness: 55 },
+  piano: { attack: 3, decay: 55, release: 45, brightness: 68 },
   electric_piano: { attack: 12, decay: 40, release: 30, brightness: 62 },
   guitar: { attack: 8, decay: 35, release: 25, brightness: 50 },
   organ: { attack: 25, decay: 70, release: 45, brightness: 48 },
@@ -306,9 +314,12 @@ export class PianoSynth {
 
     const preset = PRESETS[instrument] ?? PRESETS.piano;
     const now = context.audioCtx.currentTime;
-    const attackSeconds = attackPercentToSeconds(attackPercent);
+    const attackSeconds = Math.max(0.002, attackPercentToSeconds(attackPercent) * (preset.attackScale ?? 1));
     const decaySeconds = decayPercentToSeconds(decayPercent);
     const releaseSeconds = Math.max(0.02, releasePercentToSeconds(releasePercent) * (preset.releaseScale ?? 1));
+    const playedMidi = instrument === 'piano' || instrument === 'electric_piano'
+      ? Math.max(21, Math.min(108, Math.round(midi)))
+      : Math.max(0, Math.min(127, Math.round(midi)));
 
     const spatialMix = resolveSpatialMix({
       dx: spatial.x,
@@ -336,7 +347,11 @@ export class PianoSynth {
     if (preset.filter) {
       const filter = context.audioCtx.createBiquadFilter();
       filter.type = preset.filter.type;
-      filter.frequency.setValueAtTime(preset.filter.frequency * brightnessPercentToMultiplier(brightnessPercent), now);
+      const keyBrightness = preset.keyBrightness ? Math.pow(2, (playedMidi - 60) / 72) : 1;
+      filter.frequency.setValueAtTime(
+        Math.max(350, Math.min(12000, preset.filter.frequency * keyBrightness * brightnessPercentToMultiplier(brightnessPercent))),
+        now,
+      );
       filter.Q.setValueAtTime(preset.filter.q ?? 0.7, now);
       voiceGain.connect(filter);
       tailNode = filter;
@@ -351,7 +366,7 @@ export class PianoSynth {
       tailNode.connect(context.destination);
     }
 
-    const frequency = midiToFrequency(midi);
+    const frequency = midiToFrequency(playedMidi);
     const oscillators: OscillatorNode[] = [];
     const modulators: OscillatorNode[] = [];
     for (const partial of preset.oscillators) {
@@ -374,6 +389,9 @@ export class PianoSynth {
         modulators.push(lfo);
       }
     }
+    if (preset.hammerNoise) {
+      this.playHammerTransient(context, voiceGain, now, playedMidi, brightnessPercent);
+    }
 
     this.voices.set(keyId, {
       gain: voiceGain,
@@ -386,6 +404,26 @@ export class PianoSynth {
     const groupKeys = this.activeVoiceKeysByGroup.get(sourceGroupId) ?? new Set<string>();
     groupKeys.add(keyId);
     this.activeVoiceKeysByGroup.set(sourceGroupId, groupKeys);
+  }
+
+  /** Short filtered attack noise that makes acoustic piano notes read as struck strings. */
+  private playHammerTransient(context: PianoContext, gain: GainNode, now: number, midi: number, brightnessPercent: number): void {
+    const noise = context.audioCtx.createBufferSource();
+    noise.buffer = this.getNoiseBuffer(context.audioCtx);
+    const filter = context.audioCtx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(
+      Math.max(900, Math.min(7200, 1800 * Math.pow(2, (midi - 48) / 48) * brightnessPercentToMultiplier(brightnessPercent))),
+      now,
+    );
+    filter.Q.setValueAtTime(1.8, now);
+    const transientGain = context.audioCtx.createGain();
+    transientGain.gain.setValueAtTime(0.0001, now);
+    transientGain.gain.exponentialRampToValueAtTime(0.11, now + 0.002);
+    transientGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
+    noise.connect(filter).connect(transientGain).connect(gain);
+    noise.start(now);
+    safeStop(noise, now + 0.05);
   }
 
   /** Releases one active note tied to a keyboard key id. */

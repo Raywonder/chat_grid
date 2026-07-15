@@ -11,6 +11,7 @@ from pathlib import Path
 from .client import ClientConnection
 from .item_catalog import get_item_definition
 from .models import PersistedWorldItem, WorldItem
+from .seed_items import ensure_builtin_items
 
 LOGGER = logging.getLogger("chgrid.server")
 
@@ -18,7 +19,9 @@ LOGGER = logging.getLogger("chgrid.server")
 class ItemService:
     """Owns world-item storage, lifecycle, and persistence to disk."""
 
-    def __init__(self, state_file: Path | None = None):
+    def __init__(
+        self, state_file: Path | None = None, *, seed_builtin_items: bool = False
+    ):
         """Create service and eagerly load persisted state when configured."""
 
         self.state_file = state_file
@@ -28,6 +31,11 @@ class ItemService:
         self.items: dict[str, WorldItem] = {}
         self.piano_songs: dict[str, dict] = {}
         self.load_state()
+        if seed_builtin_items:
+            changed = self.ensure_builtin_items()
+            if changed:
+                LOGGER.info("seeded or updated %d built-in world items", len(changed))
+                self.save_state()
         self.load_piano_songs()
 
     @staticmethod
@@ -47,6 +55,7 @@ class ItemService:
             id=str(uuid.uuid4()),
             type=item_type,
             title=item_def.default_title,
+            locationId=client.location_id,
             x=client.x,
             y=client.y,
             createdBy=actor_id,
@@ -62,6 +71,11 @@ class ItemService:
             params=deepcopy(item_def.default_params),
             carrierId=None,
         )
+
+    def ensure_builtin_items(self) -> list[WorldItem]:
+        """Insert/update built-in world items and return changed items."""
+
+        return ensure_builtin_items(self.items, now_ms=self.now_ms())
 
     def add_item(self, item: WorldItem) -> None:
         """Insert or replace an item in in-memory state."""
@@ -81,6 +95,50 @@ class ItemService:
             if item.carrierId == client_id:
                 return item
         return None
+
+    def carried_items_for_client(self, client_id: str) -> list[WorldItem]:
+        """Return all items currently carried by a client."""
+
+        return [item for item in self.items.values() if item.carrierId == client_id]
+
+    @staticmethod
+    def _clean_group_value(value: object) -> str:
+        """Return a normalized item relationship key."""
+
+        if not isinstance(value, str):
+            return ""
+        return value.strip()
+
+    @classmethod
+    def assembly_key_for_item(cls, item: WorldItem) -> str:
+        """Return the key that makes an item move with linked parts."""
+
+        explicit_key = cls._clean_group_value(item.params.get("assemblyId"))
+        if explicit_key:
+            return f"assembly:{item.locationId}:{explicit_key}"
+
+        if item.type == "radio_station":
+            media_group = cls._clean_group_value(item.params.get("linkedMediaGroup"))
+            if media_group:
+                return f"radio:{item.locationId}:{media_group}"
+
+        return ""
+
+    def linked_assembly_for_item(self, root: WorldItem) -> list[WorldItem]:
+        """Return same-location items that should relocate with the root item."""
+
+        assembly_key = self.assembly_key_for_item(root)
+        if not assembly_key:
+            return [root]
+
+        linked = [
+            item
+            for item in self.items.values()
+            if item.locationId == root.locationId
+            and self.assembly_key_for_item(item) == assembly_key
+        ]
+        linked.sort(key=lambda item: (item.id != root.id, item.id))
+        return linked or [root]
 
     def items_on_square(self, x: int, y: int) -> list[WorldItem]:
         """Return non-carried items occupying a specific world coordinate."""
@@ -108,6 +166,23 @@ class ItemService:
                 changed.append(item)
         return changed
 
+    def recover_stale_carried_items(
+        self, active_client_ids: set[str] | None = None
+    ) -> list[WorldItem]:
+        """Clear carrier ids that do not belong to currently connected clients."""
+
+        active = active_client_ids or set()
+        changed: list[WorldItem] = []
+        for item in self.items.values():
+            if item.carrierId is None or item.carrierId in active:
+                continue
+            item.carrierId = None
+            item.updatedAt = self.now_ms()
+            item.updatedBy = "system"
+            item.updatedByName = "system"
+            changed.append(item)
+        return changed
+
     def load_state(self) -> None:
         """Load persisted item instances and rehydrate global fields from catalog."""
 
@@ -127,6 +202,7 @@ class ItemService:
                     id=persisted.id,
                     type=persisted.type,
                     title=persisted.title,
+                    locationId=persisted.locationId,
                     x=persisted.x,
                     y=persisted.y,
                     createdBy=persisted.createdBy,
@@ -195,6 +271,7 @@ class ItemService:
                     id=item.id,
                     type=item.type,
                     title=item.title,
+                    locationId=item.locationId,
                     x=item.x,
                     y=item.y,
                     createdBy=item.createdBy,

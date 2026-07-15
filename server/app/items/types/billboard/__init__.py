@@ -1,0 +1,1 @@
+"""Billboard item type package."""

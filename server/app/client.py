@@ -22,8 +22,14 @@ class ClientConnection:
     nickname: str = "user..."
     saved_x: int | None = None
     saved_y: int | None = None
+    saved_location_id: str | None = None
+    location_id: str = "city"
     x: int = 20
     y: int = 20
+    posture: str = "standing"
+    seated_item_id: str | None = None
+    seated_offset: float = 0.0
+    hand_held_by_id: str | None = None
     last_position_update_ms: int = 0
     movement_window_index: int = -1
     movement_window_steps_used: int = 0
@@ -32,4 +38,11 @@ class ClientConnection:
     def summary(self) -> dict[str, str | int]:
         """Return a compact serializable snapshot for logs/diagnostics."""
 
-        return {"id": self.id, "nickname": self.nickname, "x": self.x, "y": self.y}
+        return {
+            "id": self.id,
+            "nickname": self.nickname,
+            "locationId": self.location_id,
+            "x": self.x,
+            "y": self.y,
+            "seatedItemId": self.seated_item_id or "",
+        }

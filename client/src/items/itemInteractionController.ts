@@ -31,10 +31,12 @@ type ItemControllerDeps = {
     selectedItemIds: string[];
     selectedItemIndex: number;
     selectedItemId: string | null;
+    focusedItemId: string | null;
     itemPropertyKeys: string[];
     itemPropertyIndex: number;
     editingPropertyKey: string | null;
     itemPropertyOptionValues: string[];
+    itemPropertyOptionLabels: string[];
     itemPropertyOptionIndex: number;
     items: Map<string, WorldItem>;
     peers: Map<string, unknown>;
@@ -71,13 +73,13 @@ type ItemControllerDeps = {
  */
 export function createItemInteractionController(deps: ItemControllerDeps): {
   reset: () => void;
-  beginItemSelection: (context: Exclude<SelectionContext, 'drop' | null>, items: WorldItem[]) => void;
+  beginItemSelection: (context: Exclude<SelectionContext, 'drop' | null>, items: WorldItem[], preferredItemId?: string | null) => void;
   beginItemManagement: (item: WorldItem) => void;
   beginItemProperties: (item: WorldItem, showAll?: boolean) => void;
   recomputeActiveItemPropertyKeys: (itemId: string) => void;
   getManagementOptions: (item: WorldItem) => ItemManagementOption[];
   handleItemTransferTargets: (message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>) => void;
-  handleSelectItemModeInput: (code: string, key: string) => void;
+  handleSelectItemModeInput: (code: string, key: string, shiftKey?: boolean) => void;
   handleItemManageOptionsModeInput: (code: string, key: string) => void;
   handleItemManageTransferUserModeInput: (code: string, key: string) => void;
   handleConfirmYesNoModeInput: (code: string, key: string) => void;
@@ -145,17 +147,19 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     deps.announceMenuEntry(context.prompt, YES_NO_OPTIONS[itemManagementConfirmIndex].label);
   }
 
-  function beginItemSelection(context: Exclude<SelectionContext, 'drop' | null>, items: WorldItem[]): void {
+  function beginItemSelection(context: Exclude<SelectionContext, 'drop' | null>, items: WorldItem[], preferredItemId?: string | null): void {
     if (items.length === 0) {
       deps.updateStatus('No items available.');
       deps.sfxUiCancel();
       return;
     }
+    const preferredIndex = preferredItemId ? items.findIndex((item) => item.id === preferredItemId) : -1;
+    const selectedIndex = preferredIndex >= 0 ? preferredIndex : 0;
     deps.state.mode = 'selectItem';
     deps.state.selectionContext = context;
     deps.state.selectedItemIds = items.map((item) => item.id);
-    deps.state.selectedItemIndex = 0;
-    deps.announceMenuEntry('Select item', deps.itemLabel(items[0]));
+    deps.state.selectedItemIndex = selectedIndex;
+    deps.announceMenuEntry('Select item', deps.itemLabel(items[selectedIndex]));
   }
 
   function beginItemManagement(item: WorldItem): void {
@@ -178,6 +182,7 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     deps.state.mode = 'itemProperties';
     deps.state.editingPropertyKey = null;
     deps.state.itemPropertyOptionValues = [];
+    deps.state.itemPropertyOptionLabels = [];
     deps.state.itemPropertyOptionIndex = 0;
     deps.state.itemPropertyKeys = showAll ? deps.getInspectItemPropertyKeys(item) : deps.getEditableItemPropertyKeys(item);
     deps.state.itemPropertyIndex = 0;
@@ -232,7 +237,7 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     deps.announceMenuEntry('Users', transferTargetLabel(itemManagementTransferTargets[0]));
   }
 
-  function handleSelectItemModeInput(code: string, key: string): void {
+  function handleSelectItemModeInput(code: string, key: string, shiftKey = false): void {
     if (deps.state.selectedItemIds.length === 0) {
       deps.state.mode = 'normal';
       deps.state.selectionContext = null;
@@ -259,10 +264,11 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
         return;
       }
       const context = deps.state.selectionContext;
+      deps.state.focusedItemId = selected.id;
       deps.state.mode = 'normal';
       deps.state.selectionContext = null;
       if (context === 'pickup') {
-        deps.signalingSend({ type: 'item_pickup', itemId: selected.id });
+        deps.signalingSend({ type: 'item_pickup', itemId: selected.id, moveAttached: code === 'Enter' && shiftKey });
         return;
       }
       if (context === 'delete') {
