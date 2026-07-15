@@ -1,11 +1,12 @@
 import './styles.css';
-import { AudioEngine } from './audio/audioEngine';
+import { AudioEngine, type LocationAmbienceProfile } from './audio/audioEngine';
 import {
   EFFECT_SEQUENCE,
 } from './audio/effects';
 import { RadioStationRuntime } from './audio/radioStationRuntime';
 import { getProxyUrlForMedia, shouldProxyExternalMediaUrl } from './audio/mediaUrl';
 import { ItemEmitRuntime } from './audio/itemEmitRuntime';
+import { BillboardRuntime } from './audio/billboardRuntime';
 import { ClockAnnouncer } from './audio/clockAnnouncer';
 import { normalizeDegrees } from './audio/spatial';
 import {
@@ -27,6 +28,7 @@ import { dispatchModeInput } from './input/modeDispatcher';
 import { handleListControlKey } from './input/listController';
 import { createAdminController, type AdminMenuAction } from './input/adminController';
 import { setupKeyboardInputHandlers } from './input/keyboardController';
+import { setupMidiInputHandlers, type MidiControllerHandle } from './input/midiController';
 import { getEditSessionAction } from './input/editSession';
 import { formatSteppedNumber, snapNumberToStep } from './input/numeric';
 import { type IncomingMessage, type OutgoingMessage } from './network/protocol';
@@ -40,7 +42,9 @@ import {
   getDirection,
   getNearestItem,
   getNearestPeer,
+  isItemQuiet,
   type GameMode,
+  type PeerState,
   type WorldItem,
 } from './state/gameState';
 import {
@@ -63,9 +67,10 @@ import { createItemPropertyPresentation } from './items/itemPropertyPresentation
 import { ItemBehaviorRegistry } from './items/types/behaviorRegistry';
 import { SettingsStore } from './settings/settingsStore';
 import { createAuthController } from './session/authController';
+import { startClientUpdateWatcher, type ClientVersionMetadata } from './session/clientUpdateWatcher';
 import { runConnectFlow, runDisconnectFlow, type ConnectFlowDeps } from './session/connectionFlow';
 import { MediaSession } from './session/mediaSession';
-import { type AudioLayerState } from './types/audio';
+import { type AnnouncementMode, type AudioAnnouncementSettings, type AudioLayerState } from './types/audio';
 import { setupUiHandlers as setupDomUiHandlers } from './ui/domBindings';
 import { PeerManager } from './webrtc/peerManager';
 
@@ -92,9 +97,12 @@ function consumeExternalAuthAssertion(): string {
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const RECONNECT_DELAY_MS = 5_000;
 const RECONNECT_MAX_ATTEMPTS = 3;
+const CLIENT_UPDATE_POLL_MS = 30_000;
 const AUDIO_SUBSCRIPTION_REFRESH_MS = 500;
 const TELEPORT_SQUARES_PER_SECOND = 20;
 const AUTH_POLICY_STORAGE_KEY = 'chgridAuthPolicy';
+const MESSAGE_OUTBOX_STORAGE_KEY = 'chatGridPendingMessages';
+const MESSAGE_OUTBOX_MAX_ITEMS = 25;
 
 declare global {
   interface Window {
@@ -108,18 +116,8 @@ type Dom = {
   connectionStatus: HTMLElement;
   appVersion: HTMLElement;
   loginView: HTMLElement;
-  registerView: HTMLElement;
-  authUsername: HTMLInputElement;
-  authPassword: HTMLInputElement;
-  registerUsername: HTMLInputElement;
-  registerPassword: HTMLInputElement;
-  registerPasswordConfirm: HTMLInputElement;
-  registerEmail: HTMLInputElement;
-  authPolicyHintRegister: HTMLParagraphElement;
   authSessionView: HTMLElement;
   authSessionText: HTMLParagraphElement;
-  authModeSeparator: HTMLElement;
-  showRegisterButton: HTMLButtonElement;
   helpSection: HTMLElement;
   helpToggle: HTMLButtonElement;
   updatesSection: HTMLElement;
@@ -129,11 +127,19 @@ type Dom = {
   logoutButton: HTMLButtonElement;
   disconnectButton: HTMLButtonElement;
   focusGridButton: HTMLButtonElement;
+  midiButton: HTMLButtonElement;
   settingsButton: HTMLButtonElement;
   closeSettingsButton: HTMLButtonElement;
+  readGuideButton: HTMLButtonElement;
   settingsModal: HTMLDivElement;
   audioInputSelect: HTMLSelectElement;
   audioOutputSelect: HTMLSelectElement;
+  announcementModeSelect: HTMLSelectElement;
+  itemBeaconsToggle: HTMLInputElement;
+  ntfyNotificationsToggle: HTMLInputElement;
+  ntfyNotificationsStatus: HTMLParagraphElement;
+  ntfySubscriptionLink: HTMLAnchorElement;
+  rotateNtfyTopicButton: HTMLButtonElement;
   audioInputCurrent: HTMLParagraphElement;
   audioOutputCurrent: HTMLParagraphElement;
   joinGuide: HTMLElement;
@@ -143,6 +149,11 @@ type Dom = {
   gridItems: HTMLSpanElement;
   gridHere: HTMLSpanElement;
   canvas: HTMLCanvasElement;
+  interactiveItemPanel: HTMLElement;
+  interactiveItemTitle: HTMLHeadingElement;
+  interactiveItemOpenLink: HTMLAnchorElement;
+  interactiveItemCloseButton: HTMLButtonElement;
+  interactiveItemFrame: HTMLIFrameElement;
   status: HTMLDivElement;
   instructions: HTMLDivElement;
 };
@@ -152,18 +163,8 @@ const dom: Dom = {
   connectionStatus: requiredById('connectionStatus'),
   appVersion: requiredById('appVersion'),
   loginView: requiredById('loginView'),
-  registerView: requiredById('registerView'),
-  authUsername: requiredById('authUsername'),
-  authPassword: requiredById('authPassword'),
-  registerUsername: requiredById('registerUsername'),
-  registerPassword: requiredById('registerPassword'),
-  registerPasswordConfirm: requiredById('registerPasswordConfirm'),
-  registerEmail: requiredById('registerEmail'),
-  authPolicyHintRegister: requiredById('authPolicyHintRegister'),
   authSessionView: requiredById('authSessionView'),
   authSessionText: requiredById('authSessionText'),
-  authModeSeparator: requiredById('authModeSeparator'),
-  showRegisterButton: requiredById('showRegisterButton'),
   helpSection: requiredById('helpSection'),
   helpToggle: requiredById('helpToggle'),
   updatesSection: requiredById('updatesSection'),
@@ -173,11 +174,19 @@ const dom: Dom = {
   logoutButton: requiredById('logoutButton'),
   disconnectButton: requiredById('disconnectButton'),
   focusGridButton: requiredById('focusGridButton'),
+  midiButton: requiredById('midiButton'),
   settingsButton: requiredById('settingsButton'),
   closeSettingsButton: requiredById('closeSettingsButton'),
+  readGuideButton: requiredById('readGuideButton'),
   settingsModal: requiredById('settingsModal'),
   audioInputSelect: requiredById('audioInputSelect'),
   audioOutputSelect: requiredById('audioOutputSelect'),
+  announcementModeSelect: requiredById('announcementModeSelect'),
+  itemBeaconsToggle: requiredById('itemBeaconsToggle'),
+  ntfyNotificationsToggle: requiredById('ntfyNotificationsToggle'),
+  ntfyNotificationsStatus: requiredById('ntfyNotificationsStatus'),
+  ntfySubscriptionLink: requiredById('ntfySubscriptionLink'),
+  rotateNtfyTopicButton: requiredById('rotateNtfyTopicButton'),
   audioInputCurrent: requiredById('audioInputCurrent'),
   audioOutputCurrent: requiredById('audioOutputCurrent'),
   joinGuide: requiredById('joinGuide'),
@@ -187,6 +196,11 @@ const dom: Dom = {
   gridItems: requiredById('gridItems'),
   gridHere: requiredById('gridHere'),
   canvas: requiredById('gameCanvas'),
+  interactiveItemPanel: requiredById('interactiveItemPanel'),
+  interactiveItemTitle: requiredById('interactiveItemTitle'),
+  interactiveItemOpenLink: requiredById('interactiveItemOpenLink'),
+  interactiveItemCloseButton: requiredById('interactiveItemCloseButton'),
+  interactiveItemFrame: requiredById('interactiveItemFrame'),
   status: requiredById('status'),
   instructions: requiredById('instructions'),
 };
@@ -214,6 +228,45 @@ type HelpData = {
   sections: HelpSection[];
 };
 
+type WorldLocationOption = {
+  id: string;
+  name: string;
+  kind: string;
+  description: string;
+  spawnX: number;
+  spawnY: number;
+  ambienceKey?: string;
+  ambienceName?: string;
+};
+
+type FootstepCue = {
+  url: string;
+  gain: number;
+  fadeInMs: number;
+  playbackRate: number;
+  identity: string;
+  nickname: string;
+  surface: string;
+};
+
+type QueuedChatMessage = {
+  id: string;
+  kind: 'room' | 'direct';
+  message: string;
+  targetId?: string;
+  targetName?: string;
+  createdAt: number;
+};
+
+type FootstepSurfaceProfile = {
+  label: string;
+  sampleIndexes: number[];
+  gain: number;
+  pitchMin: number;
+  pitchMax: number;
+  fadeInMs?: number;
+};
+
 /** Builds linearized help-view lines from sectioned help content. */
 function buildHelpLines(help: HelpData): string[] {
   const lines: string[] = [];
@@ -224,6 +277,86 @@ function buildHelpLines(help: HelpData): string[] {
     }
   }
   return lines;
+}
+
+/** Builds linear startup-guide lines from the visible join guide content. */
+function buildJoinGuideLines(): string[] {
+  const title = dom.joinGuide.querySelector('h2')?.textContent?.trim();
+  const lines = Array.from(dom.joinGuide.querySelectorAll('p'))
+    .map((line) => line.textContent?.replace(/\s+/g, ' ').trim() ?? '')
+    .filter((line) => line.length > 0);
+  return [title, ...lines].filter((line): line is string => Boolean(line && line.length > 0));
+}
+
+/** Announces the current startup-guide line through the app reader. */
+function announceJoinGuideLine(): void {
+  const lines = buildJoinGuideLines();
+  if (lines.length === 0) {
+    updateStatus('Guide unavailable.');
+    audio.sfxUiCancel();
+    return;
+  }
+  joinGuideReaderIndex = Math.max(0, Math.min(joinGuideReaderIndex, lines.length - 1));
+  updateStatus(lines[joinGuideReaderIndex]);
+  audio.sfxUiBlip();
+}
+
+/** Opens a focus-mode reader for startup instructions before joining the grid. */
+function openJoinGuideReader(): void {
+  joinGuideReaderActive = true;
+  joinGuideReaderIndex = 0;
+  dom.readGuideButton.textContent = 'Reading guide';
+  dom.readGuideButton.setAttribute('aria-pressed', 'true');
+  dom.readGuideButton.focus();
+  announceJoinGuideLine();
+}
+
+/** Closes the startup guide reader and returns focus to the guide button. */
+function closeJoinGuideReader(): void {
+  if (!joinGuideReaderActive) return;
+  dom.readGuideButton.textContent = 'Read guide';
+  dom.readGuideButton.setAttribute('aria-pressed', 'false');
+  dom.readGuideButton.focus();
+  updateStatus('Closed guide.');
+  audio.sfxUiCancel();
+  joinGuideReaderActive = false;
+}
+
+/** Handles arrow-key reading for the startup guide without requiring screen-reader browse mode. */
+function handleJoinGuideReaderKey(event: KeyboardEvent): void {
+  if (!joinGuideReaderActive) return;
+  const lines = buildJoinGuideLines();
+  if (lines.length === 0) {
+    closeJoinGuideReader();
+    return;
+  }
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape', 'Enter', ' '].includes(event.key)) return;
+  event.preventDefault();
+  if (event.key === 'ArrowDown') {
+    joinGuideReaderIndex = Math.min(lines.length - 1, joinGuideReaderIndex + 1);
+    announceJoinGuideLine();
+    return;
+  }
+  if (event.key === 'ArrowUp') {
+    joinGuideReaderIndex = Math.max(0, joinGuideReaderIndex - 1);
+    announceJoinGuideLine();
+    return;
+  }
+  if (event.key === 'Home') {
+    joinGuideReaderIndex = 0;
+    announceJoinGuideLine();
+    return;
+  }
+  if (event.key === 'End') {
+    joinGuideReaderIndex = lines.length - 1;
+    announceJoinGuideLine();
+    return;
+  }
+  if (event.key === 'Enter' || event.key === ' ') {
+    announceJoinGuideLine();
+    return;
+  }
+  closeJoinGuideReader();
 }
 
 /** Announces standardized menu entry as `Title. First option.` */
@@ -239,17 +372,33 @@ function announceMenuEntry(title: string, firstOption: string): void {
 const APP_RELEASE_VERSION = String(window.CHGRID_RELEASE_VERSION ?? '').trim();
 const APP_CLIENT_REVISION = String(window.CHGRID_CLIENT_REVISION ?? '').trim();
 const APP_DISPLAY_VERSION = [APP_RELEASE_VERSION, APP_CLIENT_REVISION].filter((value) => value.length > 0).join(' ').trim();
+const STARTED_FROM_VERSION_RELOAD = isVersionReloadedSession();
 dom.appVersion.textContent = APP_DISPLAY_VERSION
   ? `Another AI experiment with Jage. Version ${APP_DISPLAY_VERSION}`
   : 'Another AI experiment with Jage. Version unknown';
 const DEFAULT_GRID_NAME = 'Chat Grid';
 const DEFAULT_WELCOME_MESSAGE =
-  'Welcome to the Chat Grid, your immersive audio playground. Configure your audio, then Log in or register to join the grid.';
+  'Welcome to the Chat Grid, your immersive audio playground. Configure your audio, then sign in with blind.software to join the grid.';
 const APP_BASE_URL = import.meta.env.BASE_URL || '/';
 /** Resolves an app-relative path against the configured Vite base path. */
 function withBase(path: string): string {
   const normalizedBase = APP_BASE_URL.endsWith('/') ? APP_BASE_URL : `${APP_BASE_URL}/`;
   return `${normalizedBase}${path.replace(/^\/+/, '')}`;
+}
+/** Announces a newer browser bundle and navigates through a cache-busted URL. */
+function scheduleClientUpdateReload(metadata: ClientVersionMetadata): void {
+  if (reloadScheduledForVersionMismatch) return;
+  reloadScheduledForVersionMismatch = true;
+  const label = [metadata.releaseVersion, metadata.clientRevision].filter((value) => value.length > 0).join(' ');
+  const message = label ? `New Chat Grid update ${label} found. Reloading...` : 'New Chat Grid update found. Reloading...';
+  setConnectionStatus(message);
+  pushChatMessage(message);
+  window.setTimeout(
+    () => {
+      reloadClientForVersion(metadata.clientRevision || 'latest');
+    },
+    document.visibilityState === 'visible' ? 1_500 : 50,
+  );
 }
 const SYSTEM_SOUND_URLS = {
   logon: withBase('sounds/logon.ogg'),
@@ -258,34 +407,85 @@ const SYSTEM_SOUND_URLS = {
 } as const;
 const AUTH_SESSION_COOKIE_SET_URL = withBase('auth/session/set');
 const AUTH_SESSION_COOKIE_CLEAR_URL = withBase('auth/session/clear');
+const AUTH_SESSION_COOKIE_CHECK_URL = withBase('auth/session/check');
 const AUTH_SESSION_COOKIE_CLIENT_HEADER = 'X-Chgrid-Auth-Client';
 const ACTION_SOUND_URL = withBase('sounds/action.ogg');
 const FOOTSTEP_SOUND_URLS = Array.from({ length: 11 }, (_, index) => withBase(`sounds/step-${index + 1}.ogg`));
 const FOOTSTEP_GAIN = 0.7;
+const LOCATION_AMBIENCE_PROFILES: Record<string, Omit<LocationAmbienceProfile, 'key' | 'name'>> = {
+  city_plaza: { loopUrl: withBase('sounds/ambience/city_plaza.ogg'), loopGain: 0.5, rootHz: 110, colorHz: 165, airHz: 330, noiseHz: 950, noiseQ: 0.8, gain: 0.06, noiseGain: 0.018, wave: 'sine' },
+  forest_canopy: { loopUrl: withBase('sounds/ambience/forest_canopy.ogg'), loopGain: 0.45, rootHz: 82, colorHz: 123, airHz: 246, noiseHz: 1450, noiseQ: 1.2, gain: 0.055, noiseGain: 0.032, wave: 'triangle' },
+  town_square: { loopUrl: withBase('sounds/ambience/town_square.ogg'), loopGain: 0.48, rootHz: 98, colorHz: 147, airHz: 294, noiseHz: 720, noiseQ: 0.7, gain: 0.052, noiseGain: 0.018, wave: 'sine' },
+  arcade_glow: { loopUrl: withBase('sounds/ambience/arcade_glow.ogg?v=20260714-arcade-loop'), loopGain: 0.5, rootHz: 130.81, colorHz: 196, airHz: 392, noiseHz: 1800, noiseQ: 2.4, gain: 0.052, noiseGain: 0.012, wave: 'square' },
+  office_focus: { loopUrl: withBase('sounds/ambience/office_focus.ogg'), loopGain: 0.42, rootHz: 73.42, colorHz: 146.83, airHz: 293.66, noiseHz: 560, noiseQ: 0.9, gain: 0.047, noiseGain: 0.014, wave: 'sine' },
+  neighborhood_evening: { loopUrl: withBase('sounds/ambience/neighborhood_evening.ogg'), loopGain: 0.48, rootHz: 87.31, colorHz: 130.81, airHz: 261.63, noiseHz: 820, noiseQ: 0.9, gain: 0.049, noiseGain: 0.02, wave: 'triangle' },
+  front_entry: { loopUrl: withBase('sounds/ambience/front_entry.ogg'), loopGain: 0.42, rootHz: 92.5, colorHz: 185, airHz: 277.18, noiseHz: 650, noiseQ: 1, gain: 0.045, noiseGain: 0.014, wave: 'sine' },
+  living_room_warmth: { loopUrl: withBase('sounds/ambience/living_room_warmth.ogg'), loopGain: 0.5, rootHz: 65.41, colorHz: 130.81, airHz: 196, noiseHz: 500, noiseQ: 0.8, gain: 0.05, noiseGain: 0.012, wave: 'triangle' },
+  studio_current: { loopUrl: withBase('sounds/ambience/studio_current.ogg'), loopGain: 0.42, rootHz: 55, colorHz: 110, airHz: 220, noiseHz: 1250, noiseQ: 1.6, gain: 0.052, noiseGain: 0.018, wave: 'sawtooth' },
+  kitchen_soft_clatter: { loopUrl: withBase('sounds/ambience/kitchen_soft_clatter.ogg'), loopGain: 0.35, rootHz: 104, colorHz: 156, airHz: 312, noiseHz: 980, noiseQ: 1.3, gain: 0.048, noiseGain: 0.019, wave: 'triangle' },
+  bedroom_quiet: { loopUrl: withBase('sounds/ambience/bedroom_quiet.ogg'), loopGain: 0.55, rootHz: 61.74, colorHz: 123.47, airHz: 185, noiseHz: 420, noiseQ: 0.7, gain: 0.038, noiseGain: 0.01, wave: 'sine' },
+  relaxation_ocean: { loopUrl: withBase('sounds/ambience/relaxation_bowls.ogg?v=20260714-singing-bowls'), loopGain: 0.52, rootHz: 74, colorHz: 148, airHz: 222, noiseHz: 360, noiseQ: 0.65, gain: 0.042, noiseGain: 0.026, wave: 'sine' },
+};
+const STREAM_LOCATION_AMBIENCE_BASE: Omit<LocationAmbienceProfile, 'key' | 'name' | 'loopUrl' | 'loopGain'> = {
+  rootHz: 96,
+  colorHz: 144,
+  airHz: 288,
+  noiseHz: 820,
+  noiseQ: 0.9,
+  gain: 0.048,
+  noiseGain: 0.018,
+  wave: 'sine',
+};
+const DEFAULT_FOOTSTEP_PROFILE: FootstepSurfaceProfile = {
+  label: 'pavement',
+  sampleIndexes: [1, 2, 3, 4, 6],
+  gain: FOOTSTEP_GAIN,
+  pitchMin: 0.95,
+  pitchMax: 1.06,
+};
 const TELEPORT_START_SOUND_URL = withBase('sounds/teleport_start.ogg');
 const TELEPORT_START_GAIN = 0.1;
 const TELEPORT_SOUND_URL = withBase('sounds/teleport.ogg');
+const DOOR_CLOSE_SOUND_URL = withBase('sounds/doors/door-close.mp3?v=20260714-real-door');
 const WALL_SOUND_URL = withBase('sounds/wall.ogg');
+const MOVEMENT_NARRATION_INTERVAL_MS = 650;
+const RUN_MOVEMENT_TICK_MULTIPLIER = 0.55;
+const CAREFUL_MOVEMENT_TICK_MULTIPLIER = 1.25;
+const ITEM_BEACON_RADIUS = 3.5;
+const ITEM_BEACON_INTERVAL_MS = 3200;
+const SEAT_INTERACTION_RADIUS = 1.5;
+const SEATED_BINAURAL_STEP = 0.25;
+const SEATED_BINAURAL_LIMIT = 1.25;
 
 const state = createInitialState();
 const renderer = new CanvasRenderer(dom.canvas);
 const audio = new AudioEngine();
 const settings = new SettingsStore();
+const initialAuthUsername = settings.loadAuthUsername();
 let worldGridSize = GRID_SIZE;
 let movementTickMs = MOVE_COOLDOWN_MS;
 let lastWallCollisionDirection: string | null = null;
 let statusTimeout: number | null = null;
+let pendingDoorCloseCue: { x: number; y: number; expiresAt: number } | null = null;
 let lastFocusedElement: Element | null = null;
 let lastAnnouncementText = '';
 let lastAnnouncementAt = 0;
+let lastMovementNarrationAt = 0;
+let lastMovementNarrationDirection = '';
 let outputMode = settings.loadOutputMode();
 let activeGridName = DEFAULT_GRID_NAME;
 let activeWelcomeMessage = DEFAULT_WELCOME_MESSAGE;
+let currentLocationId = '';
+let currentLocationName = '';
+let worldLocationOptions: WorldLocationOption[] = [];
 const messageBuffer: string[] = [];
 let messageCursor = -1;
 const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig);
 const itemEmitRuntime = new ItemEmitRuntime(audio, resolveIncomingSoundUrl, getItemSpatialConfig);
-const clockAnnouncer = new ClockAnnouncer(audio, () => ({ x: state.player.x, y: state.player.y }));
+const billboardRuntime = new BillboardRuntime(audio, getItemSpatialConfig, (message) => {
+  pushChatMessage(message);
+}, shouldSpeakItemAnnouncement);
+const clockAnnouncer = new ClockAnnouncer(audio, () => getListenerPosition());
 const initialExternalAuthAssertion = consumeExternalAuthAssertion();
 let replaceTextOnNextType = false;
 let pendingEscapeDisconnect = false;
@@ -294,9 +494,174 @@ let mainHelpViewerLines: string[] = [];
 let helpViewerLines: string[] = [];
 let helpViewerIndex = 0;
 let helpViewerReturnMode: GameMode = 'normal';
+let joinGuideReaderActive = false;
+let joinGuideReaderIndex = 0;
 const commandPaletteCommands: Array<CommandDescriptor & { run: () => void | Promise<void> }> = [];
 let commandPaletteIndex = 0;
 let commandPaletteReturnMode: GameMode = 'normal';
+type UserActionId =
+  | 'hug'
+  | 'announce_focus'
+  | 'tap_shoulder'
+  | 'wave'
+  | 'high_five'
+  | 'fist_bump'
+  | 'cheer'
+  | 'clap'
+  | 'laugh'
+  | 'smile'
+  | 'wink'
+  | 'nod'
+  | 'shake_head'
+  | 'bow'
+  | 'dance'
+  | 'spin'
+  | 'jump'
+  | 'shrug'
+  | 'facepalm'
+  | 'gasp'
+  | 'sigh'
+  | 'comfort'
+  | 'pat_back'
+  | 'poke'
+  | 'boop'
+  | 'salute'
+  | 'point'
+  | 'thumbs_up'
+  | 'heart'
+  | 'sparkle'
+  | 'celebrate'
+  | 'tease'
+  | 'playful_smack'
+  | 'whisper'
+  | 'listen'
+  | 'sit_with'
+  | 'step_back'
+  | 'take_left_hand'
+  | 'take_right_hand'
+  | 'release_hand'
+  | 'walk_to'
+  | 'teleport_to'
+  | 'direct_message';
+type UserActionOption = {
+  id: UserActionId;
+  label: string;
+  tooltip: string;
+};
+const USER_ACTION_OPTIONS: UserActionOption[] = [
+  {
+    id: 'hug',
+    label: 'Hug',
+    tooltip: 'Give this user a spatial hug reaction.',
+  },
+  {
+    id: 'announce_focus',
+    label: 'Announce focus',
+    tooltip: 'Tell the room who you are focusing without touching or moving anyone.',
+  },
+  {
+    id: 'tap_shoulder',
+    label: 'Tap shoulder',
+    tooltip: 'Gently get this user attention with a spatial tap cue.',
+  },
+  { id: 'wave', label: 'Wave', tooltip: 'Wave hello to this user.' },
+  { id: 'high_five', label: 'High-five', tooltip: 'Give this user a quick high-five.' },
+  { id: 'fist_bump', label: 'Fist bump', tooltip: 'Give this user a small fist bump.' },
+  { id: 'cheer', label: 'Cheer', tooltip: 'Cheer this user on.' },
+  { id: 'clap', label: 'Clap', tooltip: 'Applaud this user.' },
+  { id: 'laugh', label: 'Laugh', tooltip: 'Laugh with this user.' },
+  { id: 'smile', label: 'Smile', tooltip: 'Smile at this user.' },
+  { id: 'wink', label: 'Wink', tooltip: 'Give this user a playful wink.' },
+  { id: 'nod', label: 'Nod', tooltip: 'Nod to this user.' },
+  { id: 'shake_head', label: 'Shake head', tooltip: 'React with a head shake.' },
+  { id: 'bow', label: 'Bow', tooltip: 'Bow politely to this user.' },
+  { id: 'dance', label: 'Dance', tooltip: 'Dance near this user.' },
+  { id: 'spin', label: 'Spin', tooltip: 'Spin around near this user.' },
+  { id: 'jump', label: 'Jump', tooltip: 'Jump excitedly near this user.' },
+  { id: 'shrug', label: 'Shrug', tooltip: 'Shrug near this user.' },
+  { id: 'facepalm', label: 'Facepalm', tooltip: 'React with a facepalm.' },
+  { id: 'gasp', label: 'Gasp', tooltip: 'React with surprise.' },
+  { id: 'sigh', label: 'Sigh', tooltip: 'Let out a small sigh.' },
+  { id: 'comfort', label: 'Comfort', tooltip: 'Offer quiet comfort.' },
+  { id: 'pat_back', label: 'Pat back', tooltip: 'Pat this user on the back.' },
+  { id: 'poke', label: 'Poke', tooltip: 'Poke this user playfully.' },
+  { id: 'boop', label: 'Boop', tooltip: 'Boop this user playfully.' },
+  { id: 'salute', label: 'Salute', tooltip: 'Salute this user.' },
+  { id: 'point', label: 'Point', tooltip: 'Point toward this user.' },
+  { id: 'thumbs_up', label: 'Thumbs-up', tooltip: 'Give this user a thumbs-up.' },
+  { id: 'heart', label: 'Heart', tooltip: 'Send this user a heart.' },
+  { id: 'sparkle', label: 'Sparkle', tooltip: 'Sparkle at this user.' },
+  { id: 'celebrate', label: 'Celebrate', tooltip: 'Celebrate with this user.' },
+  { id: 'tease', label: 'Tease', tooltip: 'Tease this user playfully.' },
+  { id: 'playful_smack', label: 'Playful smack', tooltip: 'A light physical-comedy reaction.' },
+  { id: 'whisper', label: 'Whisper', tooltip: 'Lean in like you are whispering.' },
+  { id: 'listen', label: 'Listen', tooltip: 'Show that you are listening closely.' },
+  { id: 'sit_with', label: 'Sit with', tooltip: 'Sit with this user.' },
+  { id: 'step_back', label: 'Step back', tooltip: 'Give this user some space.' },
+  {
+    id: 'take_left_hand',
+    label: 'Offer left hand',
+    tooltip: 'Offer your left hand. The other user keeps choice and may release or follow.',
+  },
+  {
+    id: 'take_right_hand',
+    label: 'Offer right hand',
+    tooltip: 'Offer your right hand. The other user keeps choice and may release or follow.',
+  },
+  {
+    id: 'release_hand',
+    label: 'Release hand',
+    tooltip: 'Release the hand connection or decline being led.',
+  },
+  {
+    id: 'walk_to',
+    label: 'Walk to user',
+    tooltip: 'Move to a nearby square beside this user.',
+  },
+  {
+    id: 'teleport_to',
+    label: 'Teleport to user',
+    tooltip: 'Move directly onto this user square.',
+  },
+  {
+    id: 'direct_message',
+    label: 'Direct message',
+    tooltip: 'Start a private message to this user.',
+  },
+];
+const DYNAMIC_USER_ACTION_IDS: UserActionId[] = [
+  'announce_focus',
+  'tap_shoulder',
+  'wave',
+  'high_five',
+  'fist_bump',
+  'cheer',
+  'clap',
+  'laugh',
+  'smile',
+  'wink',
+  'nod',
+  'bow',
+  'dance',
+  'shrug',
+  'gasp',
+  'comfort',
+  'pat_back',
+  'poke',
+  'boop',
+  'salute',
+  'thumbs_up',
+  'heart',
+  'sparkle',
+  'celebrate',
+  'tease',
+  'playful_smack',
+  'listen',
+  'sit_with',
+  'step_back',
+];
+let userActionMenuIndex = 0;
+let userActionTargetId: string | null = null;
 let heartbeatTimerId: number | null = null;
 let heartbeatNextPingId = -1;
 let heartbeatAwaitingPong = false;
@@ -312,6 +677,11 @@ let audioLayers: AudioLayerState = {
   media: true,
   world: true,
 };
+let audioAnnouncementSettings: AudioAnnouncementSettings = settings.loadAudioAnnouncementSettings();
+let lastItemBeaconTile = '';
+let lastItemBeaconItemId = '';
+let lastItemBeaconAtMs = 0;
+let lastAutoSeatItemId = '';
 let lastSubscriptionRefreshAt = 0;
 let lastSubscriptionRefreshTileX = Math.round(state.player.x);
 let lastSubscriptionRefreshTileY = Math.round(state.player.y);
@@ -364,12 +734,19 @@ const mediaSession = new MediaSession({
   micInputGainStep: MIC_INPUT_GAIN_STEP,
 });
 
+let midiControllerHandle: MidiControllerHandle = {
+  requestEnable: async () => false,
+  setControlVisible: () => undefined,
+};
+
 const itemBehaviorRegistry = new ItemBehaviorRegistry({
   state,
   audio,
   signalingSend: (message) => signaling.send(message),
   updateStatus,
   openHelpViewer: (lines, returnMode) => openHelpViewer(lines, returnMode),
+  requestMidiAccess: (reason) => midiControllerHandle.requestEnable(reason),
+  setMidiControlVisible: (visible) => midiControllerHandle.setControlVisible(visible),
   withBase,
 });
 
@@ -383,6 +760,14 @@ void loadHelp();
 void itemBehaviorRegistry.initialize();
 void loadChangelog();
 void loadClientBranding();
+startClientUpdateWatcher({
+  currentRevision: APP_CLIENT_REVISION,
+  currentEntrypointUrl: import.meta.url,
+  versionUrl: withBase('version.js'),
+  indexUrl: withBase(''),
+  pollMs: CLIENT_UPDATE_POLL_MS,
+  onUpdateAvailable: scheduleClientUpdateReload,
+});
 
 function applyGridBranding(gridName: string | null | undefined, welcomeMessage: string | null | undefined): void {
   const nextGridName = String(gridName ?? '').trim() || DEFAULT_GRID_NAME;
@@ -393,6 +778,117 @@ function applyGridBranding(gridName: string | null | undefined, welcomeMessage: 
   dom.gridTitle.textContent = nextGridName;
   dom.focusGridButton.textContent = nextGridName;
   dom.canvas.setAttribute('aria-label', `${nextGridName}, press question mark for help.`);
+}
+
+/** Stores server-advertised world locations for keyboard navigation. */
+function setWorldLocations(locations: WorldLocationOption[], selectedLocationId?: string): void {
+  worldLocationOptions = locations.filter((location) => location.id.trim().length > 0 && location.name.trim().length > 0);
+  if (selectedLocationId) {
+    const current = worldLocationOptions.find((location) => location.id === selectedLocationId);
+    currentLocationId = selectedLocationId;
+    currentLocationName = current?.name ?? selectedLocationId;
+  }
+  preloadLocationAmbienceSounds();
+  void syncLocationAmbience();
+}
+
+/** Stores the current server location label for local travel menus. */
+function setCurrentLocation(locationId: string, locationName: string): void {
+  currentLocationId = locationId;
+  currentLocationName = locationName;
+  void syncLocationAmbience();
+}
+
+function profileForLocationAmbience(location: WorldLocationOption | undefined): LocationAmbienceProfile | null {
+  if (!location) return null;
+  const locationAmbienceItem = Array.from(state.items.values())
+    .filter((item) => {
+      if (item.type !== 'widget') return false;
+      if (item.locationId !== location.id) return false;
+      if (item.carrierId) return false;
+      if (item.params.enabled === false) return false;
+      if (String(item.params.ambienceScope ?? '').trim().toLowerCase() !== 'location') return false;
+      const emitSound = String(item.params.emitSound ?? item.emitSound ?? '').trim();
+      return resolveIncomingSoundUrl(emitSound).length > 0;
+    })
+    .sort((a, b) => {
+      const priorityA = Number(a.params.ambiencePriority ?? 50);
+      const priorityB = Number(b.params.ambiencePriority ?? 50);
+      const normalizedA = Number.isFinite(priorityA) ? priorityA : 50;
+      const normalizedB = Number.isFinite(priorityB) ? priorityB : 50;
+      return normalizedB - normalizedA || a.title.localeCompare(b.title) || a.id.localeCompare(b.id);
+    })[0];
+  if (locationAmbienceItem) {
+    const emitSound = String(locationAmbienceItem.params.emitSound ?? locationAmbienceItem.emitSound ?? '').trim();
+    const ambienceName = String(locationAmbienceItem.params.ambienceName ?? '').trim() || locationAmbienceItem.title;
+    const volumeRaw = Number(locationAmbienceItem.params.emitVolume ?? 100);
+    const volume = Number.isFinite(volumeRaw) ? Math.max(0, Math.min(100, volumeRaw)) : 100;
+    return {
+      ...STREAM_LOCATION_AMBIENCE_BASE,
+      key: `item:${locationAmbienceItem.id}:${emitSound}:${volume}`,
+      name: ambienceName,
+      loopUrl: resolveIncomingSoundUrl(emitSound),
+      loopGain: 0.12 * (volume / 100),
+    };
+  }
+  const ambienceKey = location.ambienceKey || location.kind || location.id;
+  const profileKey = ambienceKey.trim() || location.id;
+  const name = location.ambienceName?.trim() || location.name;
+  const profile = LOCATION_AMBIENCE_PROFILES[profileKey] ?? LOCATION_AMBIENCE_PROFILES[location.kind] ?? LOCATION_AMBIENCE_PROFILES.city_plaza;
+  return { key: profileKey, name, ...profile };
+}
+
+function preloadLocationAmbienceSounds(): void {
+  audio.preloadSamples(Object.values(LOCATION_AMBIENCE_PROFILES).map((profile) => profile.loopUrl));
+  audio.preloadSamples([
+    TELEPORT_START_SOUND_URL,
+    TELEPORT_SOUND_URL,
+    withBase('sounds/teleport_departure_whoosh.ogg'),
+    withBase('sounds/teleport_arrival_chime.ogg'),
+    withBase('sounds/teleport_pad_loop.ogg'),
+    withBase('sounds/portal_spatial_loop.ogg'),
+  ]);
+}
+
+function locationOptionForId(locationId?: string | null): WorldLocationOption | undefined {
+  const normalized = String(locationId || '').trim();
+  if (!normalized) return undefined;
+  return worldLocationOptions.find((entry) => entry.id === normalized);
+}
+
+function currentLocationOption(): WorldLocationOption | undefined {
+  return locationOptionForId(currentLocationId);
+}
+
+/** Resolves a location name from a peer or item location id. */
+function locationNameForId(locationId?: string | null): string {
+  const normalized = String(locationId || '').trim();
+  if (!normalized) return currentLocationName || currentLocationOption()?.name || 'the grid';
+  return worldLocationOptions.find((entry) => entry.id === normalized)?.name || normalized;
+}
+
+function profileForLocationFootsteps(location: WorldLocationOption | undefined): FootstepSurfaceProfile {
+  const surfaceKey = (location?.ambienceKey || location?.kind || location?.id || '').trim();
+  const profiles: Record<string, FootstepSurfaceProfile> = {
+    city_plaza: { label: 'pavement', sampleIndexes: [1, 2, 3, 4, 6], gain: 0.72, pitchMin: 0.96, pitchMax: 1.06 },
+    forest_canopy: { label: 'gravel and leaves', sampleIndexes: [7, 8, 9, 10, 11], gain: 0.84, pitchMin: 1.02, pitchMax: 1.18 },
+    town_square: { label: 'gravel path', sampleIndexes: [4, 6, 7, 8, 10], gain: 0.8, pitchMin: 0.98, pitchMax: 1.12 },
+    arcade_glow: { label: 'rubber arcade floor', sampleIndexes: [3, 5, 6, 9], gain: 0.66, pitchMin: 0.88, pitchMax: 1 },
+    office_focus: { label: 'office carpet', sampleIndexes: [1, 2, 5], gain: 0.5, pitchMin: 0.8, pitchMax: 0.92, fadeInMs: 18 },
+    neighborhood_evening: { label: 'sidewalk and porch gravel', sampleIndexes: [2, 4, 7, 8], gain: 0.75, pitchMin: 0.94, pitchMax: 1.08 },
+    front_entry: { label: 'wood entry', sampleIndexes: [3, 4, 6], gain: 0.64, pitchMin: 0.94, pitchMax: 1.04 },
+    living_room_warmth: { label: 'living room rug', sampleIndexes: [1, 2, 3], gain: 0.52, pitchMin: 0.8, pitchMax: 0.93, fadeInMs: 18 },
+    studio_current: { label: 'studio floor', sampleIndexes: [5, 6, 9, 11], gain: 0.62, pitchMin: 0.9, pitchMax: 1.05 },
+    kitchen_soft_clatter: { label: 'kitchen tile', sampleIndexes: [4, 5, 6, 9], gain: 0.74, pitchMin: 1.04, pitchMax: 1.18 },
+    bedroom_quiet: { label: 'bedroom carpet', sampleIndexes: [1, 2], gain: 0.42, pitchMin: 0.76, pitchMax: 0.86, fadeInMs: 24 },
+    relaxation_ocean: { label: 'soft relaxation room carpet', sampleIndexes: [1, 2], gain: 0.38, pitchMin: 0.72, pitchMax: 0.84, fadeInMs: 26 },
+  };
+  return profiles[surfaceKey] ?? profiles[location?.kind ?? ''] ?? DEFAULT_FOOTSTEP_PROFILE;
+}
+
+async function syncLocationAmbience(): Promise<void> {
+  const location = currentLocationOption();
+  await audio.setLocationAmbience(profileForLocationAmbience(location), audioLayers.world);
 }
 
 async function loadClientBranding(): Promise<void> {
@@ -406,7 +902,7 @@ async function loadClientBranding(): Promise<void> {
       typeof data.gridName === 'string' ? data.gridName : null,
       typeof data.welcomeMessage === 'string' ? data.welcomeMessage : null,
     );
-    if (!state.running && !isVersionReloadedSession()) {
+    if (!state.running && !STARTED_FROM_VERSION_RELOAD) {
       setConnectionStatus(activeWelcomeMessage);
     }
   } catch {
@@ -428,13 +924,92 @@ const getItemPropertyValue = itemPropertyPresentation.getItemPropertyValue;
 const isItemPropertyEditable = itemPropertyPresentation.isItemPropertyEditable;
 const describeItemPropertyHelp = itemPropertyPresentation.describeItemPropertyHelp;
 const validateNumericItemPropertyInput = itemPropertyPresentation.validateNumericItemPropertyInput;
+
+type ItemPropertyOptionSet = {
+  values: string[];
+  labels: string[];
+};
+
+function radioSpeakerRoleLabel(value: unknown): string {
+  const role = String(value ?? 'primary').trim().toLowerCase();
+  if (role === 'sub') return 'sub';
+  if (role === 'low') return 'low';
+  if (role === 'mid') return 'mid';
+  if (role === 'high') return 'high';
+  if (role === 'high_low_bass') return 'high/low';
+  return 'primary';
+}
+
+function radioPlaybackLabel(item: WorldItem): string {
+  const station = String(item.params.stationName ?? '').trim();
+  const nowPlaying = String(item.params.nowPlaying ?? '').trim();
+  if (nowPlaying && station) return `${station}, ${nowPlaying}`;
+  if (station) return station;
+  if (nowPlaying) return nowPlaying;
+  return item.params.enabled === false ? 'off' : 'playing nearby';
+}
+
+function radioLinkedMediaGroupOptions(item: WorldItem): ItemPropertyOptionSet {
+  const currentGroup = String(item.params.linkedMediaGroup ?? '').trim();
+  const entries = Array.from(state.items.values())
+    .filter((candidate) => {
+      if (candidate.id === item.id) return false;
+      if (candidate.type !== 'radio_station') return false;
+      if (candidate.locationId !== item.locationId) return false;
+      if (candidate.carrierId) return false;
+      return String(candidate.params.linkedMediaGroup ?? '').trim().length > 0;
+    })
+    .map((candidate) => {
+      const group = String(candidate.params.linkedMediaGroup ?? '').trim();
+      const distance = Math.hypot(candidate.x - item.x, candidate.y - item.y);
+      const enabled = candidate.params.enabled !== false;
+      const hasMedia = String(candidate.params.playbackUrl ?? candidate.params.streamUrl ?? '').trim().length > 0;
+      const role = radioSpeakerRoleLabel(candidate.params.speakerRole);
+      return {
+        group,
+        label: `${candidate.title}, ${role}, ${enabled && hasMedia ? radioPlaybackLabel(candidate) : 'available'} (${Math.round(distance)} away)`,
+        distance,
+        enabled,
+        hasMedia,
+        isPrimary: role === 'primary',
+      };
+    })
+    .sort((a, b) => {
+      if (a.group === currentGroup && b.group !== currentGroup) return -1;
+      if (b.group === currentGroup && a.group !== currentGroup) return 1;
+      if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
+      if (a.hasMedia !== b.hasMedia) return a.hasMedia ? -1 : 1;
+      if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+      return a.distance - b.distance || a.label.localeCompare(b.label);
+    });
+  const values: string[] = [];
+  const labels: string[] = [];
+  if (currentGroup) {
+    values.push(currentGroup);
+    labels.push(`Current link: ${currentGroup}`);
+  }
+  for (const entry of entries) {
+    if (values.includes(entry.group)) continue;
+    values.push(entry.group);
+    labels.push(`Link to ${entry.label}`);
+  }
+  return { values, labels };
+}
+
+function getItemPropertyOptionsForItem(item: WorldItem, key: string): string[] | undefined {
+  if (item.type === 'radio_station' && key === 'linkedMediaGroup') {
+    const options = radioLinkedMediaGroupOptions(item).values;
+    return options.length > 0 ? options : undefined;
+  }
+  return getItemPropertyOptionValues(item.type, key);
+}
 const authController = createAuthController({
   dom,
   authPolicyStorageKey: AUTH_POLICY_STORAGE_KEY,
   authSessionCookieSetUrl: AUTH_SESSION_COOKIE_SET_URL,
   authSessionCookieClearUrl: AUTH_SESSION_COOKIE_CLEAR_URL,
   authSessionCookieClientHeader: AUTH_SESSION_COOKIE_CLIENT_HEADER,
-  initialAuthUsername: settings.loadAuthUsername(),
+  initialAuthUsername,
   initialExternalAuthAssertion,
   isRunning: () => state.running,
   isMuted: () => state.isMuted,
@@ -490,7 +1065,7 @@ const itemInteractionController = createItemInteractionController({
 /** Toggles updates panel visibility and syncs associated ARIA state. */
 function setUpdatesExpanded(expanded: boolean): void {
   dom.updatesToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-  dom.updatesToggle.textContent = expanded ? 'Hide updates' : 'Show updates';
+  dom.updatesToggle.textContent = expanded ? 'Close world updates' : 'Read world updates';
   dom.updatesPanel.hidden = !expanded;
   dom.updatesPanel.classList.toggle('hidden', !expanded);
 }
@@ -594,7 +1169,7 @@ async function loadChangelog(): Promise<void> {
 
 /** Announces status text via ARIA with brief de-duplication and auto-clear timing. */
 function updateStatus(message: string): void {
-  if (!state.running) {
+  if (!state.running && !joinGuideReaderActive) {
     return;
   }
   const normalized = String(message)
@@ -658,6 +1233,94 @@ function loadAudioLayerState(): void {
 /** Persists current audio-layer toggles to local storage. */
 function persistAudioLayerState(): void {
   settings.saveAudioLayers(audioLayers);
+}
+
+/** Normalizes a user-selected announcement mode into the supported setting values. */
+function normalizeAnnouncementMode(value: string): AnnouncementMode {
+  return value === 'sounds_only' || value === 'required_only' || value === 'full' ? value : 'full';
+}
+
+/** Persists current TTS/beacon preferences to local storage. */
+function persistAudioAnnouncementSettings(): void {
+  settings.saveAudioAnnouncementSettings(audioAnnouncementSettings);
+}
+
+/** Syncs Audio setup controls from persisted TTS/beacon preferences. */
+function syncAnnouncementSettingsControls(): void {
+  dom.announcementModeSelect.value = audioAnnouncementSettings.mode;
+  dom.itemBeaconsToggle.checked = audioAnnouncementSettings.itemBeacons;
+}
+
+/** Returns whether a bool-like item param is explicitly enabled. */
+function itemParamEnabled(item: WorldItem, key: string): boolean {
+  const raw = item.params[key];
+  if (raw === true) return true;
+  if (typeof raw === 'number') return raw !== 0;
+  if (typeof raw === 'string') {
+    const token = raw.trim().toLowerCase();
+    return token === 'true' || token === 'on' || token === 'yes' || token === '1' || token === 'required';
+  }
+  return false;
+}
+
+/** Returns whether the item should still produce a minimal required alert. */
+function isItemAnnouncementRequired(item: WorldItem): boolean {
+  return itemParamEnabled(item, 'announcementRequired') || itemParamEnabled(item, 'beaconRequired');
+}
+
+/** Returns whether optional browser TTS is enabled for this item announcement. */
+function shouldSpeakItemAnnouncement(item: WorldItem): boolean {
+  if (audioAnnouncementSettings.mode === 'sounds_only') return false;
+  if (audioAnnouncementSettings.mode === 'required_only') return isItemAnnouncementRequired(item);
+  return true;
+}
+
+/** Returns whether an item can produce proximity beacons under the current preference. */
+function shouldBeaconItem(item: WorldItem): boolean {
+  if (item.carrierId || isItemQuiet(item)) return false;
+  if (isItemAnnouncementRequired(item)) return true;
+  return audioAnnouncementSettings.itemBeacons;
+}
+
+/** Applies a user-selected announcement mode and announces the result. */
+function setAnnouncementMode(value: string): void {
+  audioAnnouncementSettings = {
+    ...audioAnnouncementSettings,
+    mode: normalizeAnnouncementMode(value),
+  };
+  persistAudioAnnouncementSettings();
+  syncAnnouncementSettingsControls();
+  const labels: Record<AnnouncementMode, string> = {
+    full: 'TTS announcements and alert sounds',
+    sounds_only: 'alert sounds only',
+    required_only: 'required announcements only',
+  };
+  updateStatus(`Announcements: ${labels[audioAnnouncementSettings.mode]}.`);
+  audio.sfxUiConfirm();
+}
+
+/** Applies the optional item-beacon preference while preserving required item beacons. */
+function setItemBeacons(enabled: boolean): void {
+  audioAnnouncementSettings = {
+    ...audioAnnouncementSettings,
+    itemBeacons: enabled,
+  };
+  persistAudioAnnouncementSettings();
+  syncAnnouncementSettingsControls();
+  updateStatus(enabled ? 'Optional item beacons on.' : 'Optional item beacons off. Required item alerts remain on.');
+  audio.sfxUiConfirm();
+}
+
+/** Cycles through user-facing TTS announcement modes from the command palette. */
+function cycleAnnouncementModeCommand(): void {
+  const sequence: AnnouncementMode[] = ['full', 'sounds_only', 'required_only'];
+  const currentIndex = sequence.indexOf(audioAnnouncementSettings.mode);
+  setAnnouncementMode(sequence[(currentIndex + 1) % sequence.length] ?? 'full');
+}
+
+/** Toggles optional item beacons from the command palette. */
+function toggleItemBeaconsCommand(): void {
+  setItemBeacons(!audioAnnouncementSettings.itemBeacons);
 }
 
 /** Clamps microphone input gain to the supported calibration bounds. */
@@ -731,9 +1394,11 @@ async function applyAudioLayerState(): Promise<void> {
   } else {
     peerManager.suspendRemoteAudio();
   }
-  const listenerPosition = { x: state.player.x, y: state.player.y };
+  const listenerPosition = getListenerPosition();
   await radioRuntime.setLayerEnabled(audioLayers.media, state.items.values(), listenerPosition);
   await itemEmitRuntime.setLayerEnabled(audioLayers.item, state.items.values(), listenerPosition);
+  billboardRuntime.setLayerEnabled(audioLayers.item);
+  await syncLocationAmbience();
 }
 
 /** Refreshes distance-gated radio/item stream subscriptions for a listener position. */
@@ -765,6 +1430,9 @@ async function refreshAudioSubscriptionsForListeners(
   lastSubscriptionRefreshTileX = tileX;
   lastSubscriptionRefreshTileY = tileY;
   try {
+    if (force) {
+      radioRuntime.recoverActivePlayback();
+    }
     await radioRuntime.sync(state.items.values(), listenerPositions);
     await itemEmitRuntime.sync(state.items.values(), listenerPositions);
   } finally {
@@ -788,7 +1456,7 @@ async function refreshAudioSubscriptions(force = false): Promise<void> {
     );
     return;
   }
-  await refreshAudioSubscriptionsAt({ x: state.player.x, y: state.player.y }, force);
+  await refreshAudioSubscriptionsAt(getListenerPosition(), force);
 }
 
 /** Toggles a single audio layer and applies the change immediately. */
@@ -803,6 +1471,14 @@ function toggleAudioLayer(layer: keyof AudioLayerState): void {
 /** Routes signaling transport status messages through chat buffer + status output. */
 function handleSignalingStatus(message: string): void {
   if (message === 'Connected.') {
+    return;
+  }
+  if (message === 'Disconnected.' && mediaSession.isConnecting() && !state.running) {
+    stopLocalMedia();
+    mediaSession.setConnecting(false);
+    updateConnectAvailability();
+    setConnectionStatus('Connect failed. Server disconnected before joining the grid.');
+    pushChatMessage('Connect failed. Server disconnected before joining the grid.');
     return;
   }
   if (message === 'Disconnected.' && state.running && !reconnectInFlight) {
@@ -833,6 +1509,15 @@ function isVersionReloadedSession(): boolean {
   return params.has('v') && params.has('t');
 }
 
+/** Removes one-shot version reload markers after startup has consumed them. */
+function clearVersionReloadMarker(): void {
+  const nextUrl = new URL(window.location.href);
+  if (!nextUrl.searchParams.has('v') && !nextUrl.searchParams.has('t')) return;
+  nextUrl.searchParams.delete('v');
+  nextUrl.searchParams.delete('t');
+  window.history.replaceState(window.history.state, '', nextUrl.toString());
+}
+
 /** Appends a chat/system line to the bounded status history buffer. */
 function pushChatMessage(message: string): void {
   messageBuffer.push(message);
@@ -847,11 +1532,114 @@ function pushChatMessage(message: string): void {
   updateStatus(message);
 }
 
+function loadQueuedChatMessages(): QueuedChatMessage[] {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(MESSAGE_OUTBOX_STORAGE_KEY) || '[]') as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item): item is QueuedChatMessage => {
+        if (!item || typeof item !== 'object') return false;
+        const row = item as Partial<QueuedChatMessage>;
+        return (
+          (row.kind === 'room' || row.kind === 'direct') &&
+          typeof row.message === 'string' &&
+          row.message.trim().length > 0 &&
+          typeof row.createdAt === 'number'
+        );
+      })
+      .slice(-MESSAGE_OUTBOX_MAX_ITEMS);
+  } catch {
+    return [];
+  }
+}
+
+function saveQueuedChatMessages(messages: QueuedChatMessage[]): void {
+  try {
+    window.localStorage.setItem(
+      MESSAGE_OUTBOX_STORAGE_KEY,
+      JSON.stringify(messages.slice(-MESSAGE_OUTBOX_MAX_ITEMS)),
+    );
+  } catch {
+    // If storage is unavailable, the live socket path still handles normal sends.
+  }
+}
+
+function queueChatMessage(message: QueuedChatMessage): void {
+  const queued = loadQueuedChatMessages();
+  queued.push(message);
+  saveQueuedChatMessages(queued);
+  const label = message.kind === 'direct' && message.targetName ? `direct message to ${message.targetName}` : 'room message';
+  pushChatMessage(`Queued ${label}. It will send after reconnect.`);
+}
+
+function currentPeerIdForQueuedMessage(message: QueuedChatMessage): string | null {
+  if (message.kind !== 'direct') return null;
+  if (message.targetId && state.peers.has(message.targetId)) {
+    return message.targetId;
+  }
+  const targetName = String(message.targetName || '').trim().toLowerCase();
+  if (!targetName) return null;
+  for (const peer of state.peers.values()) {
+    if (peer.nickname.trim().toLowerCase() === targetName) {
+      return peer.id;
+    }
+  }
+  return null;
+}
+
+function sendQueuedMessageNow(message: QueuedChatMessage): boolean {
+  if (message.kind === 'room') {
+    return signaling.send({ type: 'chat_message', message: message.message });
+  }
+  const targetId = currentPeerIdForQueuedMessage(message);
+  if (!targetId) return false;
+  return signaling.send({ type: 'direct_message', targetId, message: message.message });
+}
+
+function flushQueuedChatMessages(): void {
+  if (!signaling.isOpen()) return;
+  const queued = loadQueuedChatMessages();
+  if (queued.length === 0) return;
+  const remaining: QueuedChatMessage[] = [];
+  let sentCount = 0;
+  for (const message of queued) {
+    if (sendQueuedMessageNow(message)) {
+      sentCount += 1;
+    } else {
+      remaining.push(message);
+    }
+  }
+  saveQueuedChatMessages(remaining);
+  if (sentCount > 0) {
+    pushChatMessage(`Sent ${sentCount} queued ${sentCount === 1 ? 'message' : 'messages'}.`);
+  }
+  if (remaining.length > 0) {
+    pushChatMessage(`${remaining.length} queued ${remaining.length === 1 ? 'message is' : 'messages are'} still waiting for the target.`);
+  }
+}
+
+function sendOrQueueChatMessage(rawMessage: string): void {
+  const directTargetId = state.directMessageTargetId;
+  const directTargetName = state.directMessageTargetName || undefined;
+  const queued: QueuedChatMessage = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    kind: directTargetId ? 'direct' : 'room',
+    message: rawMessage,
+    targetId: directTargetId || undefined,
+    targetName: directTargetName,
+    createdAt: Date.now(),
+  };
+  if (sendQueuedMessageNow(queued)) {
+    return;
+  }
+  queueChatMessage(queued);
+}
+
 /** Refreshes the compact visible dashboard for sighted and low-vision grid users. */
 function updateGridDashboard(): void {
   if (!state.running) return;
   const peerCount = state.peers.size;
-  const itemCount = Array.from(state.items.values()).filter((item) => !item.carrierId).length;
+  const itemCount = Array.from(state.items.values()).filter((item) => !item.carrierId && !isItemQuiet(item)).length;
   const namesHere = getPeerNamesAtPosition(state.player.x, state.player.y);
   const itemsHere = getItemsAtPosition(state.player.x, state.player.y).map((item) => itemLabel(item));
   const hereSummary = [...namesHere, ...itemsHere].join(', ') || 'just you';
@@ -900,6 +1688,152 @@ function resolveIncomingSoundUrl(url: string): string {
   return raw;
 }
 
+function stringParam(item: WorldItem, key: string): string {
+  const value = item.params[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function resolveInteractiveItemUrl(rawUrl: string): string {
+  const raw = rawUrl.trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith('/')) return new URL(raw, window.location.origin).toString();
+  return new URL(raw, window.location.href).toString();
+}
+
+function interactiveItemFrameUrl(item: WorldItem, url: string): string {
+  const serviceKind = stringParam(item, 'serviceKind').toLowerCase();
+  if (serviceKind !== 'game') return url;
+  try {
+    const frameUrl = new URL(url);
+    frameUrl.searchParams.set('embed', 'chatgrid');
+    return frameUrl.toString();
+  } catch {
+    return url;
+  }
+}
+
+function canLaunchInteractiveItem(item: WorldItem): boolean {
+  if (item.type !== 'service_link') return false;
+  if (stringParam(item, 'targetLocation')) return false;
+  return Boolean(resolveInteractiveItemUrl(stringParam(item, 'url')));
+}
+
+function openInteractiveItem(item: WorldItem): boolean {
+  if (!canLaunchInteractiveItem(item)) return false;
+  const url = resolveInteractiveItemUrl(stringParam(item, 'url'));
+  const serviceKind = stringParam(item, 'serviceKind').toLowerCase();
+  dom.interactiveItemTitle.textContent = item.title;
+  dom.interactiveItemFrame.title = item.title;
+  dom.interactiveItemOpenLink.href = url;
+  dom.interactiveItemFrame.src = interactiveItemFrameUrl(item, url);
+  dom.interactiveItemPanel.classList.remove('hidden');
+  dom.interactiveItemPanel.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  dom.interactiveItemFrame.addEventListener(
+    'load',
+    () => {
+      focusInteractiveItemFrame(true);
+    },
+    { once: true },
+  );
+  updateStatus(serviceKind === 'game' ? `You opened ${item.title}. The game is ready in Chat Grid.` : `You opened ${item.title} in Chat Grid.`);
+  audio.sfxUiConfirm();
+  return true;
+}
+
+function openGameLaunchInvite(message: Extract<IncomingMessage, { type: 'item_game_launch' }>): boolean {
+  const item = state.items.get(message.itemId);
+  const launchItem: WorldItem =
+    item && item.type === 'service_link'
+      ? item
+      : {
+          id: message.itemId,
+          type: 'service_link',
+          title: message.title,
+          locationId: currentLocationId,
+          x: message.x,
+          y: message.y,
+          createdBy: message.actorId,
+          updatedBy: message.actorId,
+          createdAt: 0,
+          updatedAt: 0,
+          version: 0,
+          capabilities: ['usable'],
+          params: {
+            serviceKind: 'game',
+            url: message.url,
+          },
+          carrierId: null,
+        };
+  return openInteractiveItem(launchItem);
+}
+
+function isDoorTransitionItem(item: WorldItem | null | undefined): boolean {
+  if (!item) return false;
+  if (['cabin', 'house', 'room', 'shack', 'shed'].includes(item.type)) return true;
+  if (item.type !== 'service_link') return false;
+  const kind = stringParam(item, 'serviceKind').toLowerCase();
+  if (['portal', 'game', 'app', 'service', 'site', 'station', 'tool'].includes(kind)) return false;
+  return stringParam(item, 'targetLocation').length > 0;
+}
+
+function handleDoorTransitionUseResult(itemId: string | null | undefined): void {
+  const item = itemId ? state.items.get(itemId) : null;
+  if (!isDoorTransitionItem(item)) return;
+  pendingDoorCloseCue = {
+    x: item?.x ?? state.player.x,
+    y: item?.y ?? state.player.y,
+    expiresAt: Date.now() + 5_000,
+  };
+}
+
+function handleDoorTransitionArrival(x: number, y: number): void {
+  if (!pendingDoorCloseCue) return;
+  const cue = pendingDoorCloseCue;
+  pendingDoorCloseCue = null;
+  if (Date.now() > cue.expiresAt || !audioLayers.item) return;
+  window.setTimeout(() => {
+    void audio.playSpatialSample(DOOR_CLOSE_SOUND_URL, { x, y }, getListenerPosition(), 0.9, HEARING_RADIUS);
+  }, 420);
+}
+
+function focusInteractiveItemFrame(enterGame = false): void {
+  if (dom.interactiveItemPanel.classList.contains('hidden')) return;
+  dom.interactiveItemFrame.focus();
+  if (enterGame) {
+    dom.interactiveItemFrame.contentWindow?.postMessage({ type: 'moonstep-enter-game' }, '*');
+  }
+}
+
+function closeInteractiveItem(): boolean {
+  if (dom.interactiveItemPanel.classList.contains('hidden')) return false;
+  dom.interactiveItemFrame.removeAttribute('src');
+  dom.interactiveItemPanel.classList.add('hidden');
+  updateStatus('Interactive item closed.');
+  audio.sfxUiCancel();
+  dom.canvas.focus();
+  return true;
+}
+
+dom.interactiveItemPanel.addEventListener('pointerdown', (event) => {
+  if (event.target instanceof HTMLElement && event.target.closest('button, a')) return;
+  window.setTimeout(() => focusInteractiveItemFrame(true), 0);
+});
+
+document.addEventListener(
+  'keydown',
+  (event) => {
+    if (dom.interactiveItemPanel.classList.contains('hidden')) return;
+    if (event.key !== 'Enter' && event.code !== 'Enter') return;
+    if (document.activeElement === dom.interactiveItemFrame) return;
+    if (event.target instanceof HTMLElement && event.target.closest('button, a, input, textarea, select')) return;
+    event.preventDefault();
+    focusInteractiveItemFrame(true);
+    updateStatus('Game focused.');
+  },
+  true,
+);
+
 /** Navigates buffered chat lines and speaks the selected entry. */
 function navigateChatBuffer(target: 'prev' | 'next' | 'first' | 'last'): void {
   if (messageBuffer.length === 0) {
@@ -936,7 +1870,7 @@ function updateDeviceSummary(): void {
 /** Returns peer nicknames currently occupying the given grid cell. */
 function getPeerNamesAtPosition(x: number, y: number): string[] {
   return Array.from(state.peers.values())
-    .filter((peer) => peer.x === x && peer.y === y)
+    .filter((peer) => (peer.locationId || currentLocationId) === currentLocationId && peer.x === x && peer.y === y)
     .map((peer) => peer.nickname);
 }
 
@@ -974,22 +1908,224 @@ function openHelpViewer(lines: string[], returnMode: GameMode = 'normal'): void 
 }
 
 /** Returns non-carried items occupying a given grid position. */
-function getItemsAtPosition(x: number, y: number): WorldItem[] {
-  return Array.from(state.items.values()).filter((item) => !item.carrierId && item.x === x && item.y === y);
+function getItemsAtPosition(x: number, y: number, includeQuiet = false): WorldItem[] {
+  return Array.from(state.items.values()).filter(
+    (item) => !item.carrierId && item.x === x && item.y === y && (includeQuiet || !isItemQuiet(item)),
+  );
 }
 
-/** Returns the item currently carried by the local player, if any. */
+/** Returns whether an item can seat a user under the current item metadata. */
+function isSeatableItem(item: WorldItem): boolean {
+  const kind = String(item.params.furnitureKind ?? item.params.objectKind ?? item.type).trim().toLowerCase();
+  const posture = String(item.params.postureMode ?? '').trim().toLowerCase();
+  const capacity = Number(item.params.seatingCapacity);
+  if (Number.isFinite(capacity) && capacity <= 0) return false;
+  return posture === 'sit' || posture === 'lie' || posture === 'sit_lie' || ['chair', 'couch', 'sofa', 'bench', 'stool', 'loveseat', 'bed'].includes(kind);
+}
+
+/** Finds the nearest couch/chair-like item close enough for space-to-sit. */
+function getNearestSeatableItem(): WorldItem | null {
+  let nearest: WorldItem | null = null;
+  let nearestDistance = Infinity;
+  for (const item of state.items.values()) {
+    if (item.carrierId || isItemQuiet(item) || !isSeatableItem(item)) continue;
+    const distance = Math.hypot(item.x - state.player.x, item.y - state.player.y);
+    if (distance <= SEAT_INTERACTION_RADIUS && distance < nearestDistance) {
+      nearest = item;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
+}
+
+/** Returns the current local listener position, including seated head-offset controls. */
+function getListenerPosition(): { x: number; y: number } {
+  if (state.player.posture === 'standing') {
+    return { x: state.player.x, y: state.player.y };
+  }
+  return { x: state.player.x + state.player.seatedOffset, y: state.player.y };
+}
+
+/** Returns all items currently carried by the local player. */
+function getCarriedItems(): WorldItem[] {
+  if (!state.player.id) return [];
+  return Array.from(state.items.values()).filter((item) => item.carrierId === state.player.id);
+}
+
+/** Returns the focused or first item currently carried by the local player, if any. */
 function getCarriedItem(): WorldItem | null {
-  if (!state.player.id) return null;
-  return Array.from(state.items.values()).find((item) => item.carrierId === state.player.id) || null;
+  const carried = getCarriedItems();
+  if (state.focusedItemId) {
+    const focused = carried.find((item) => item.id === state.focusedItemId);
+    if (focused) return focused;
+  }
+  return carried[0] ?? null;
+}
+
+/** Returns whether one carried house object should behave as a radio remote. */
+function isRadioRemoteItem(item: WorldItem | null): item is WorldItem {
+  if (!item || item.type !== 'house_object') return false;
+  const objectKind = String(item.params.objectKind ?? '').trim().toLowerCase();
+  if (objectKind !== 'remote') return false;
+  const title = item.title.trim().toLowerCase();
+  const description = String(item.params.description ?? '').trim().toLowerCase();
+  return title.includes('radio') || description.includes('radio');
+}
+
+/** Returns whether one carried house object should behave as a TV remote. */
+function isTvRemoteItem(item: WorldItem | null): item is WorldItem {
+  if (!item || item.type !== 'house_object') return false;
+  const objectKind = String(item.params.objectKind ?? '').trim().toLowerCase();
+  if (objectKind !== 'remote') return false;
+  const title = item.title.trim().toLowerCase();
+  const description = String(item.params.description ?? '').trim().toLowerCase();
+  const text = `${title} ${description}`;
+  return ['tv', 'television', 'movie', 'movies', 'channel', 'channels'].some((token) => text.includes(token));
+}
+
+/** Returns the carried radio or TV remote, if the local player has one in hand. */
+function getCarriedMediaRemote(): { item: WorldItem; kind: 'radio' | 'tv' } | null {
+  const carried = getCarriedItems();
+  if (state.focusedItemId) {
+    const focused = carried.find((item) => item.id === state.focusedItemId);
+    if (isTvRemoteItem(focused)) return { item: focused, kind: 'tv' };
+    if (isRadioRemoteItem(focused)) return { item: focused, kind: 'radio' };
+  }
+  const tv = carried.find((item) => isTvRemoteItem(item));
+  if (tv) return { item: tv, kind: 'tv' };
+  const radio = carried.find((item) => isRadioRemoteItem(item));
+  if (radio) return { item: radio, kind: 'radio' };
+  return null;
+}
+
+/** Returns whether a carried item can occupy a furniture surface slot. */
+function isSurfacePlaceableItem(item: WorldItem): boolean {
+  return item.type === 'house_object' || item.type === 'radio_station';
+}
+
+/** Returns whether a furniture item can receive a placed item. */
+function isObjectSurfaceItem(item: WorldItem): boolean {
+  return item.type === 'furniture' && item.params.supportsObjects !== false;
+}
+
+/** Returns how many item slots are still open on a furniture surface. */
+function getOpenSurfaceSlots(surface: WorldItem): number {
+  const slotCount = Number(surface.params.surfaceSlots ?? 0);
+  if (!Number.isFinite(slotCount)) return 0;
+  const occupied = Array.from(state.items.values()).filter(
+    (item) =>
+      isSurfacePlaceableItem(item) &&
+      !item.carrierId &&
+      item.params.surfaceId === surface.id,
+  ).length;
+  return Math.max(0, Math.floor(slotCount) - occupied);
+}
+
+/** Finds the focused or same-square furniture surface for automatic placement. */
+function getAutomaticPlacementSurface(squareItems = getCurrentSquareItems()): WorldItem | null {
+  const focused = getFocusedActionItem();
+  if (focused && isObjectSurfaceItem(focused) && getOpenSurfaceSlots(focused) > 0) {
+    return focused;
+  }
+  return squareItems.find((item) => isObjectSurfaceItem(item) && getOpenSurfaceSlots(item) > 0) ?? null;
+}
+
+/** Finds a placed house object, preferring the currently focused furniture surface when present. */
+function getPlacedHouseObjectForInteraction(squareItems = getCurrentSquareItems()): WorldItem | null {
+  const focused = getFocusedActionItem();
+  if (focused && isObjectSurfaceItem(focused)) {
+    const surfaceObject = squareItems.find(
+      (item) => item.type === 'house_object' && item.params.surfaceId === focused.id,
+    );
+    if (surfaceObject) return surfaceObject;
+  }
+  return (
+    squareItems.find(
+      (item) => item.type === 'house_object' && typeof item.params.surfaceId === 'string' && item.params.surfaceId.length > 0,
+    ) ?? null
+  );
+}
+
+/** Describes why the physical interaction key has nothing surface-mounted to affect. */
+function describeMissingPlacedHouseObject(squareItems = getCurrentSquareItems()): string {
+  const focused = getFocusedActionItem();
+  if (focused && isObjectSurfaceItem(focused)) {
+    return `Nothing is sitting on ${itemLabel(focused)}.`;
+  }
+  const surface = squareItems.find((item) => isObjectSurfaceItem(item));
+  if (surface) {
+    return `Nothing is sitting on ${itemLabel(surface)}.`;
+  }
+  if (focused) {
+    if (focused.type === 'radio_station') {
+      return `No loose house object is on ${itemLabel(focused)}. Use Enter to operate the radio.`;
+    }
+    return `No placed house object is attached to ${itemLabel(focused)}.`;
+  }
+  const fixture = squareItems.find((item) => item.type !== 'house_object');
+  if (fixture) {
+    return `No placed house object is attached to ${itemLabel(fixture)}.`;
+  }
+  return 'No placed house object here.';
+}
+
+/** Returns items that can receive normal-mode focus for contextual actions. */
+function getFocusableActionItems(): WorldItem[] {
+  const items: WorldItem[] = [];
+  for (const item of getCarriedItems()) {
+    items.push(item);
+  }
+  for (const item of getCurrentSquareItems()) {
+    if (item.capabilities.includes('usable') && !items.some((entry) => entry.id === item.id)) {
+      items.push(item);
+    }
+  }
+  return items;
+}
+
+/** Returns the currently focused item when it is still contextually available. */
+function getFocusedActionItem(): WorldItem | null {
+  if (!state.focusedItemId) return null;
+  const available = getFocusableActionItems();
+  return available.find((item) => item.id === state.focusedItemId) || null;
+}
+
+/** Cycles normal-mode item focus through carried and same-square action items. */
+function cycleFocusedItemCommand(reverse = false): void {
+  const items = getFocusableActionItems();
+  if (items.length === 0) {
+    state.focusedItemId = null;
+    updateStatus('No carried or nearby items to focus.');
+    audio.sfxUiCancel();
+    return;
+  }
+  const currentIndex = state.focusedItemId ? items.findIndex((item) => item.id === state.focusedItemId) : -1;
+  const direction = reverse ? -1 : 1;
+  const nextIndex = ((currentIndex + direction) % items.length + items.length) % items.length;
+  const item = items[nextIndex];
+  state.focusedItemId = item.id;
+  updateStatus(`Focused ${itemLabel(item)}. Shift+Enter for related actions.`);
+  audio.sfxUiBlip();
+}
+
+/** Remembers the item the user most recently targeted for direct item actions. */
+function focusItemForAction(item: WorldItem): void {
+  state.focusedItemId = item.id;
+}
+
+/** Returns the focused item id when it is one of the available choices. */
+function preferredItemIdFor(items: WorldItem[]): string | null {
+  if (!state.focusedItemId) return null;
+  return items.some((item) => item.id === state.focusedItemId) ? state.focusedItemId : null;
 }
 
 /** Opens the shared item-selection flow for the provided context and items. */
 function beginItemSelection(
   context: 'pickup' | 'delete' | 'edit' | 'use' | 'secondaryUse' | 'inspect' | 'manage',
   items: WorldItem[],
+  preferredItemId: string | null = preferredItemIdFor(items),
 ): void {
-  itemInteractionController.beginItemSelection(context, items);
+  itemInteractionController.beginItemSelection(context, items, preferredItemId);
 }
 
 /** Builds available item-management actions for one selected item. */
@@ -999,11 +2135,13 @@ function itemManagementOptionsFor(item: WorldItem) {
 
 /** Opens item-management options for one selected item. */
 function beginItemManagement(item: WorldItem): void {
+  focusItemForAction(item);
   itemInteractionController.beginItemManagement(item);
 }
 
 /** Opens item property browsing/editing mode for one item. */
 function beginItemProperties(item: WorldItem, showAll = false): void {
+  focusItemForAction(item);
   itemInteractionController.beginItemProperties(item, showAll);
 }
 
@@ -1014,27 +2152,116 @@ function recomputeActiveItemPropertyKeys(itemId: string): void {
 
 /** Sends an item-use request for the selected item. */
 function useItem(item: WorldItem): void {
+  focusItemForAction(item);
+  updateStatus(`You use ${itemLabel(item)}.`);
+  if (item.type === 'radio_station') {
+    audio.sfxRadioPower();
+  } else if (item.type === 'house_object') {
+    audio.sfxSoftPlasticPress();
+  }
   signaling.send({ type: 'item_use', itemId: item.id });
 }
 
 /** Sends an item secondary-use request for the selected item. */
 function secondaryUseItem(item: WorldItem): void {
+  focusItemForAction(item);
+  updateStatus(`You try ${itemLabel(item)} another way.`);
+  if (item.type === 'radio_station') {
+    audio.sfxRadioTunerStep();
+  } else if (item.type === 'house_object') {
+    audio.sfxDeviceHardwareToggle();
+  }
   signaling.send({ type: 'item_secondary_use', itemId: item.id });
+}
+
+/** Sends a physical item interaction request for furniture and house objects. */
+function interactItemCommand(): void {
+  const carried = getCarriedItem();
+  const squareItems = getCurrentSquareItems();
+  if (carried) {
+    const surface = getAutomaticPlacementSurface(squareItems);
+    if (!surface) {
+      updateStatus('No open furniture surface here.');
+      audio.sfxUiCancel();
+      return;
+    }
+    updateStatus(`You place ${itemLabel(carried)} on ${itemLabel(surface)}.`);
+    focusItemForAction(surface);
+    signaling.send({
+      type: 'item_interact',
+      itemId: carried.id,
+      targetItemId: surface.id,
+      action: 'place_on',
+    });
+    return;
+  }
+
+  const damaged = squareItems.find(
+    (item) =>
+      item.type === 'house_object' &&
+      (item.params.condition === 'broken' || item.params.condition === 'cracked'),
+  );
+  if (damaged) {
+    updateStatus(`You repair ${itemLabel(damaged)}.`);
+    focusItemForAction(damaged);
+    signaling.send({ type: 'item_interact', itemId: damaged.id, action: 'repair' });
+    return;
+  }
+
+  const placedObject = getPlacedHouseObjectForInteraction(squareItems);
+  if (!placedObject) {
+    updateStatus(describeMissingPlacedHouseObject(squareItems));
+    audio.sfxUiCancel();
+    return;
+  }
+  updateStatus(`You shove ${itemLabel(placedObject)} off its surface.`);
+  focusItemForAction(placedObject);
+  signaling.send({ type: 'item_interact', itemId: placedObject.id, action: 'shove_off' });
+}
+
+/** Reorders the focused item within its current furniture surface without leaving that surface. */
+function moveFocusedSurfaceItemCommand(direction: 'left' | 'right'): void {
+  const item = getFocusedActionItem();
+  if (!item) {
+    updateStatus('Focus an item on a table or shelf first.');
+    audio.sfxUiCancel();
+    return;
+  }
+  const surfaceId = String(item.params.surfaceId || '').trim();
+  const surfaceTitle = String(item.params.surfaceTitle || '').trim();
+  if (!surfaceId) {
+    updateStatus(`${itemLabel(item)} is not sitting on a table or shelf.`);
+    audio.sfxUiCancel();
+    return;
+  }
+  updateStatus(`Moving ${itemLabel(item)} ${direction}${surfaceTitle ? ` on ${surfaceTitle}` : ''}.`);
+  signaling.send({
+    type: 'item_interact',
+    itemId: item.id,
+    action: direction === 'left' ? 'move_surface_left' : 'move_surface_right',
+  });
 }
 
 /** Opens option-list selection mode for list-based item properties. */
 function openItemPropertyOptionSelect(item: WorldItem, key: string): void {
-  const options = getItemPropertyOptionValues(item.type, key);
+  const dynamicOptions =
+    item.type === 'radio_station' && key === 'linkedMediaGroup'
+      ? radioLinkedMediaGroupOptions(item)
+      : null;
+  const options = dynamicOptions?.values ?? getItemPropertyOptionValues(item.type, key);
   if (!options || options.length === 0) {
+    updateStatus(`No ${itemPropertyLabel(key)} choices nearby.`);
+    audio.sfxUiCancel();
     return;
   }
   state.mode = 'itemPropertyOptionSelect';
   state.editingPropertyKey = key;
   state.itemPropertyOptionValues = options;
+  state.itemPropertyOptionLabels = dynamicOptions?.labels ?? options;
   const currentValue = getItemPropertyValue(item, key);
   const currentIndex = options.indexOf(currentValue);
   state.itemPropertyOptionIndex = currentIndex >= 0 ? currentIndex : 0;
-  updateStatus(`Select ${itemPropertyLabel(key)}: ${state.itemPropertyOptionValues[state.itemPropertyOptionIndex]}`);
+  updateStatus(`Select ${itemPropertyLabel(key)}: ${state.itemPropertyOptionLabels[state.itemPropertyOptionIndex]}`);
   audio.sfxUiBlip();
 }
 
@@ -1128,6 +2355,18 @@ function squareWord(distance: number): string {
   return distance === 1 ? 'square' : 'squares';
 }
 
+/** Builds a concise room-style coordinate phrase for the current grid location. */
+function roomCoordinatePhrase(x: number, y: number): string {
+  const location = currentLocationName || currentLocationOption()?.name || 'the grid';
+  return `${location}, ${formatCoordinate(x)}, ${formatCoordinate(y)}`;
+}
+
+/** Returns a short surface phrase for IF-style movement narration. */
+function currentSurfacePhrase(): string {
+  const surface = profileForLocationFootsteps(currentLocationOption()).label.trim();
+  return surface ? `on ${surface}` : 'through the grid';
+}
+
 /** Builds a spoken distance+direction phrase between two grid coordinates. */
 function distanceDirectionPhrase(px: number, py: number, tx: number, ty: number): string {
   const distance = Math.round(Math.hypot(tx - px, ty - py));
@@ -1136,15 +2375,113 @@ function distanceDirectionPhrase(px: number, py: number, tx: number, ty: number)
   return `${distance} ${squareWord(distance)} ${direction}`;
 }
 
+/** Describes where a peer is, including other rooms/locations when known. */
+function peerLocationPhrase(peer: PeerState): string {
+  const peerLocationId = peer.locationId || currentLocationId;
+  const coordinates = `${formatCoordinate(peer.x)}, ${formatCoordinate(peer.y)}`;
+  if (peerLocationId && peerLocationId !== currentLocationId) {
+    return `in ${locationNameForId(peerLocationId)} at ${coordinates}`;
+  }
+  return `${distanceDirectionPhrase(state.player.x, state.player.y, peer.x, peer.y)}, ${coordinates}`;
+}
+
+/** Names a one-step movement direction without the "directly" prefix. */
+function movementDirectionPhrase(dx: number, dy: number): string {
+  return getDirection(0, 0, dx, dy).replace(/^directly\s+/, '');
+}
+
+/** Builds the IF-style narration for a tile after movement or teleport. */
+function describeTileArrival(x: number, y: number, dx = 0, dy = 0): string {
+  const parts: string[] = [];
+  const direction = dx || dy ? movementDirectionPhrase(dx, dy) : '';
+  parts.push(direction ? `You walked ${direction} ${currentSurfacePhrase()} to ${roomCoordinatePhrase(x, y)}.` : `You are at ${roomCoordinatePhrase(x, y)}.`);
+
+  const namesOnTile = getPeerNamesAtPosition(x, y);
+  if (namesOnTile.length > 0) {
+    parts.push(`You hear ${namesOnTile.join(', ')} here.`);
+  }
+
+  const itemsOnTile = getItemsAtPosition(x, y);
+  if (itemsOnTile.length > 0) {
+    parts.push(`You notice ${itemsOnTile.map((item) => itemLabel(item)).join(', ')}.`);
+  }
+
+  return parts.join(' ');
+}
+
+/** Announces local movement with throttling unless the tile has something meaningful. */
+function narrateLocalMovement(x: number, y: number, dx: number, dy: number, force = false): void {
+  const now = performance.now();
+  const direction = movementDirectionPhrase(dx, dy);
+  const hasTileContext = getPeerNamesAtPosition(x, y).length > 0 || getItemsAtPosition(x, y).length > 0;
+  if (!force && !hasTileContext && direction === lastMovementNarrationDirection && now - lastMovementNarrationAt < MOVEMENT_NARRATION_INTERVAL_MS) {
+    return;
+  }
+  lastMovementNarrationAt = now;
+  lastMovementNarrationDirection = direction;
+  updateStatus(describeTileArrival(x, y, dx, dy));
+}
+
+/** Announces a user-facing arrival after a location change. */
+function narrateLocationArrival(locationName: string, x: number, y: number): void {
+  const location = locationName.trim() || currentLocationName || 'the new location';
+  const ambience = currentLocationOption()?.ambienceName?.trim();
+  const ambiencePhrase = ambience ? ` ${ambience} ambience is playing.` : '';
+  updateStatus(`You entered ${location} at ${formatCoordinate(x)}, ${formatCoordinate(y)}.${ambiencePhrase}`);
+}
+
+/** Narrates another user's nearby movement in room-style language. */
+function narrateRemoteMovement(nickname: string, fromX: number, fromY: number, toX: number, toY: number): void {
+  const movementDelta = Math.hypot(toX - fromX, toY - fromY);
+  if (movementDelta <= 0 || movementDelta > 1.5) return;
+  const distanceToPlayer = Math.hypot(toX - state.player.x, toY - state.player.y);
+  if (distanceToPlayer > 4) return;
+  const direction = movementDirectionPhrase(toX - fromX, toY - fromY);
+  const relative = distanceDirectionPhrase(state.player.x, state.player.y, toX, toY);
+  updateStatus(`${nickname} walked ${direction}, ${relative}.`);
+}
+
 /** Formats a coordinate with up to 2 decimals while trimming trailing zeros. */
 function formatCoordinate(value: number): string {
   if (!Number.isFinite(value)) return '0';
   return value.toFixed(2).replace(/\.?0+$/, '');
 }
 
-/** Picks one random footstep sample URL. */
-function randomFootstepUrl(): string {
-  return FOOTSTEP_SOUND_URLS[Math.floor(Math.random() * FOOTSTEP_SOUND_URLS.length)];
+/** Picks one environment-aware footstep cue for a location surface and user identity. */
+function randomFootstepCue(
+  identity = state.player.id ?? state.player.nickname,
+  nickname = state.player.nickname,
+  locationId = currentLocationId,
+): FootstepCue {
+  const profile = profileForLocationFootsteps(locationOptionForId(locationId) ?? currentLocationOption());
+  const safeIndexes = profile.sampleIndexes.filter((index) => index >= 1 && index <= FOOTSTEP_SOUND_URLS.length);
+  const sampleIndexes = safeIndexes.length > 0 ? safeIndexes : DEFAULT_FOOTSTEP_PROFILE.sampleIndexes;
+  const identityHash = hashText(`${identity}:${nickname}`);
+  const sampleOffset = identityHash % sampleIndexes.length;
+  const randomOffset = Math.floor(Math.random() * sampleIndexes.length);
+  const sampleIndex = sampleIndexes[(sampleOffset + randomOffset) % sampleIndexes.length] ?? 1;
+  const pitchRange = Math.max(0, profile.pitchMax - profile.pitchMin);
+  const identityPitch = ((identityHash >>> 8) % 9 - 4) * 0.012;
+  const playbackRate = Math.max(0.55, profile.pitchMin + Math.random() * pitchRange + identityPitch);
+  return {
+    url: FOOTSTEP_SOUND_URLS[sampleIndex - 1] ?? FOOTSTEP_SOUND_URLS[0],
+    gain: profile.gain,
+    fadeInMs: profile.fadeInMs ?? 0,
+    playbackRate,
+    identity,
+    nickname,
+    surface: profile.label,
+  };
+}
+
+/** Stable tiny hash used only for deterministic per-user sound color. */
+function hashText(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 /** Stops active teleport loop audio, if one is running. */
@@ -1176,7 +2513,11 @@ function startTeleportTo(targetX: number, targetY: number, completionStatus: str
   stopTeleportLoopAudio();
   activeTeleportLoopToken += 1;
   const loopToken = activeTeleportLoopToken;
-  void audio.startLoopingSample(TELEPORT_START_SOUND_URL, TELEPORT_START_GAIN).then((stopLoop) => {
+  void audio.startLoopingSample(TELEPORT_START_SOUND_URL, TELEPORT_START_GAIN, {
+    fadeInSeconds: 0.08,
+    fadeOutSeconds: 0.1,
+    startDelaySeconds: 0.04,
+  }).then((stopLoop) => {
     if (!stopLoop) return;
     if (activeTeleport && loopToken === activeTeleportLoopToken) {
       activeTeleportLoopStop = stopLoop;
@@ -1233,7 +2574,32 @@ function updateTeleport(): void {
   stopTeleportLoopAudio();
   void refreshAudioSubscriptions(true);
   void audio.playSample(TELEPORT_SOUND_URL, FOOTSTEP_GAIN);
-  updateStatus(completionStatus);
+  updateStatus(`${completionStatus} ${describeTileArrival(state.player.x, state.player.y)}`);
+}
+
+function isNearCarefulNavigationZone(x: number, y: number): boolean {
+  if (x <= 0 || y <= 0 || x >= worldGridSize - 1 || y >= worldGridSize - 1) return true;
+  for (const item of state.items.values()) {
+    if (item.locationId && item.locationId !== currentLocationId) continue;
+    if (Math.hypot(item.x - x, item.y - y) <= 1.5) return true;
+  }
+  for (const peer of state.peers.values()) {
+    if (peer.locationId && peer.locationId !== currentLocationId) continue;
+    if (Math.hypot(peer.x - x, peer.y - y) <= 1.5) return true;
+  }
+  return false;
+}
+
+function effectiveMovementTickMs(): number {
+  const shiftHeld = Boolean(state.keysPressed.ShiftLeft || state.keysPressed.ShiftRight || state.keysPressed.Shift);
+  const careful = isNearCarefulNavigationZone(state.player.x, state.player.y);
+  if (careful) {
+    return Math.round(movementTickMs * CAREFUL_MOVEMENT_TICK_MULTIPLIER);
+  }
+  if (shiftHeld) {
+    return Math.max(80, Math.round(movementTickMs * RUN_MOVEMENT_TICK_MULTIPLIER));
+  }
+  return movementTickMs;
 }
 
 /** Main animation/update loop for movement, spatial audio, and rendering. */
@@ -1241,13 +2607,16 @@ function gameLoop(): void {
   if (!state.running) return;
   updateTeleport();
   handleMovement();
+  const listenerPosition = getListenerPosition();
   if (!activeTeleport) {
     void refreshAudioSubscriptions();
   }
-  audio.updateSpatialAudio(peerManager.getPeers(), { x: state.player.x, y: state.player.y });
-  audio.updateSpatialSamples({ x: state.player.x, y: state.player.y });
-  radioRuntime.updateSpatialAudio(state.items, { x: state.player.x, y: state.player.y });
-  itemEmitRuntime.updateSpatialAudio(state.items, { x: state.player.x, y: state.player.y });
+  audio.updateSpatialAudio(peerManager.getPeers(), listenerPosition);
+  audio.updateSpatialSamples(listenerPosition);
+  radioRuntime.updateSpatialAudio(state.items, listenerPosition);
+  itemEmitRuntime.updateSpatialAudio(state.items, listenerPosition);
+  billboardRuntime.update(state.items, listenerPosition);
+  updateItemBeacon();
   state.cursorVisible = Math.floor(Date.now() / 500) % 2 === 0;
   updateGridDashboard();
   renderer.draw(state);
@@ -1258,8 +2627,14 @@ function gameLoop(): void {
 function handleMovement(): void {
   if (state.mode !== 'normal') return;
   if (activeTeleport) return;
+  if (
+    getCarriedRadioRemote() &&
+    (state.keysPressed.ArrowUp || state.keysPressed.ArrowDown || state.keysPressed.ArrowLeft || state.keysPressed.ArrowRight)
+  ) {
+    return;
+  }
   const now = Date.now();
-  if (now - state.player.lastMoveTime < movementTickMs) return;
+  if (now - state.player.lastMoveTime < effectiveMovementTickMs()) return;
 
   let dx = 0;
   let dy = 0;
@@ -1270,6 +2645,30 @@ function handleMovement(): void {
 
   if (dx === 0 && dy === 0) {
     lastWallCollisionDirection = null;
+    lastAutoSeatItemId = '';
+    return;
+  }
+
+  if (state.player.posture !== 'standing') {
+    state.player.lastMoveTime = now;
+    if (dx !== 0 && dy === 0) {
+      const nextOffset = Math.max(
+        -SEATED_BINAURAL_LIMIT,
+        Math.min(SEATED_BINAURAL_LIMIT, state.player.seatedOffset + dx * SEATED_BINAURAL_STEP),
+      );
+      state.player.seatedOffset = nextOffset;
+      void refreshAudioSubscriptions(true);
+      updateStatus(
+        dx < 0
+          ? 'You shift your listening position left on the couch.'
+          : 'You shift your listening position right on the couch.',
+      );
+      audio.sfxUiBlip();
+      return;
+    }
+    signaling.send({ type: 'update_position', x: state.player.x + dx, y: state.player.y + dy });
+    updateStatus('Stand up before moving away from the furniture.');
+    audio.sfxUiCancel();
     return;
   }
 
@@ -1280,6 +2679,7 @@ function handleMovement(): void {
     state.player.lastMoveTime = now;
     if (lastWallCollisionDirection !== attemptedDirection) {
       void audio.playSample(WALL_SOUND_URL, 1);
+      updateStatus(`A boundary blocks you to the ${movementDirectionPhrase(dx, dy)}.`);
       lastWallCollisionDirection = attemptedDirection;
     }
     return;
@@ -1290,22 +2690,27 @@ function handleMovement(): void {
   lastWallCollisionDirection = null;
   state.player.lastMoveTime = now;
   void refreshAudioSubscriptions(true);
-  void audio.playSample(randomFootstepUrl(), FOOTSTEP_GAIN, movementTickMs);
+  const footstep = randomFootstepCue();
+  void audio.playSample(footstep.url, footstep.gain, footstep.fadeInMs, footstep.playbackRate);
+  audio.playStepSignature({ identity: footstep.identity, nickname: footstep.nickname });
   signaling.send({ type: 'update_position', x: nextX, y: nextY });
 
   const namesOnTile = getPeerNamesAtPosition(nextX, nextY);
   const itemsOnTile = getItemsAtPosition(nextX, nextY);
-  const tileAnnouncements: string[] = [];
   if (namesOnTile.length > 0) {
-    tileAnnouncements.push(namesOnTile.join(', '));
     audio.sfxTileUserPing();
   }
   if (itemsOnTile.length > 0) {
-    tileAnnouncements.push(itemsOnTile.map((item) => itemLabel(item)).join(', '));
     audio.sfxTileItemPing();
   }
-  if (tileAnnouncements.length > 0) {
-    updateStatus(tileAnnouncements.join('. '));
+  narrateLocalMovement(nextX, nextY, dx, dy);
+  const nearestSeat = getNearestSeatableItem();
+  if (nearestSeat && nearestSeat.id !== lastAutoSeatItemId) {
+    lastAutoSeatItemId = nearestSeat.id;
+    const kind = String(nearestSeat.params.furnitureKind ?? nearestSeat.params.objectKind ?? '').trim().toLowerCase();
+    const posture = kind === 'bed' ? 'settle onto the bed' : 'gently settle into a relaxed sitting position';
+    updateStatus(`You are close to ${nearestSeat.title}; you ${posture}.`);
+    signaling.send({ type: 'item_use', itemId: nearestSeat.id });
   }
 }
 
@@ -1468,6 +2873,16 @@ function handleAdminUsersList(message: Extract<IncomingMessage, { type: 'admin_u
   adminController.handleAdminUsersList(message);
 }
 
+/** Handles server platform overview response for admin menu flows. */
+function handleAdminPlatformOverview(message: Extract<IncomingMessage, { type: 'admin_platform_overview' }>): void {
+  adminController.handleAdminPlatformOverview(message);
+}
+
+/** Handles server notification-list response for admin menu flows. */
+function handleAdminNotificationsList(message: Extract<IncomingMessage, { type: 'admin_notifications_list' }>): void {
+  adminController.handleAdminNotificationsList(message);
+}
+
 /** Handles server transfer-target list response for item-management transfer flow. */
 function handleItemTransferTargets(message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>): void {
   itemInteractionController.handleItemTransferTargets(message);
@@ -1477,6 +2892,24 @@ function handleItemTransferTargets(message: Extract<IncomingMessage, { type: 'it
 function handleAdminActionResult(message: Extract<IncomingMessage, { type: 'admin_action_result' }>): void {
   adminController.handleAdminActionResult(message);
   audio.sfxUiConfirm();
+}
+
+/** Applies server-backed ntfy preferences for the signed-in Chat Grid identity. */
+function handleNtfyPreferences(message: Extract<IncomingMessage, { type: 'ntfy_preferences' }>): void {
+  dom.ntfyNotificationsToggle.disabled = !message.configured;
+  dom.ntfyNotificationsToggle.checked = message.enabled;
+  dom.ntfyNotificationsStatus.textContent = message.configured
+    ? (message.message || (message.enabled ? 'ntfy notifications are enabled.' : 'ntfy notifications are disabled.'))
+    : 'ntfy delivery is not configured on this server.';
+  if (message.subscriptionUrl) {
+    dom.ntfySubscriptionLink.href = message.subscriptionUrl;
+    dom.ntfySubscriptionLink.classList.remove('hidden');
+    dom.rotateNtfyTopicButton.classList.remove('hidden');
+  } else {
+    dom.ntfySubscriptionLink.removeAttribute('href');
+    dom.ntfySubscriptionLink.classList.add('hidden');
+    dom.rotateNtfyTopicButton.classList.add('hidden');
+  }
 }
 
 /** Builds dependencies shared by connect/disconnect flow helpers. */
@@ -1543,6 +2976,36 @@ function disconnect(): void {
   itemBehaviorRegistry.cleanup();
 }
 
+async function hasValidAuthSessionCookie(): Promise<boolean> {
+  try {
+    const response = await fetch(AUTH_SESSION_COOKIE_CHECK_URL, {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        [AUTH_SESSION_COOKIE_CLIENT_HEADER]: '1',
+      },
+      cache: 'no-store',
+    });
+    return response.status === 204;
+  } catch (error) {
+    console.warn('Unable to check saved auth session.', error);
+    return false;
+  }
+}
+
+async function autoConnectFromSavedSessionCookie(): Promise<void> {
+  if (state.running || mediaSession.isConnecting()) {
+    return;
+  }
+  const hasCookie = await hasValidAuthSessionCookie();
+  authController.setSavedSessionCookieAvailable(hasCookie);
+  if (!hasCookie || state.running || mediaSession.isConnecting()) {
+    return;
+  }
+  setConnectionStatus('Restoring saved session...');
+  await connect();
+}
+
 /** Starts peer negotiation only after welcome + media setup sequencing is complete. */
 async function activatePeerNegotiation(): Promise<void> {
   if (!state.running) return;
@@ -1559,14 +3022,26 @@ async function activatePeerNegotiation(): Promise<void> {
   }
 }
 
+/** Drops stale voice/media runtimes so reconnects rebuild full streams cleanly. */
+function resetRealtimeStreamsForReconnect(): void {
+  peerNegotiationReady = false;
+  pendingSignalMessages = [];
+  peerManager.cleanupAll();
+  radioRuntime.resetPlaybackRecovery();
+  itemEmitRuntime.resetPlaybackRecovery();
+}
+
 const onAppMessage = createOnMessageHandler({
   getWorldGridSize: () => worldGridSize,
+  getCurrentLocationId: () => currentLocationId,
   setWorldGridSize: (size) => {
     worldGridSize = size;
   },
   setMovementTickMs: (value) => {
     movementTickMs = Math.max(1, value);
   },
+  setWorldLocations,
+  setCurrentLocation,
   setConnecting: (value) => {
     mediaSession.setConnecting(value);
     updateConnectAvailability();
@@ -1581,21 +3056,43 @@ const onAppMessage = createOnMessageHandler({
   cleanupItemAudio: (itemId) => {
     radioRuntime.cleanup(itemId);
     itemEmitRuntime.cleanup(itemId);
+    billboardRuntime.cleanup(itemId);
   },
   applyAudioLayerState,
+  syncLocationAmbience,
   gameLoop,
   sanitizeName,
-  randomFootstepUrl,
-  playRemoteSpatialStepOrTeleport: (url, peerX, peerY) => {
+  randomFootstepCue,
+  playRemoteSpatialStepOrTeleport: (cue, peerX, peerY) => {
+    const listenerPosition = getListenerPosition();
+    const url = typeof cue === 'string' ? cue : cue.url;
     const gain = url === TELEPORT_START_SOUND_URL ? TELEPORT_START_GAIN : FOOTSTEP_GAIN;
+    const playbackRate = typeof cue === 'string' ? 1 : cue.playbackRate;
     void audio.playSpatialSample(
       url,
       { x: peerX, y: peerY },
-      { x: state.player.x, y: state.player.y },
-      gain,
+      listenerPosition,
+      typeof cue === 'string' ? gain : cue.gain,
+      undefined,
+      playbackRate,
     );
+    if (typeof cue !== 'string') {
+      audio.playStepSignature({
+        identity: cue.identity,
+        nickname: cue.nickname,
+        sourcePosition: { x: peerX, y: peerY },
+        playerPosition: listenerPosition,
+        range: HEARING_RADIUS,
+      });
+    }
   },
+  narrateLocationArrival,
+  narrateRemoteMovement,
   handleItemActionResultStatus: (message) => itemBehaviorRegistry.onActionResultStatus(message),
+  handleInteractiveItemLaunch: openInteractiveItem,
+  handleGameLaunchInvite: openGameLaunchInvite,
+  handleDoorTransitionArrival,
+  handleDoorTransitionUseResult,
   handleItemBehaviorIncomingMessage: (message) => itemBehaviorRegistry.onIncomingMessage(message),
   handleItemBehaviorPeerLeft: (senderId) => itemBehaviorRegistry.onPeerLeft(senderId),
   TELEPORT_SOUND_URL,
@@ -1618,12 +3115,23 @@ const onAppMessage = createOnMessageHandler({
   getItemPropertyValue,
   getItemById: (itemId) => state.items.get(itemId),
   shouldAnnounceItemPropertyEcho: () => Date.now() >= suppressItemPropertyEchoUntilMs,
-  playLocateToneAt: (x, y) => audio.sfxLocate({ x: x - state.player.x, y: y - state.player.y }),
+  playLocateToneAt: (x, y) => {
+    const listenerPosition = getListenerPosition();
+    audio.sfxLocate({ x: x - listenerPosition.x, y: y - listenerPosition.y });
+  },
   resolveIncomingSoundUrl,
   playIncomingItemUseSound: (url, x, y, range) => {
-    void audio.playSpatialSample(url, { x, y }, { x: state.player.x, y: state.player.y }, 1, range ?? HEARING_RADIUS);
+    const listenerPosition = getListenerPosition();
+    void audio.playSpatialSample(url, { x, y }, listenerPosition, 1, range ?? HEARING_RADIUS);
+    if (/\/sounds\/spin\.ogg(?:[?#].*)?$/i.test(url)) {
+      audio.playSpatialWheelFlourish({ x, y }, listenerPosition, range ?? HEARING_RADIUS);
+    }
   },
   playClockAnnouncement: (sounds, x, y, range) => {
+    if (sounds.length === 0) {
+      void audio.playSpatialSample(ACTION_SOUND_URL, { x, y }, getListenerPosition(), 0.72, range ?? HEARING_RADIUS);
+      return;
+    }
     void clockAnnouncer.playSequence(sounds.map(resolveIncomingSoundUrl), x, y, range);
   },
   handleAuthRequired,
@@ -1631,7 +3139,10 @@ const onAppMessage = createOnMessageHandler({
   handleAuthPermissions,
   handleAdminRolesList,
   handleAdminUsersList,
+  handleAdminPlatformOverview,
+  handleAdminNotificationsList,
   handleAdminActionResult,
+  handleNtfyPreferences,
   handleItemTransferTargets,
   isPeerNegotiationReady: () => peerNegotiationReady,
   enqueuePendingSignal: (message) => {
@@ -1680,11 +3191,15 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
       restartAnnouncement = 'Server restarted.';
     }
     activeServerInstanceId = incomingInstanceId;
+    if (reconnectInFlight || state.running) {
+      resetRealtimeStreamsForReconnect();
+    }
+    signaling.send({ type: 'welcome_ready' });
     startHeartbeat();
   }
   await onAppMessage(message);
   if (message.type === 'welcome') {
-    signaling.send({ type: 'welcome_ready' });
+    flushQueuedChatMessages();
     await setupMediaAfterAuth();
     if (playSelfLoginSound) {
       void audio.playSample(SYSTEM_SOUND_URLS.logon, 1);
@@ -1727,6 +3242,8 @@ async function setupMediaAfterAuth(): Promise<void> {
     setConnectionStatus(describeMediaError(error));
   } finally {
     await activatePeerNegotiation();
+    await refreshAudioSubscriptions(true);
+    await applyAudioLayerState();
   }
 }
 
@@ -1743,7 +3260,7 @@ function toggleMute(): void {
 }
 
 function getCurrentSquareItems(): WorldItem[] {
-  return getItemsAtPosition(state.player.x, state.player.y);
+  return getItemsAtPosition(state.player.x, state.player.y, true);
 }
 
 function getUsableItemsOnCurrentSquare(): WorldItem[] {
@@ -1812,6 +3329,24 @@ function speakCoordinatesCommand(): void {
   audio.sfxUiBlip();
 }
 
+function formatLocationOption(location: WorldLocationOption): string {
+  const here = location.id === currentLocationId ? ', current location' : '';
+  return `${location.name}${here}. ${location.description}`;
+}
+
+function listLocationsCommand(): void {
+  if (worldLocationOptions.length === 0) {
+    updateStatus('No locations available.');
+    audio.sfxUiCancel();
+    return;
+  }
+  const currentIndex = worldLocationOptions.findIndex((location) => location.id === currentLocationId);
+  state.itemListIndex = Math.max(0, currentIndex);
+  state.mode = 'listLocations';
+  const locationCount = worldLocationOptions.length;
+  announceMenuEntry(`${locationCount} ${locationCount === 1 ? 'location' : 'locations'}`, formatLocationOption(worldLocationOptions[state.itemListIndex]));
+}
+
 function openMicGainEditCommand(): void {
   if (!authController.getVoiceSendAllowed()) {
     updateStatus('Voice send is disabled for this account.');
@@ -1841,12 +3376,29 @@ function openAdminMenuCommand(): void {
 }
 
 function useItemCommand(): void {
+  if (state.player.posture !== 'standing' && state.player.seatedItemId) {
+    const seat = state.items.get(state.player.seatedItemId);
+    if (seat) {
+      useItem(seat);
+      return;
+    }
+  }
+  const focused = getFocusedActionItem();
+  if (focused) {
+    useItem(focused);
+    return;
+  }
   const carried = getCarriedItem();
   if (carried) {
     useItem(carried);
     return;
   }
   const usable = getUsableItemsOnCurrentSquare();
+  const nearestSeat = getNearestSeatableItem();
+  if (nearestSeat && !usable.some((item) => item.id === nearestSeat.id)) {
+    useItem(nearestSeat);
+    return;
+  }
   if (usable.length === 0) {
     updateStatus('No usable items here.');
     audio.sfxUiCancel();
@@ -1860,6 +3412,11 @@ function useItemCommand(): void {
 }
 
 function secondaryUseItemCommand(): void {
+  const focused = getFocusedActionItem();
+  if (focused) {
+    secondaryUseItem(focused);
+    return;
+  }
   const carried = getCarriedItem();
   if (carried) {
     secondaryUseItem(carried);
@@ -1876,6 +3433,28 @@ function secondaryUseItemCommand(): void {
     return;
   }
   beginItemSelection('secondaryUse', usable);
+}
+
+function radioRemoteControlCommand(action: 'station_next' | 'station_previous' | 'volume_up' | 'volume_down'): void {
+  const remote = getCarriedMediaRemote();
+  if (!remote) {
+    updateStatus('Hold a radio or TV remote first.');
+    audio.sfxUiCancel();
+    return;
+  }
+  const labelByAction = {
+    station_next: 'next station',
+    station_previous: 'previous station',
+    volume_up: 'volume up',
+    volume_down: 'volume down',
+  } as const;
+  updateStatus(`${remote.kind === 'tv' ? 'TV' : 'Radio'} remote ${labelByAction[action]}.`);
+  if (action === 'station_next' || action === 'station_previous') {
+    audio.sfxDevicePresetButton();
+  } else {
+    audio.sfxDeviceKeypad();
+  }
+  signaling.send({ type: 'item_remote_control', itemId: remote.item.id, action });
 }
 
 function speakUsersCommand(): void {
@@ -1899,7 +3478,7 @@ function addItemCommand(): void {
 
 function listItemsCommand(): void {
   state.sortedItemIds = Array.from(state.items.entries())
-    .filter(([, item]) => !item.carrierId)
+    .filter(([, item]) => !item.carrierId && !isItemQuiet(item))
     .sort(
       (a, b) =>
         Math.hypot(a[1].x - state.player.x, a[1].y - state.player.y) -
@@ -1911,10 +3490,11 @@ function listItemsCommand(): void {
     audio.sfxUiCancel();
     return;
   }
-  state.itemListIndex = 0;
+  const preferredIndex = state.focusedItemId ? state.sortedItemIds.indexOf(state.focusedItemId) : -1;
+  state.itemListIndex = preferredIndex >= 0 ? preferredIndex : 0;
   state.mode = 'listItems';
-  const first = state.items.get(state.sortedItemIds[0]);
-  if (!first) {
+  const selected = state.items.get(state.sortedItemIds[state.itemListIndex]);
+  if (!selected) {
     audio.sfxUiCancel();
     return;
   }
@@ -1922,7 +3502,7 @@ function listItemsCommand(): void {
   const itemLabelText = itemCount === 1 ? 'item' : 'items';
   announceMenuEntry(
     `${itemCount} ${itemLabelText}`,
-    `${itemLabel(first)}, ${distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y)}, ${first.x}, ${first.y}`,
+    `${itemLabel(selected)}, ${distanceDirectionPhrase(state.player.x, state.player.y, selected.x, selected.y)}, ${selected.x}, ${selected.y}`,
   );
 }
 
@@ -1935,14 +3515,62 @@ function locateNearestItemCommand(): void {
   }
   const item = state.items.get(nearest.itemId);
   if (!item) return;
-  audio.sfxLocate({ x: item.x - state.player.x, y: item.y - state.player.y });
+  focusItemForAction(item);
+  audio.sfxLocate({ x: item.x - state.player.x, y: item.y - state.player.y }, HEARING_RADIUS);
   updateStatus(`${itemLabel(item)}, ${distanceDirectionPhrase(state.player.x, state.player.y, item.x, item.y)}, ${item.x}, ${item.y}`);
 }
 
-function pickupDropItemCommand(): void {
+/** Plays a gentle proximity beacon for nearby discoverable items when enabled. */
+function updateItemBeacon(): void {
+  if (!audioLayers.item) return;
+  const nowMs = Date.now();
+  const tileKey = `${Math.round(state.player.x)},${Math.round(state.player.y)}`;
+  let nearest: { item: WorldItem; distance: number } | null = null;
+  for (const item of state.items.values()) {
+    if (!shouldBeaconItem(item)) continue;
+    const distance = Math.hypot(item.x - state.player.x, item.y - state.player.y);
+    if (distance > ITEM_BEACON_RADIUS) continue;
+    if (!nearest || distance < nearest.distance) {
+      nearest = { item, distance };
+    }
+  }
+  if (!nearest) {
+    lastItemBeaconTile = tileKey;
+    lastItemBeaconItemId = '';
+    return;
+  }
+  const required = isItemAnnouncementRequired(nearest.item);
+  const interval = required ? Math.floor(ITEM_BEACON_INTERVAL_MS * 0.75) : ITEM_BEACON_INTERVAL_MS;
+  if (
+    lastItemBeaconTile === tileKey &&
+    lastItemBeaconItemId === nearest.item.id &&
+    nowMs - lastItemBeaconAtMs < interval
+  ) {
+    return;
+  }
+  lastItemBeaconTile = tileKey;
+  lastItemBeaconItemId = nearest.item.id;
+  lastItemBeaconAtMs = nowMs;
+  audio.sfxItemBeacon({ x: nearest.item.x - state.player.x, y: nearest.item.y - state.player.y }, ITEM_BEACON_RADIUS);
+}
+
+function pickupDropItemCommand(moveAttached = false): void {
   const carried = getCarriedItem();
   if (carried) {
-    signaling.send({ type: 'item_drop', itemId: carried.id, x: state.player.x, y: state.player.y });
+    const surface = isSurfacePlaceableItem(carried) ? getAutomaticPlacementSurface() : null;
+    if (surface && !moveAttached) {
+      updateStatus(`You place ${itemLabel(carried)} on ${itemLabel(surface)}.`);
+      focusItemForAction(surface);
+      signaling.send({
+        type: 'item_interact',
+        itemId: carried.id,
+        targetItemId: surface.id,
+        action: 'place_on',
+      });
+      return;
+    }
+    focusItemForAction(carried);
+    signaling.send({ type: 'item_drop', itemId: carried.id, x: state.player.x, y: state.player.y, moveAttached: true });
     return;
   }
   const squareItems = getCurrentSquareItems();
@@ -1952,10 +3580,15 @@ function pickupDropItemCommand(): void {
     return;
   }
   if (squareItems.length === 1) {
-    signaling.send({ type: 'item_pickup', itemId: squareItems[0].id });
+    focusItemForAction(squareItems[0]);
+    signaling.send({ type: 'item_pickup', itemId: squareItems[0].id, moveAttached });
     return;
   }
   beginItemSelection('pickup', squareItems);
+}
+
+function pickupDropAttachedItemsCommand(): void {
+  pickupDropItemCommand(true);
 }
 
 function openItemManagementCommand(): void {
@@ -2039,10 +3672,7 @@ function listUsersCommand(): void {
   const userCount = state.sortedPeerIds.length;
   const userLabelText = userCount === 1 ? 'user' : 'users';
   const gainPhrase = `volume ${formatSteppedNumber(getPeerListenGainForNickname(first.nickname), MIC_INPUT_GAIN_STEP)}`;
-  announceMenuEntry(
-    `${userCount} ${userLabelText}`,
-    `${first.nickname}, ${gainPhrase}, ${distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y)}, ${first.x}, ${first.y}`,
-  );
+  announceMenuEntry(`${userCount} ${userLabelText}`, `${first.nickname}, ${gainPhrase}, ${peerLocationPhrase(first)}`);
 }
 
 function locateNearestUserCommand(): void {
@@ -2054,8 +3684,12 @@ function locateNearestUserCommand(): void {
   }
   const peer = state.peers.get(nearest.peerId);
   if (!peer) return;
-  audio.sfxLocate({ x: peer.x - state.player.x, y: peer.y - state.player.y });
-  updateStatus(`${peer.nickname}, ${distanceDirectionPhrase(state.player.x, state.player.y, peer.x, peer.y)}, ${peer.x}, ${peer.y}`);
+  if ((peer.locationId || currentLocationId) === currentLocationId) {
+    audio.sfxLocate({ x: peer.x - state.player.x, y: peer.y - state.player.y });
+  } else {
+    audio.sfxUiBlip();
+  }
+  updateStatus(`${peer.nickname}, ${peerLocationPhrase(peer)}`);
 }
 
 function openHelpCommand(): void {
@@ -2066,9 +3700,110 @@ function openChatCommand(): void {
   state.mode = 'chat';
   state.nicknameInput = '';
   state.cursorPos = 0;
+  state.directMessageTargetId = null;
+  state.directMessageTargetName = null;
   replaceTextOnNextType = false;
-  updateStatus('Chat.');
+  updateStatus('Room chat.');
   audio.sfxUiBlip();
+}
+
+function getSelectedOrNearestPeer(): PeerState | null {
+  const selectedPeerId =
+    state.mode === 'listUsers' && state.sortedPeerIds.length > 0
+      ? state.sortedPeerIds[state.listIndex] || null
+      : null;
+  const selectedPeer = selectedPeerId ? state.peers.get(selectedPeerId) : null;
+  if (selectedPeer) {
+    return selectedPeer;
+  }
+  const nearest = getNearestPeer(state);
+  const nearestPeer = nearest.peerId ? state.peers.get(nearest.peerId) : null;
+  return nearestPeer ?? null;
+}
+
+function openDirectMessageCommand(): void {
+  const target = getSelectedOrNearestPeer();
+  if (!target) {
+    updateStatus('No user to message.');
+    audio.sfxUiCancel();
+    return;
+  }
+  state.mode = 'chat';
+  state.nicknameInput = '';
+  state.cursorPos = 0;
+  state.directMessageTargetId = target.id;
+  state.directMessageTargetName = target.nickname;
+  replaceTextOnNextType = false;
+  updateStatus(`Direct message to ${target.nickname}.`);
+  audio.sfxUiBlip();
+}
+
+function formatUserActionOption(option: UserActionOption, target: PeerState): string {
+  return `${option.label} ${target.nickname}, ${peerLocationPhrase(target)}`;
+}
+
+function availableUserActionOptions(target: PeerState): UserActionOption[] {
+  return USER_ACTION_OPTIONS.filter((option) => {
+    if (option.id !== 'release_hand') return true;
+    return state.player.handHeldById === target.id;
+  });
+}
+
+function getUserActionTarget(): PeerState | null {
+  if (userActionTargetId) {
+    const target = state.peers.get(userActionTargetId);
+    if (target) return target;
+  }
+  return getSelectedOrNearestPeer();
+}
+
+function openUserActionMenuCommand(): void {
+  const focused = getFocusedActionItem();
+  if (focused) {
+    secondaryUseItem(focused);
+    return;
+  }
+  const target = getSelectedOrNearestPeer();
+  if (!target) {
+    secondaryUseItemCommand();
+    return;
+  }
+  userActionTargetId = target.id;
+  userActionMenuIndex = 0;
+  state.mode = 'userActionMenu';
+  const options = availableUserActionOptions(target);
+  announceMenuEntry('User actions', formatUserActionOption(options[userActionMenuIndex] ?? options[0], target));
+}
+
+function runUserAction(option: UserActionOption, target: PeerState): void {
+  state.mode = 'normal';
+  userActionTargetId = null;
+  if (option.id === 'walk_to') {
+    signaling.send({ type: 'chat_message', message: `/walkto ${target.nickname}` });
+    return;
+  }
+  if (option.id === 'teleport_to') {
+    signaling.send({ type: 'chat_message', message: `/teleportto ${target.nickname}` });
+    return;
+  }
+  if (option.id === 'direct_message') {
+    state.mode = 'chat';
+    state.nicknameInput = '';
+    state.cursorPos = 0;
+    state.directMessageTargetId = target.id;
+    state.directMessageTargetName = target.nickname;
+    replaceTextOnNextType = false;
+    updateStatus(`Direct message to ${target.nickname}.`);
+    audio.sfxUiBlip();
+    return;
+  }
+  signaling.send({ type: 'user_action', actionId: option.id, targetId: target.id });
+}
+
+function runDynamicUserAction(target: PeerState): void {
+  const candidates = availableUserActionOptions(target).filter((option) => DYNAMIC_USER_ACTION_IDS.includes(option.id));
+  const selected = candidates[Math.floor(Math.random() * candidates.length)] || USER_ACTION_OPTIONS[0];
+  runUserAction(selected, target);
 }
 
 function escapeCommand(): void {
@@ -2091,6 +3826,8 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   toggleItemLayer: () => toggleAudioLayer('item'),
   toggleMediaLayer: () => toggleAudioLayer('media'),
   toggleWorldLayer: () => toggleAudioLayer('world'),
+  cycleAnnouncementMode: cycleAnnouncementModeCommand,
+  toggleItemBeacons: toggleItemBeaconsCommand,
   masterVolumeUp: () => adjustMasterVolumeCommand(5),
   masterVolumeDown: () => adjustMasterVolumeCommand(-5),
   openEffectSelect: openEffectSelectCommand,
@@ -2099,21 +3836,31 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   speakCoordinates: speakCoordinatesCommand,
   openMicGainEdit: openMicGainEditCommand,
   calibrateMicrophone: calibrateMicrophoneCommand,
+  cycleFocusedItem: () => cycleFocusedItemCommand(false),
   useItem: useItemCommand,
   secondaryUseItem: secondaryUseItemCommand,
+  radioRemoteStationNext: () => radioRemoteControlCommand('station_next'),
+  radioRemoteStationPrevious: () => radioRemoteControlCommand('station_previous'),
+  radioRemoteVolumeUp: () => radioRemoteControlCommand('volume_up'),
+  radioRemoteVolumeDown: () => radioRemoteControlCommand('volume_down'),
+  openUserActionMenu: openUserActionMenuCommand,
+  interactItem: interactItemCommand,
   speakUsers: speakUsersCommand,
   addItem: addItemCommand,
   locateNearestItem: locateNearestItemCommand,
   listItems: listItemsCommand,
   pickupDropItem: pickupDropItemCommand,
+  pickupDropAttachedItems: pickupDropAttachedItemsCommand,
   openItemManagement: openItemManagementCommand,
   editItem: editItemCommand,
   inspectItem: inspectItemCommand,
   pingServer: pingServerCommand,
   locateNearestUser: locateNearestUserCommand,
   listUsers: listUsersCommand,
+  listLocations: listLocationsCommand,
   openHelp: openHelpCommand,
   openChat: openChatCommand,
+  openDirectMessage: openDirectMessageCommand,
   openAdminMenu: openAdminMenuCommand,
   chatPrev: () => navigateChatBuffer('prev'),
   chatNext: () => navigateChatBuffer('next'),
@@ -2131,13 +3878,17 @@ function getAvailableCommandPaletteEntriesForMode(mode: GameMode): Array<Command
       itemTypeCount: getItemTypeSequence().length,
       visibleItemCount: Array.from(state.items.values()).filter((item) => !item.carrierId).length,
       userCount: state.peers.size,
+      hasDirectMessageTarget: state.peers.size > 0,
+      locationCount: worldLocationOptions.length,
       chatMessageCount: messageBuffer.length,
       hasCarriedItem: Boolean(getCarriedItem()),
+      hasCarriedRadioRemote: Boolean(getCarriedRadioRemote()),
       squareItemCount: getCurrentSquareItems().length,
       usableItemCount: getUsableItemsOnCurrentSquare().length,
       manageableItemCount: getManageableItemsOnCurrentSquare().length,
       hasEditableItemTarget: canEditCurrentItem(),
       hasInspectableItemTarget: canInspectCurrentItem(),
+      hasFocusedUserTarget: state.peers.size > 0 || Boolean(getCarriedItem()) || getUsableItemsOnCurrentSquare().length > 0,
     });
     return descriptors.map((descriptor) => ({
       ...descriptor,
@@ -2187,11 +3938,53 @@ function executeCommandPaletteSelection(): void {
 }
 
 /** Handles command-mode keybindings while in main gameplay mode. */
-function handleNormalModeInput(code: string, shiftKey: boolean): void {
+function handleNormalModeInput(code: string, shiftKey: boolean, ctrlKey: boolean): void {
   if (code !== 'Escape' && pendingEscapeDisconnect) {
     pendingEscapeDisconnect = false;
   }
-  const command = resolveMainModeCommand(code, shiftKey);
+  if (ctrlKey && shiftKey && (code === 'KeyJ' || code === 'KeyK')) {
+    moveFocusedSurfaceItemCommand(code === 'KeyJ' ? 'left' : 'right');
+    return;
+  }
+  if (getCarriedRadioRemote()) {
+    if (code === 'Tab') {
+      cycleFocusedItemCommand(shiftKey);
+      return;
+    }
+    if (code === 'Space') {
+      radioRemoteControlCommand(shiftKey ? 'station_previous' : 'station_next');
+      return;
+    }
+    if (code === 'ArrowRight') {
+      radioRemoteControlCommand('station_next');
+      return;
+    }
+    if (code === 'ArrowLeft') {
+      radioRemoteControlCommand('station_previous');
+      return;
+    }
+    if (code === 'ArrowUp') {
+      radioRemoteControlCommand('volume_up');
+      return;
+    }
+    if (code === 'ArrowDown') {
+      radioRemoteControlCommand('volume_down');
+      return;
+    }
+    if (code === 'Period') {
+      radioRemoteControlCommand('station_next');
+      return;
+    }
+    if (code === 'Comma') {
+      radioRemoteControlCommand('station_previous');
+      return;
+    }
+  }
+  if (code === 'Tab') {
+    cycleFocusedItemCommand(shiftKey);
+    return;
+  }
+  const command = resolveMainModeCommand(code, shiftKey, ctrlKey);
   if (!command) return;
   mainModeCommandHandlers[command]();
 }
@@ -2275,10 +4068,12 @@ function handleChatModeInput(code: string, key: string, ctrlKey: boolean): void 
   if (editAction === 'submit') {
     const rawMessage = state.nicknameInput;
     if (rawMessage.trim().length > 0) {
-      signaling.send({ type: 'chat_message', message: rawMessage });
+      sendOrQueueChatMessage(rawMessage);
       state.mode = 'normal';
       state.nicknameInput = '';
       state.cursorPos = 0;
+      state.directMessageTargetId = null;
+      state.directMessageTargetName = null;
       if (!/^\/me(?:\s|$)/i.test(rawMessage)) {
         audio.sfxUiConfirm();
       }
@@ -2294,6 +4089,8 @@ function handleChatModeInput(code: string, key: string, ctrlKey: boolean): void 
     state.mode = 'normal';
     state.nicknameInput = '';
     state.cursorPos = 0;
+    state.directMessageTargetId = null;
+    state.directMessageTargetName = null;
     updateStatus('Cancelled.');
     audio.sfxUiCancel();
     return;
@@ -2424,9 +4221,7 @@ function handleListModeInput(code: string, key: string): void {
     const entry = state.peers.get(state.sortedPeerIds[state.listIndex]);
     if (!entry) return;
     const gainPhrase = `volume ${formatSteppedNumber(getPeerListenGainForNickname(entry.nickname), MIC_INPUT_GAIN_STEP)}`;
-    updateStatus(
-      `${entry.nickname}, ${gainPhrase}, ${distanceDirectionPhrase(state.player.x, state.player.y, entry.x, entry.y)}, ${entry.x}, ${entry.y}`,
-    );
+    updateStatus(`${entry.nickname}, ${gainPhrase}, ${peerLocationPhrase(entry)}`);
     if (control.reason === 'initial') {
       audio.sfxUiBlip();
     }
@@ -2436,6 +4231,12 @@ function handleListModeInput(code: string, key: string): void {
   if (control.type === 'select') {
     const entry = state.peers.get(state.sortedPeerIds[state.listIndex]);
     if (!entry) return;
+    const entryLocationId = entry.locationId || currentLocationId;
+    if (entryLocationId !== currentLocationId) {
+      updateStatus(`${entry.nickname} is ${peerLocationPhrase(entry)}.`);
+      audio.sfxUiBlip();
+      return;
+    }
     if (state.player.x === entry.x && state.player.y === entry.y) {
       updateStatus('Already here.');
       return;
@@ -2448,6 +4249,50 @@ function handleListModeInput(code: string, key: string): void {
   if (control.type === 'cancel') {
     state.mode = 'normal';
     updateStatus('Exit list mode.');
+    audio.sfxUiCancel();
+  }
+}
+
+/** Handles contextual actions toward the selected, focused, or nearest user. */
+function handleUserActionMenuModeInput(code: string, key: string): void {
+  const target = getUserActionTarget();
+  if (!target) {
+    state.mode = 'normal';
+    userActionTargetId = null;
+    updateStatus('User no longer available.');
+    audio.sfxUiCancel();
+    return;
+  }
+
+  const options = availableUserActionOptions(target);
+  if (userActionMenuIndex >= options.length) {
+    userActionMenuIndex = Math.max(0, options.length - 1);
+  }
+  const control = handleListControlKey(code, key, options, userActionMenuIndex, (option) =>
+    formatUserActionOption(option, target),
+  );
+  if (control.type === 'move') {
+    userActionMenuIndex = control.index;
+    updateStatus(formatUserActionOption(options[userActionMenuIndex], target));
+    if (control.reason === 'initial') {
+      audio.sfxUiBlip();
+    }
+    return;
+  }
+  if (code === 'Space') {
+    runDynamicUserAction(target);
+    return;
+  }
+  if (control.type === 'select') {
+    const selected = options[userActionMenuIndex];
+    if (!selected) return;
+    runUserAction(selected, target);
+    return;
+  }
+  if (control.type === 'cancel') {
+    state.mode = 'normal';
+    userActionTargetId = null;
+    updateStatus('Exit user actions.');
     audio.sfxUiCancel();
   }
 }
@@ -2478,6 +4323,7 @@ function handleListItemsModeInput(code: string, key: string): void {
   if (control.type === 'select') {
     const item = state.items.get(state.sortedItemIds[state.itemListIndex]);
     if (!item) return;
+    focusItemForAction(item);
     if (state.player.x === item.x && state.player.y === item.y) {
       updateStatus('Already here.');
       return;
@@ -2489,6 +4335,43 @@ function handleListItemsModeInput(code: string, key: string): void {
   if (control.type === 'cancel') {
     state.mode = 'normal';
     updateStatus('Exit item list mode.');
+    audio.sfxUiCancel();
+  }
+}
+
+/** Handles location list navigation and travel-on-select. */
+function handleLocationListModeInput(code: string, key: string): void {
+  if (worldLocationOptions.length === 0) {
+    state.mode = 'normal';
+    return;
+  }
+
+  const control = handleListControlKey(code, key, worldLocationOptions, state.itemListIndex, (location) => location.name);
+  if (control.type === 'move') {
+    state.itemListIndex = control.index;
+    updateStatus(formatLocationOption(worldLocationOptions[state.itemListIndex]));
+    if (control.reason === 'initial') {
+      audio.sfxUiBlip();
+    }
+    return;
+  }
+  if (control.type === 'select') {
+    const location = worldLocationOptions[state.itemListIndex];
+    if (!location) return;
+    if (location.id === currentLocationId) {
+      updateStatus(currentLocationName ? `Already in ${currentLocationName}.` : 'Already here.');
+      audio.sfxUiBlip();
+      return;
+    }
+    state.mode = 'normal';
+    updateStatus(`You head toward ${location.name}.`);
+    audio.sfxUiConfirm();
+    signaling.send({ type: 'change_location', locationId: location.id });
+    return;
+  }
+  if (control.type === 'cancel') {
+    state.mode = 'normal';
+    updateStatus('Exit location list mode.');
     audio.sfxUiCancel();
   }
 }
@@ -2529,8 +4412,8 @@ function handleAddItemModeInput(code: string, key: string): void {
 }
 
 /** Handles generic selected-item list flow used by pickup/delete/edit/use/inspect contexts. */
-function handleSelectItemModeInput(code: string, key: string): void {
-  itemInteractionController.handleSelectItemModeInput(code, key);
+function handleSelectItemModeInput(code: string, key: string, shiftKey = false): void {
+  itemInteractionController.handleSelectItemModeInput(code, key, shiftKey);
 }
 
 /** Handles item-management action menu (`z`) for the selected square item. */
@@ -2594,7 +4477,7 @@ const itemPropertyEditor = createItemPropertyEditor({
   getItemPropertyValue,
   itemPropertyLabel,
   isItemPropertyEditable,
-  getItemPropertyOptionValues,
+  getItemPropertyOptionValues: getItemPropertyOptionsForItem,
   openItemPropertyOptionSelect,
   describeItemPropertyHelp,
   getItemPropertyMetadata,
@@ -2661,9 +4544,12 @@ function handleModeInput(input: ModeInput): void {
       effectSelect: ({ code: currentCode, key: currentKey }) => handleEffectSelectModeInput(currentCode, currentKey),
       helpView: ({ code: currentCode }) => handleHelpViewModeInput(currentCode),
       listUsers: ({ code: currentCode, key: currentKey }) => handleListModeInput(currentCode, currentKey),
+      userActionMenu: ({ code: currentCode, key: currentKey }) => handleUserActionMenuModeInput(currentCode, currentKey),
       listItems: ({ code: currentCode, key: currentKey }) => handleListItemsModeInput(currentCode, currentKey),
+      listLocations: ({ code: currentCode, key: currentKey }) => handleLocationListModeInput(currentCode, currentKey),
       addItem: ({ code: currentCode, key: currentKey }) => handleAddItemModeInput(currentCode, currentKey),
-      selectItem: ({ code: currentCode, key: currentKey }) => handleSelectItemModeInput(currentCode, currentKey),
+      selectItem: ({ code: currentCode, key: currentKey, shiftKey: currentShiftKey }) =>
+        handleSelectItemModeInput(currentCode, currentKey, currentShiftKey),
       itemManageOptions: ({ code: currentCode, key: currentKey }) => handleItemManageOptionsModeInput(currentCode, currentKey),
       itemManageTransferUser: ({ code: currentCode, key: currentKey }) =>
         handleItemManageTransferUserModeInput(currentCode, currentKey),
@@ -2699,9 +4585,21 @@ async function populateAudioDevices(): Promise<void> {
 function openSettings(): void {
   lastFocusedElement = document.activeElement;
   dom.settingsModal.classList.remove('hidden');
+  syncAnnouncementSettingsControls();
   void populateAudioDevices();
+  if (state.running) signaling.send({ type: 'ntfy_preferences_get' });
   dom.audioInputSelect.focus();
 }
+
+dom.ntfyNotificationsToggle.addEventListener('change', () => {
+  signaling.send({ type: 'ntfy_preferences_update', enabled: dom.ntfyNotificationsToggle.checked });
+  dom.ntfyNotificationsStatus.textContent = 'Saving ntfy notification settings...';
+});
+
+dom.rotateNtfyTopicButton.addEventListener('click', () => {
+  signaling.send({ type: 'ntfy_preferences_update', enabled: true, rotateTopic: true });
+  dom.ntfyNotificationsStatus.textContent = 'Replacing the private ntfy topic...';
+});
 
 /** Closes settings modal and restores focus back to prior element or game canvas. */
 function closeSettings(): void {
@@ -2737,6 +4635,31 @@ setupKeyboardInputHandlers({
   setReplaceTextOnNextType: (value) => {
     replaceTextOnNextType = value;
   },
+  closeInteractiveItem,
+});
+
+dom.readGuideButton.addEventListener('click', () => {
+  if (joinGuideReaderActive) {
+    closeJoinGuideReader();
+    return;
+  }
+  openJoinGuideReader();
+});
+
+document.addEventListener('keydown', handleJoinGuideReaderKey);
+
+midiControllerHandle = setupMidiInputHandlers({
+  button: dom.midiButton,
+  state,
+  handleMidiNoteOn: (mode, midi, velocity) => itemBehaviorRegistry.handleMidiNoteOn(mode, midi, velocity),
+  handleMidiNoteOff: (mode, midi) => itemBehaviorRegistry.handleMidiNoteOff(mode, midi),
+  updateStatus,
+  sfxUiBlip: () => audio.sfxUiBlip(),
+  sfxUiCancel: () => audio.sfxUiCancel(),
+});
+
+dom.interactiveItemCloseButton.addEventListener('click', () => {
+  closeInteractiveItem();
 });
 setupDomUiHandlers({
   dom,
@@ -2756,19 +4679,27 @@ setupDomUiHandlers({
   },
   updateDeviceSummary,
   setOutputDevice: (id) => peerManager.setOutputDevice(id),
+  setAnnouncementMode,
+  setItemBeacons,
 });
 authController.setupUiHandlers({
   connect,
 });
 authController.initializeUi();
 updateDeviceSummary();
+syncAnnouncementSettingsControls();
 setConnectionStatus(
-  isVersionReloadedSession()
-    ? 'Client updated, please reconnect.'
+  STARTED_FROM_VERSION_RELOAD
+    ? 'Client updated. Reconnecting...'
     : activeWelcomeMessage,
 );
-if (initialExternalAuthAssertion) {
+if (STARTED_FROM_VERSION_RELOAD) {
+  clearVersionReloadMarker();
+}
+if (STARTED_FROM_VERSION_RELOAD || initialExternalAuthAssertion || initialAuthUsername.trim().length > 0) {
   window.setTimeout(() => {
     void connect();
   }, 0);
+} else {
+  void autoConnectFromSavedSessionCookie();
 }
