@@ -1,5 +1,5 @@
 #define MyAppName "Chat Grid"
-#define MyAppVersion "0.3.6"
+#define MyAppVersion "0.3.7"
 #define MyAppPublisher "Raywonder / TappedIn"
 #define MyAppExeName "ChatGrid.exe"
 
@@ -11,7 +11,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\Chat Grid
 DefaultGroupName=Chat Grid
 OutputDir=..\release
-OutputBaseFilename=ChatGridSetup-0.3.6
+OutputBaseFilename=ChatGridSetup-0.3.7
 Compression=lzma2
 SolidCompression=yes
 PrivilegesRequired=lowest

@@ -175,21 +175,13 @@ class MainFrame(wx.Frame):
     def _build_menu(self) -> None:
         menu_bar = wx.MenuBar()
         file_menu = wx.Menu()
-
-        connection_menu = wx.Menu()
-        connection_menu.Append(wx.ID_REFRESH, "&Reconnect\tCtrl+R")
-        file_menu.AppendSubMenu(connection_menu, "&Connection")
-
-        settings_menu = wx.Menu()
-        settings_menu.Append(wx.ID_PREFERENCES, "&Desktop settings...\tCtrl+,")
-        self.audio_settings_id = wx.NewIdRef()
-        settings_menu.Append(self.audio_settings_id, "&Audio setup...")
-        file_menu.AppendSubMenu(settings_menu, "&Settings")
-
-        information_menu = wx.Menu()
-        information_menu.Append(wx.ID_ABOUT, "&Credits and version")
-        file_menu.AppendSubMenu(information_menu, "&Information")
+        file_menu.Append(wx.ID_REFRESH, "&Reconnect\tCtrl+R")
         file_menu.AppendSeparator()
+        file_menu.Append(wx.ID_PREFERENCES, "&Desktop settings...\tCtrl+,")
+        self.audio_settings_id = wx.NewIdRef()
+        file_menu.Append(self.audio_settings_id, "&Audio setup...\tCtrl+Shift+A")
+        file_menu.AppendSeparator()
+        file_menu.Append(wx.ID_ABOUT, "&Credits and version\tCtrl+Shift+C")
         file_menu.Append(wx.ID_EXIT, "E&xit\tAlt+F4")
         menu_bar.Append(file_menu, "&File")
         self.SetMenuBar(menu_bar)
@@ -227,7 +219,7 @@ class MainFrame(wx.Frame):
         self.web.SetFocus()
 
     def _login_default(self, _event: wx.CommandEvent) -> None:
-        self._open_grid("https://blind.software/chatgrid/")
+        self._open_grid("https://blind.software/?route=chatgrid_auth_start")
 
     def _login_domain(self, _event: wx.CommandEvent) -> None:
         try:
@@ -253,7 +245,9 @@ class MainFrame(wx.Frame):
             "(()=>{document.documentElement.classList.add('chatgrid-native');"
             "let style=document.getElementById('chatgridNativeChrome');"
             "if(!style){style=document.createElement('style');style.id='chatgridNativeChrome';"
-            "style.textContent='#settingsButton{display:none!important}';document.head.appendChild(style);}})();"
+            "style.textContent='#gridTitle,#connectionStatus,#authSessionView,#button-container,"
+            "#deviceSummary,#joinGuide,#appFooter{display:none!important}';"
+            "document.head.appendChild(style);}})();"
         )
         self.web.RunScript(spatial_audio_script(self.settings.spatial_audio))
 
