@@ -19,6 +19,7 @@ from .config import APP_ID, APP_NAME, Settings, SettingsStore, app_data_dir
 from .deeplink import resolve_launch_url
 from .reconnect import ReconnectBackoff
 from .screen_reader import ScreenReaderSpeech
+from .spatial_audio import spatial_audio_script
 from .startup import set_start_with_windows
 from .updater import UpdateService
 
@@ -68,6 +69,9 @@ class SettingsDialog(wx.Dialog):
         self.tray = wx.CheckBox(panel, label="Keep me signed in and running in the background when I close the window")
         self.tray.SetValue(settings.keep_in_tray)
         layout.Add(self.tray, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+        self.spatial_audio = wx.CheckBox(panel, label="Use binaural spatial audio for world sounds")
+        self.spatial_audio.SetValue(settings.spatial_audio)
+        layout.Add(self.spatial_audio, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
         layout.Add(buttons, 0, wx.EXPAND | wx.ALL, 8)
         panel.SetSizer(layout)
@@ -82,6 +86,7 @@ class SettingsDialog(wx.Dialog):
         self.settings.start_minimized = self.minimized.GetValue()
         self.settings.auto_connect = self.connect.GetValue()
         self.settings.keep_in_tray = self.tray.GetValue()
+        self.settings.spatial_audio = self.spatial_audio.GetValue()
 
 
 class MainFrame(wx.Frame):
@@ -217,6 +222,7 @@ class MainFrame(wx.Frame):
             "window.chatGridNativeSpeak=(text,options={})=>"
             "window.chrome?.webview?.postMessage(JSON.stringify({type:'speak',text:String(text),interrupt:!!options.interrupt}));"
         )
+        self.web.RunScript(spatial_audio_script(self.settings.spatial_audio))
 
     def _on_script_message(self, event: wx.html2.WebViewEvent) -> None:
         """Accept bounded speech requests only from the approved Chat Grid origin."""

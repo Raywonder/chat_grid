@@ -37,6 +37,7 @@ class Settings:
     keep_in_tray: bool = False
     auto_connect: bool = True
     auto_update: bool = True
+    spatial_audio: bool = True
     update_url: str = DEFAULT_UPDATE_URL
     reconnect_initial_seconds: float = 2.0
     reconnect_max_seconds: float = 60.0

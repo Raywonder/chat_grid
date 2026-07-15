@@ -33,11 +33,11 @@ app = BUNDLE(
     coll,
     name="Chat Grid.app",
     bundle_identifier="fm.tappedin.chatgrid",
-    version="0.3.1",
+    version="0.3.2",
     info_plist={
         "CFBundleDisplayName": "Chat Grid",
-        "CFBundleShortVersionString": "0.3.1",
-        "CFBundleVersion": "0.3.1",
+        "CFBundleShortVersionString": "0.3.2",
+        "CFBundleVersion": "0.3.2",
         "LSMinimumSystemVersion": "14.0",
         "NSHighResolutionCapable": True,
         "CFBundleURLTypes": [{
