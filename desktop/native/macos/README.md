@@ -1,6 +1,6 @@
 # macOS native client
 
-macOS-specific py2app packaging and DMG/ZIP build tooling live in this tree.
+macOS-specific PyInstaller packaging and DMG/ZIP build tooling live in this tree.
 Shared wxPython application code remains in `../src`.
 
 Run `./scripts/build-macos.sh`. Unsigned development artifacts are acceptable
