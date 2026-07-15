@@ -21,6 +21,7 @@ def test_native_file_menu_does_not_use_single_item_submenus():
     assert 'file_menu.Append(wx.ID_ABOUT, "&Credits and version\\tCtrl+Shift+C")' in source
     assert "connection_menu" not in source
     assert "information_menu" not in source
+    assert 'file_menu.Append(self.browser_sign_in_id, "Sign in with &browser\\tCtrl+Shift+S")' in source
 
 
 def test_native_world_surface_hides_web_chrome_but_keeps_navigation():

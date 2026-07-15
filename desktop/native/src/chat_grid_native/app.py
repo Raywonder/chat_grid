@@ -8,13 +8,15 @@ import os
 from pathlib import Path
 import sys
 import threading
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlencode, urlsplit, urlunsplit
+import webbrowser
 
 import wx
 import wx.adv
 import wx.html2
 
 from . import __version__
+from .browser_auth import BrowserAuthFlow
 from .config import APP_ID, APP_NAME, Settings, SettingsStore, app_data_dir
 from .deeplink import resolve_launch_url
 from .reconnect import ReconnectBackoff
@@ -118,6 +120,7 @@ class MainFrame(wx.Frame):
         self.backoff = ReconnectBackoff(self.settings.reconnect_initial_seconds, self.settings.reconnect_max_seconds)
         self.reconnect_timer = wx.Timer(self)
         self.update_thread: threading.Thread | None = None
+        self.browser_auth_flow: BrowserAuthFlow | None = None
         self.tray_icon: TrayIcon | None = None
         self.force_exit = False
         self.screen_reader = ScreenReaderSpeech()
@@ -175,6 +178,8 @@ class MainFrame(wx.Frame):
     def _build_menu(self) -> None:
         menu_bar = wx.MenuBar()
         file_menu = wx.Menu()
+        self.browser_sign_in_id = wx.NewIdRef()
+        file_menu.Append(self.browser_sign_in_id, "Sign in with &browser\tCtrl+Shift+S")
         file_menu.Append(wx.ID_REFRESH, "&Reconnect\tCtrl+R")
         file_menu.AppendSeparator()
         file_menu.Append(wx.ID_PREFERENCES, "&Desktop settings...\tCtrl+,")
@@ -185,6 +190,7 @@ class MainFrame(wx.Frame):
         file_menu.Append(wx.ID_EXIT, "E&xit\tAlt+F4")
         menu_bar.Append(file_menu, "&File")
         self.SetMenuBar(menu_bar)
+        self.Bind(wx.EVT_MENU, self._login_default, id=self.browser_sign_in_id)
         self.Bind(wx.EVT_MENU, lambda _event: self._reload(), id=wx.ID_REFRESH)
         self.Bind(wx.EVT_MENU, self._show_settings, id=wx.ID_PREFERENCES)
         self.Bind(wx.EVT_MENU, self._show_audio_settings, id=self.audio_settings_id)
@@ -219,7 +225,7 @@ class MainFrame(wx.Frame):
         self.web.SetFocus()
 
     def _login_default(self, _event: wx.CommandEvent) -> None:
-        self._open_grid("https://blind.software/?route=chatgrid_auth_start")
+        self._start_browser_auth("https://blind.software", "https://blind.software/chatgrid/")
 
     def _login_domain(self, _event: wx.CommandEvent) -> None:
         try:
@@ -228,7 +234,45 @@ class MainFrame(wx.Frame):
             self._announce("Enter a valid HTTPS server domain, such as example.com.")
             self.domain.SetFocus()
             return
-        self._open_grid(url)
+        parsed = urlsplit(url)
+        self._start_browser_auth(f"https://{parsed.netloc}", url)
+
+    def _start_browser_auth(self, server_origin: str, grid_url: str) -> None:
+        """Authenticate through the system browser and return to this running client."""
+        if self.browser_auth_flow is not None:
+            self._announce("Browser sign-in is already waiting for completion.")
+            return
+        try:
+            flow = BrowserAuthFlow(server_origin, grid_url)
+        except ValueError:
+            self._announce("Enter a valid HTTPS Chat Grid server before signing in.")
+            return
+        self.browser_auth_flow = flow
+        self.default_login.Disable()
+        self.domain_login.Disable()
+        flow.start(
+            lambda url, assertion: wx.CallAfter(self._finish_browser_auth, url, assertion),
+            lambda message: wx.CallAfter(self._browser_auth_failed, message),
+        )
+        self._announce("Complete sign-in in your browser. Chat Grid will continue automatically.")
+        if not webbrowser.open(flow.authorization_url, new=1):
+            flow.close()
+            self._browser_auth_failed("The system browser could not be opened. Try signing in again.")
+
+    def _finish_browser_auth(self, grid_url: str, assertion: str) -> None:
+        """Load the one-use assertion into the embedded world client."""
+        self.browser_auth_flow = None
+        self.default_login.Enable()
+        self.domain_login.Enable()
+        separator = "&" if "?" in grid_url else "?"
+        self._open_grid(grid_url + separator + urlencode({"external_auth": assertion}))
+
+    def _browser_auth_failed(self, message: str) -> None:
+        self.browser_auth_flow = None
+        self.default_login.Enable()
+        self.domain_login.Enable()
+        self._announce(message)
+        self.default_login.SetFocus()
 
     def _on_loaded(self, _event: wx.html2.WebViewEvent) -> None:
         self.reconnect_timer.Stop()
