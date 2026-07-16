@@ -149,9 +149,17 @@ body {
   color: #d1d5db;
 }
 
+.join-guide-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 0 0.45rem;
+}
+
 .join-guide h2 {
   font-size: 1rem;
-  margin: 0 0 0.45rem;
+  margin: 0;
   color: #f9fafb;
 }
 
@@ -247,6 +255,53 @@ canvas {
   box-shadow: 0 0 20px rgb(96 165 250 / 35%);
 }
 
+.interactive-item-panel {
+  width: min(1120px, 98vw);
+  margin: 0.75rem auto 0;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #0f172a;
+  overflow: hidden;
+  text-align: left;
+}
+
+.interactive-item-toolbar {
+  min-height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid #334155;
+}
+
+.interactive-item-toolbar h2 {
+  margin: 0;
+  color: #e5e7eb;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.interactive-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+
+.interactive-item-actions a {
+  color: #bfdbfe;
+}
+
+.interactive-item-panel iframe {
+  width: 100%;
+  height: min(82vh, 780px);
+  min-height: 560px;
+  display: block;
+  border: 0;
+  background: #020617;
+}
+
 #status {
   height: 2rem;
   color: #86efac;
@@ -268,6 +323,18 @@ canvas {
 
 .hidden {
   display: none !important;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 
 #settingsModal {
@@ -306,5 +373,24 @@ canvas {
   .join-guide-grid,
   .grid-dashboard {
     grid-template-columns: 1fr;
+  }
+
+  .join-guide-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .interactive-item-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .interactive-item-actions {
+    justify-content: flex-end;
+  }
+
+  .interactive-item-panel iframe {
+    height: min(82vh, 680px);
+    min-height: 520px;
   }
 }

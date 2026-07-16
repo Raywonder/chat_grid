@@ -9,6 +9,8 @@ type UiDom = {
   closeSettingsButton: HTMLButtonElement;
   audioInputSelect: HTMLSelectElement;
   audioOutputSelect: HTMLSelectElement;
+  announcementModeSelect: HTMLSelectElement;
+  itemBeaconsToggle: HTMLInputElement;
   settingsModal: HTMLDivElement;
   canvas: HTMLCanvasElement;
 };
@@ -31,12 +33,30 @@ type UiBindingsDeps = {
   setPreferredOutput: (id: string, name: string) => void;
   updateDeviceSummary: () => void;
   setOutputDevice: (id: string) => Promise<void>;
+  setAnnouncementMode: (mode: string) => void;
+  setItemBeacons: (enabled: boolean) => void;
 };
 
 /**
  * Attaches UI listeners (connect/settings/device changes) and focus traps.
  */
 export function setupUiHandlers(deps: UiBindingsDeps): void {
+  const focusWorldControls = (): void => {
+    // Keyboard activation of a button may restore focus to that button after
+    // its click handler finishes. Reassert the application target on the next
+    // frame so Chrome, VoiceOver, and NVDA all end on the same element.
+    deps.dom.canvas.focus();
+    window.requestAnimationFrame(() => {
+      deps.dom.canvas.focus();
+      if (document.activeElement === deps.dom.canvas) {
+        deps.updateStatus(`${deps.getGridName()} world controls active. Arrow keys move. Press Tab to leave the world controls.`);
+        deps.sfxUiBlip();
+      } else {
+        deps.updateStatus(`Could not activate ${deps.getGridName()} world controls. Press Enter on the world controls button to try again.`);
+      }
+    });
+  };
+
   deps.dom.connectButton.addEventListener('click', () => {
     void deps.connect();
   });
@@ -45,10 +65,13 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
     deps.disconnect();
   });
 
-  deps.dom.focusGridButton.addEventListener('click', () => {
-    deps.dom.canvas.focus();
-    deps.updateStatus(`${deps.getGridName()} focused.`);
-    deps.sfxUiBlip();
+  deps.dom.focusGridButton.addEventListener('click', focusWorldControls);
+
+  deps.dom.focusGridButton.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    event.stopPropagation();
+    focusWorldControls();
   });
 
   deps.dom.settingsButton.addEventListener('click', () => {
@@ -74,9 +97,19 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
     void deps.setOutputDevice(target.value);
   });
 
+  deps.dom.announcementModeSelect.addEventListener('change', (event) => {
+    const target = event.target as HTMLSelectElement;
+    deps.setAnnouncementMode(target.value);
+  });
+
+  deps.dom.itemBeaconsToggle.addEventListener('change', (event) => {
+    const target = event.target as HTMLInputElement;
+    deps.setItemBeacons(target.checked);
+  });
+
   deps.dom.settingsModal.addEventListener('keydown', (event) => {
     if (event.key !== 'Tab') return;
-    const focusable = Array.from(deps.dom.settingsModal.querySelectorAll<HTMLElement>('select, button'));
+    const focusable = Array.from(deps.dom.settingsModal.querySelectorAll<HTMLElement>('select, input, button'));
     if (focusable.length === 0) return;
     const first = focusable[0];
     const last = focusable[focusable.length - 1];

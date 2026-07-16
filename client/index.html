@@ -25,7 +25,12 @@
         <button id="logoutButton" class="hidden">Log out</button>
         <button id="settingsButton">Audio setup</button>
         <button id="disconnectButton" class="hidden">Disconnect</button>
-        <button id="focusGridButton" class="hidden" aria-controls="gameCanvas">Chat Grid</button>
+        <button
+          id="focusGridButton"
+          class="hidden"
+          aria-controls="gameCanvas"
+          aria-describedby="worldControlsHint"
+        >Chat Grid</button>
         <button id="midiButton" class="hidden" type="button" hidden>Enable MIDI</button>
       </div>
       <div id="deviceSummary">
@@ -45,6 +50,9 @@
         </div>
       </section>
       <div id="status" role="region" aria-live="polite"></div>
+      <p id="worldControlsHint" class="visually-hidden">
+        Press Enter or Space to activate the world. Arrow keys then move. Press Tab to leave the world controls.
+      </p>
       <section id="gridDashboard" class="grid-dashboard hidden" aria-label="Current grid state">
         <p><b>Position</b> <span id="gridPosition">--</span></p>
         <p><b>People</b> <span id="gridPeople">--</span></p>
@@ -65,6 +73,8 @@
         width="600"
         height="600"
         tabindex="0"
+        role="application"
+        aria-roledescription="interactive audio world"
         class="hidden"
         aria-label="Chat Grid, press question mark for help."
       ></canvas>
