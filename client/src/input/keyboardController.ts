@@ -115,7 +115,7 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     return codeFromKey(event.key, event.location) ?? event.code ?? '';
   }
 
-  document.addEventListener('keydown', (event) => {
+  const handleKeyDown = (event: KeyboardEvent): void => {
     deps.onUserActivity();
     const code = normalizeInputCode(event);
     if (!code) return;
@@ -202,7 +202,13 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
 
     deps.handleModeInput(input);
     deps.state.keysPressed[code] = true;
-  });
+  };
+
+  // Capture world input before page links, browser widgets, or nested UI
+  // handlers can consume it. This remains gated by explicit world activation,
+  // so ordinary page navigation is untouched until the user enters the
+  // application canvas. Native shells keep using chatGridNativeKey.
+  window.addEventListener('keydown', handleKeyDown, true);
 
   document.addEventListener('keyup', (event) => {
     const code = normalizeInputCode(event);

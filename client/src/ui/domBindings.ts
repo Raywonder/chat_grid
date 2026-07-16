@@ -44,9 +44,10 @@ type UiBindingsDeps = {
  */
 export function setupUiHandlers(deps: UiBindingsDeps): void {
   const focusWorldControls = (): void => {
-    // Do not depend on Chrome successfully moving DOM/accessibility focus to a
-    // canvas. The explicit activation state owns world keys until Tab exits,
-    // while focusing the canvas remains a best-effort screen-reader hint.
+    // Preserve the older working browser contract: entering the world moves
+    // real DOM/accessibility focus to the application canvas. The activation
+    // flag is a capture-level fallback when Chrome or assistive technology
+    // retargets individual key events after focus changes.
     activateWorldControls();
     deps.dom.canvas.focus({ preventScroll: true });
     deps.updateStatus(`${deps.getGridName()} world controls active. Arrow keys move. Press Tab to leave the world controls.`);
@@ -62,13 +63,6 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
   });
 
   deps.dom.focusGridButton.addEventListener('click', focusWorldControls);
-
-  deps.dom.focusGridButton.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    event.stopPropagation();
-    focusWorldControls();
-  });
 
   deps.dom.settingsButton.addEventListener('click', () => {
     deps.openSettings();
