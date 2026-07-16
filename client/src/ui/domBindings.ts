@@ -50,7 +50,7 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
     // retargets individual key events after focus changes.
     activateWorldControls();
     deps.dom.canvas.focus({ preventScroll: true });
-    deps.updateStatus(`${deps.getGridName()} world controls active. Arrow keys move. Press Tab to leave the world controls.`);
+    deps.updateStatus(`${deps.getGridName()} world controls active. Arrow keys move. Tab and Shift Tab cycle items. Press F6 to leave the world controls.`);
     deps.sfxUiBlip();
   };
 

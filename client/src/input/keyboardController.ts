@@ -143,9 +143,13 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     // move focus away from controls before the screen reader handed input to
     // the world.
     if (!areWorldControlsActive()) return;
-    if (code === 'Tab') {
+    // Tab and Shift+Tab are world commands: they cycle focused items in both
+    // directions. F6 is the explicit browser escape back to page controls.
+    if (code === 'F6') {
       deactivateWorldControls();
       deps.state.keysPressed = {};
+      event.preventDefault();
+      event.stopImmediatePropagation();
       return;
     }
     if (event.altKey) return;
@@ -153,7 +157,7 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     if (hasShortcutModifier && !deps.isTextEditingMode(deps.state.mode) && !allowedModifiedNormalShortcut) return;
     // The activated world is an application surface. Keep its keys from also
     // reaching page navigation, link handlers, or other document listeners.
-    // Tab is deliberately handled above so it can leave the world normally.
+    // F6 is deliberately handled above so it can leave the world normally.
     event.stopImmediatePropagation();
     if (deps.hasBlockedArrowTeleport(code)) {
       event.preventDefault();
@@ -219,9 +223,8 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     // Chrome and assistive technology can perform focus/navigation work on
     // keyup even when keydown was consumed. While the world is active, own
     // the complete key cycle so a movement key cannot both move the player
-    // and advance a page link or virtual cursor. Tab remains the intentional
-    // escape route and is released by keydown above.
-    if (areWorldControlsActive() && code !== 'Tab') {
+    // and advance a page link or virtual cursor.
+    if (areWorldControlsActive()) {
       event.preventDefault();
       event.stopImmediatePropagation();
     }
