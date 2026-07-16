@@ -214,8 +214,17 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
   // application canvas. Native shells keep using chatGridNativeKey.
   window.addEventListener('keydown', handleKeyDown, true);
 
-  document.addEventListener('keyup', (event) => {
+  const handleKeyUp = (event: KeyboardEvent): void => {
     const code = normalizeInputCode(event);
+    // Chrome and assistive technology can perform focus/navigation work on
+    // keyup even when keydown was consumed. While the world is active, own
+    // the complete key cycle so a movement key cannot both move the player
+    // and advance a page link or virtual cursor. Tab remains the intentional
+    // escape route and is released by keydown above.
+    if (areWorldControlsActive() && code !== 'Tab') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
     const keyUpMode = deps.getModeKeyUpTarget(deps.state.mode);
     if (code && keyUpMode) {
       deps.onModeKeyUp(keyUpMode, {
@@ -229,7 +238,22 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     if (event.code && event.code !== code) {
       deps.state.keysPressed[event.code] = false;
     }
-  });
+  };
+
+  window.addEventListener('keyup', handleKeyUp, true);
+
+  // Some browser/accessibility combinations still synthesize keypress after
+  // a cancelled keydown. Consume it while world controls are active so the
+  // page cannot perform a second, unrelated navigation action.
+  window.addEventListener(
+    'keypress',
+    (event) => {
+      if (!areWorldControlsActive()) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    },
+    true,
+  );
 
   document.addEventListener('paste', (event) => {
     if (!areWorldControlsActive()) return;
