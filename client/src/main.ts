@@ -37,6 +37,7 @@ import { SignalingClient } from './network/signalingClient';
 import { CanvasRenderer } from './render/canvasRenderer';
 import {
   GRID_SIZE,
+  HEARING_RADIUS,
   MOVE_COOLDOWN_MS,
   createInitialState,
   getDirection,
@@ -103,6 +104,7 @@ const TELEPORT_SQUARES_PER_SECOND = 20;
 const AUTH_POLICY_STORAGE_KEY = 'chgridAuthPolicy';
 const MESSAGE_OUTBOX_STORAGE_KEY = 'chatGridPendingMessages';
 const MESSAGE_OUTBOX_MAX_ITEMS = 25;
+const CLIENT_UPDATE_RELOAD_GUARD_KEY = 'chatGridClientUpdateReloadTarget';
 
 declare global {
   interface Window {
@@ -373,6 +375,7 @@ const APP_RELEASE_VERSION = String(window.CHGRID_RELEASE_VERSION ?? '').trim();
 const APP_CLIENT_REVISION = String(window.CHGRID_CLIENT_REVISION ?? '').trim();
 const APP_DISPLAY_VERSION = [APP_RELEASE_VERSION, APP_CLIENT_REVISION].filter((value) => value.length > 0).join(' ').trim();
 const STARTED_FROM_VERSION_RELOAD = isVersionReloadedSession();
+const IS_NATIVE_CLIENT = new URLSearchParams(window.location.search).has('native_client');
 dom.appVersion.textContent = APP_DISPLAY_VERSION
   ? `Another AI experiment with Jage. Version ${APP_DISPLAY_VERSION}`
   : 'Another AI experiment with Jage. Version unknown';
@@ -388,7 +391,16 @@ function withBase(path: string): string {
 /** Announces a newer browser bundle and navigates through a cache-busted URL. */
 function scheduleClientUpdateReload(metadata: ClientVersionMetadata): void {
   if (reloadScheduledForVersionMismatch) return;
+  const reloadTarget = JSON.stringify({
+    revision: metadata.clientRevision || '',
+    entrypoint: metadata.entrypointUrl || '',
+  });
+  if (sessionStorage.getItem(CLIENT_UPDATE_RELOAD_GUARD_KEY) === reloadTarget) {
+    setConnectionStatus('A newer Chat Grid client is available. Reload once manually if this page remains incomplete.');
+    return;
+  }
   reloadScheduledForVersionMismatch = true;
+  sessionStorage.setItem(CLIENT_UPDATE_RELOAD_GUARD_KEY, reloadTarget);
   const label = [metadata.releaseVersion, metadata.clientRevision].filter((value) => value.length > 0).join(' ');
   const message = label ? `New Chat Grid update ${label} found. Reloading...` : 'New Chat Grid update found. Reloading...';
   setConnectionStatus(message);
@@ -416,6 +428,7 @@ const LOCATION_AMBIENCE_PROFILES: Record<string, Omit<LocationAmbienceProfile, '
   city_plaza: { loopUrl: withBase('sounds/ambience/city_plaza.ogg'), loopGain: 0.5, rootHz: 110, colorHz: 165, airHz: 330, noiseHz: 950, noiseQ: 0.8, gain: 0.06, noiseGain: 0.018, wave: 'sine' },
   forest_canopy: { loopUrl: withBase('sounds/ambience/forest_canopy.ogg'), loopGain: 0.45, rootHz: 82, colorHz: 123, airHz: 246, noiseHz: 1450, noiseQ: 1.2, gain: 0.055, noiseGain: 0.032, wave: 'triangle' },
   town_square: { loopUrl: withBase('sounds/ambience/town_square.ogg'), loopGain: 0.48, rootHz: 98, colorHz: 147, airHz: 294, noiseHz: 720, noiseQ: 0.7, gain: 0.052, noiseGain: 0.018, wave: 'sine' },
+  town_cafe: { loopUrl: withBase('sounds/ambience/town_cafe.ogg?v=20260715-world-cup-cafe'), loopGain: 0.38, rootHz: 92, colorHz: 184, airHz: 368, noiseHz: 1050, noiseQ: 1.1, gain: 0.044, noiseGain: 0.022, wave: 'triangle' },
   arcade_glow: { loopUrl: withBase('sounds/ambience/arcade_glow.ogg?v=20260714-arcade-loop'), loopGain: 0.5, rootHz: 130.81, colorHz: 196, airHz: 392, noiseHz: 1800, noiseQ: 2.4, gain: 0.052, noiseGain: 0.012, wave: 'square' },
   office_focus: { loopUrl: withBase('sounds/ambience/office_focus.ogg'), loopGain: 0.42, rootHz: 73.42, colorHz: 146.83, airHz: 293.66, noiseHz: 560, noiseQ: 0.9, gain: 0.047, noiseGain: 0.014, wave: 'sine' },
   neighborhood_evening: { loopUrl: withBase('sounds/ambience/neighborhood_evening.ogg'), loopGain: 0.48, rootHz: 87.31, colorHz: 130.81, airHz: 261.63, noiseHz: 820, noiseQ: 0.9, gain: 0.049, noiseGain: 0.02, wave: 'triangle' },
@@ -453,7 +466,10 @@ const RUN_MOVEMENT_TICK_MULTIPLIER = 0.55;
 const CAREFUL_MOVEMENT_TICK_MULTIPLIER = 1.25;
 const ITEM_BEACON_RADIUS = 3.5;
 const ITEM_BEACON_INTERVAL_MS = 3200;
-const SEAT_INTERACTION_RADIUS = 1.5;
+const IDLE_AUTO_REST_RADIUS = 4;
+const IDLE_AUTO_REST_AFTER_MS = 2 * 60 * 60 * 1000;
+const IDLE_AUTO_REST_CHECK_MS = 60 * 1000;
+const LIE_DOWN_MOODS = new Set(['dreamy', 'resting', 'sleepy', 'tired']);
 const SEATED_BINAURAL_STEP = 0.25;
 const SEATED_BINAURAL_LIMIT = 1.25;
 
@@ -487,6 +503,8 @@ const billboardRuntime = new BillboardRuntime(audio, getItemSpatialConfig, (mess
 }, shouldSpeakItemAnnouncement);
 const clockAnnouncer = new ClockAnnouncer(audio, () => getListenerPosition());
 const initialExternalAuthAssertion = consumeExternalAuthAssertion();
+const isDesktopClient = new URL(window.location.href).searchParams.get('desktop') === '1'
+  || Boolean((window as Window & { chatGridDesktop?: unknown }).chatGridDesktop);
 let replaceTextOnNextType = false;
 let pendingEscapeDisconnect = false;
 let micGainLoopbackRestoreState: boolean | null = null;
@@ -681,7 +699,8 @@ let audioAnnouncementSettings: AudioAnnouncementSettings = settings.loadAudioAnn
 let lastItemBeaconTile = '';
 let lastItemBeaconItemId = '';
 let lastItemBeaconAtMs = 0;
-let lastAutoSeatItemId = '';
+let lastUserActivityAt = Date.now();
+let idleAutoRestAttempted = false;
 let lastSubscriptionRefreshAt = 0;
 let lastSubscriptionRefreshTileX = Math.round(state.player.x);
 let lastSubscriptionRefreshTileY = Math.round(state.player.y);
@@ -776,8 +795,8 @@ function applyGridBranding(gridName: string | null | undefined, welcomeMessage: 
   activeWelcomeMessage = nextWelcomeMessage;
   document.title = nextGridName;
   dom.gridTitle.textContent = nextGridName;
-  dom.focusGridButton.textContent = nextGridName;
-  dom.canvas.setAttribute('aria-label', `${nextGridName}, press question mark for help.`);
+  dom.focusGridButton.textContent = `Enter ${nextGridName} world controls`;
+  dom.canvas.setAttribute('aria-label', `${nextGridName} world controls. Arrow keys move. Press question mark for help.`);
 }
 
 /** Stores server-advertised world locations for keyboard navigation. */
@@ -1182,6 +1201,17 @@ function updateStatus(message: string): void {
   }
   lastAnnouncementText = normalized;
   lastAnnouncementAt = now;
+
+  // Native desktop clients route world narration directly to the active
+  // screen reader. The ARIA live region remains the browser fallback.
+  const nativeSpeak = (
+    window as Window & {
+      chatGridNativeSpeak?: (text: string, options?: { interrupt?: boolean }) => void;
+    }
+  ).chatGridNativeSpeak;
+  if (normalized && typeof nativeSpeak === 'function') {
+    nativeSpeak(normalized, { interrupt: true });
+  }
 
   if (statusTimeout !== null) {
     window.clearTimeout(statusTimeout);
@@ -1644,10 +1674,17 @@ function updateGridDashboard(): void {
   const itemsHere = getItemsAtPosition(state.player.x, state.player.y).map((item) => itemLabel(item));
   const hereSummary = [...namesHere, ...itemsHere].join(', ') || 'just you';
 
-  dom.gridPosition.textContent = `${state.player.x}, ${state.player.y}`;
-  dom.gridPeople.textContent = peerCount === 1 ? '1 other user' : `${peerCount} other users`;
-  dom.gridItems.textContent = itemCount === 1 ? '1 item' : `${itemCount} items`;
-  dom.gridHere.textContent = hereSummary;
+  const nextValues: Array<[HTMLElement, string]> = [
+    [dom.gridPosition, `${state.player.x}, ${state.player.y}`],
+    [dom.gridPeople, peerCount === 1 ? '1 other user' : `${peerCount} other users`],
+    [dom.gridItems, itemCount === 1 ? '1 item' : `${itemCount} items`],
+    [dom.gridHere, hereSummary],
+  ];
+  for (const [element, value] of nextValues) {
+    // Replacing unchanged accessible text on every animation frame causes
+    // VoiceOver/WebKit to report the whole world as continuously refreshed.
+    if (element.textContent !== value) element.textContent = value;
+  }
 }
 
 /** Classifies a system chat line into a corresponding notification sound, when applicable. */
@@ -1920,23 +1957,59 @@ function isSeatableItem(item: WorldItem): boolean {
   const posture = String(item.params.postureMode ?? '').trim().toLowerCase();
   const capacity = Number(item.params.seatingCapacity);
   if (Number.isFinite(capacity) && capacity <= 0) return false;
-  return posture === 'sit' || posture === 'lie' || posture === 'sit_lie' || ['chair', 'couch', 'sofa', 'bench', 'stool', 'loveseat', 'bed'].includes(kind);
+  return posture === 'sit' || posture === 'lie' || posture === 'sit_lie' || ['chair', 'couch', 'sofa', 'bench', 'booth', 'stool', 'loveseat', 'bed'].includes(kind);
 }
 
-/** Finds the nearest couch/chair-like item close enough for space-to-sit. */
-function getNearestSeatableItem(): WorldItem | null {
-  let nearest: WorldItem | null = null;
-  let nearestDistance = Infinity;
-  for (const item of state.items.values()) {
-    if (item.carrierId || isItemQuiet(item) || !isSeatableItem(item)) continue;
-    const distance = Math.hypot(item.x - state.player.x, item.y - state.player.y);
-    if (distance <= SEAT_INTERACTION_RADIUS && distance < nearestDistance) {
-      nearest = item;
-      nearestDistance = distance;
-    }
-  }
-  return nearest;
+/** Records real user activity so automatic rest never competes with manual choices. */
+function recordUserActivity(): void {
+  lastUserActivityAt = Date.now();
+  idleAutoRestAttempted = false;
 }
+
+/** Chooses nearby furniture appropriate for the user's mood and local time. */
+function getSensibleIdleRestItem(): WorldItem | null {
+  const hour = new Date().getHours();
+  const nighttime = hour >= 21 || hour < 7;
+  const prefersBed = nighttime || LIE_DOWN_MOODS.has(state.player.mood);
+  const candidates = Array.from(state.items.values())
+    .filter((item) => {
+      if (item.carrierId || isItemQuiet(item) || !isSeatableItem(item)) return false;
+      return Math.hypot(item.x - state.player.x, item.y - state.player.y) <= IDLE_AUTO_REST_RADIUS;
+    })
+    .sort((left, right) => {
+      const leftKind = String(left.params.furnitureKind ?? left.params.objectKind ?? left.type).trim().toLowerCase();
+      const rightKind = String(right.params.furnitureKind ?? right.params.objectKind ?? right.type).trim().toLowerCase();
+      const leftBedPenalty = (leftKind === 'bed') === prefersBed ? 0 : 100;
+      const rightBedPenalty = (rightKind === 'bed') === prefersBed ? 0 : 100;
+      const leftDistance = Math.hypot(left.x - state.player.x, left.y - state.player.y);
+      const rightDistance = Math.hypot(right.x - state.player.x, right.y - state.player.y);
+      return leftBedPenalty + leftDistance - (rightBedPenalty + rightDistance);
+    });
+  return candidates[0] ?? null;
+}
+
+/** Applies one conservative, capacity-checked rest choice after hours of inactivity. */
+function applySensibleIdleRest(): void {
+  if (!state.running || state.mode !== 'normal' || state.player.posture !== 'standing') return;
+  if (idleAutoRestAttempted || Date.now() - lastUserActivityAt < IDLE_AUTO_REST_AFTER_MS) return;
+  idleAutoRestAttempted = true;
+  const item = getSensibleIdleRestItem();
+  if (!item) return;
+  const kind = String(item.params.furnitureKind ?? item.params.objectKind ?? item.type).trim().toLowerCase();
+  updateStatus(`After being away for a while, you settle ${kind === 'bed' ? 'onto' : 'into'} ${item.title}.`);
+  signaling.send({ type: 'item_use', itemId: item.id });
+  if (kind === 'bed' && (LIE_DOWN_MOODS.has(state.player.mood) || new Date().getHours() >= 21 || new Date().getHours() < 7)) {
+    window.setTimeout(() => {
+      if (state.player.seatedItemId === item.id && state.player.posture === 'sitting') {
+        signaling.send({ type: 'item_use', itemId: item.id });
+      }
+    }, 250);
+  }
+}
+
+window.setInterval(applySensibleIdleRest, IDLE_AUTO_REST_CHECK_MS);
+document.addEventListener('pointerdown', recordUserActivity, true);
+document.addEventListener('touchstart', recordUserActivity, true);
 
 /** Returns the current local listener position, including seated head-offset controls. */
 function getListenerPosition(): { x: number; y: number } {
@@ -2627,12 +2700,6 @@ function gameLoop(): void {
 function handleMovement(): void {
   if (state.mode !== 'normal') return;
   if (activeTeleport) return;
-  if (
-    getCarriedRadioRemote() &&
-    (state.keysPressed.ArrowUp || state.keysPressed.ArrowDown || state.keysPressed.ArrowLeft || state.keysPressed.ArrowRight)
-  ) {
-    return;
-  }
   const now = Date.now();
   if (now - state.player.lastMoveTime < effectiveMovementTickMs()) return;
 
@@ -2645,7 +2712,6 @@ function handleMovement(): void {
 
   if (dx === 0 && dy === 0) {
     lastWallCollisionDirection = null;
-    lastAutoSeatItemId = '';
     return;
   }
 
@@ -2704,14 +2770,6 @@ function handleMovement(): void {
     audio.sfxTileItemPing();
   }
   narrateLocalMovement(nextX, nextY, dx, dy);
-  const nearestSeat = getNearestSeatableItem();
-  if (nearestSeat && nearestSeat.id !== lastAutoSeatItemId) {
-    lastAutoSeatItemId = nearestSeat.id;
-    const kind = String(nearestSeat.params.furnitureKind ?? nearestSeat.params.objectKind ?? '').trim().toLowerCase();
-    const posture = kind === 'bed' ? 'settle onto the bed' : 'gently settle into a relaxed sitting position';
-    updateStatus(`You are close to ${nearestSeat.title}; you ${posture}.`);
-    signaling.send({ type: 'item_use', itemId: nearestSeat.id });
-  }
 }
 
 /** Checks microphone permission state when Permissions API support is available. */
@@ -2722,7 +2780,7 @@ async function checkMicPermission(): Promise<boolean> {
 /** Starts local microphone capture and rebuilds the outbound track pipeline. */
 async function setupLocalMedia(audioDeviceId = ''): Promise<void> {
   await mediaSession.setupLocalMedia(audioDeviceId);
-  applyVoiceSendPermission();
+  authController.reapplyVoiceSendPermission();
 }
 
 /** Runs a short RMS sample to estimate and apply a usable microphone input gain. */
@@ -2829,14 +2887,11 @@ function handleAuthRequired(message: Extract<IncomingMessage, { type: 'auth_requ
   applyGridBranding(message.gridName, message.welcomeMessage);
   const expectedClientRevision = String(message.expectedClientRevision ?? '').trim();
   if (!reloadScheduledForVersionMismatch && expectedClientRevision && expectedClientRevision !== APP_CLIENT_REVISION) {
-    reloadScheduledForVersionMismatch = true;
     const serverVersion = String(message.serverVersion ?? '').trim() || 'unknown';
     pushChatMessage(
-      `Server ${serverVersion} expects client ${expectedClientRevision}. Reloading client...`,
+      `Server ${serverVersion} expects client ${expectedClientRevision}. Checking for an updated client...`,
     );
-    window.setTimeout(() => {
-      reloadClientForVersion(expectedClientRevision);
-    }, 50);
+    scheduleClientUpdateReload({ releaseVersion: '', clientRevision: expectedClientRevision });
     return;
   }
   authController.handleAuthRequired(message);
@@ -3180,11 +3235,8 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
       expectedClientRevision &&
       expectedClientRevision !== APP_CLIENT_REVISION
     ) {
-      reloadScheduledForVersionMismatch = true;
-      pushChatMessage(`Server expects client ${expectedClientRevision}. Reloading client...`);
-      window.setTimeout(() => {
-        reloadClientForVersion(expectedClientRevision);
-      }, 50);
+      pushChatMessage(`Server expects client ${expectedClientRevision}. Checking for an updated client...`);
+      scheduleClientUpdateReload({ releaseVersion: '', clientRevision: expectedClientRevision });
       return;
     }
     if (activeServerInstanceId && incomingInstanceId && activeServerInstanceId !== incomingInstanceId) {
@@ -3200,6 +3252,14 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   await onAppMessage(message);
   if (message.type === 'welcome') {
     flushQueuedChatMessages();
+    // World admission is complete when welcome has been applied. Do not keep
+    // the UI at "Joining world" while microphone permission or device setup
+    // is waiting on the embedded browser.
+    if (connectedAnnouncement) {
+      setConnectionStatus(connectedAnnouncement);
+      pushChatMessage(connectedAnnouncement);
+      connectedAnnouncement = null;
+    }
     await setupMediaAfterAuth();
     if (playSelfLoginSound) {
       void audio.playSample(SYSTEM_SOUND_URLS.logon, 1);
@@ -3807,6 +3867,12 @@ function runDynamicUserAction(target: PeerState): void {
 }
 
 function escapeCommand(): void {
+  if (IS_NATIVE_CLIENT) {
+    pendingEscapeDisconnect = false;
+    updateStatus('Escape does not disconnect the desktop client. Use File, Sign out or Exit.');
+    audio.sfxUiCancel();
+    return;
+  }
   if (pendingEscapeDisconnect) {
     pendingEscapeDisconnect = false;
     disconnect();
@@ -3882,7 +3948,7 @@ function getAvailableCommandPaletteEntriesForMode(mode: GameMode): Array<Command
       locationCount: worldLocationOptions.length,
       chatMessageCount: messageBuffer.length,
       hasCarriedItem: Boolean(getCarriedItem()),
-      hasCarriedRadioRemote: Boolean(getCarriedRadioRemote()),
+      hasCarriedRadioRemote: Boolean(getCarriedMediaRemote()),
       squareItemCount: getCurrentSquareItems().length,
       usableItemCount: getUsableItemsOnCurrentSquare().length,
       manageableItemCount: getManageableItemsOnCurrentSquare().length,
@@ -3946,29 +4012,13 @@ function handleNormalModeInput(code: string, shiftKey: boolean, ctrlKey: boolean
     moveFocusedSurfaceItemCommand(code === 'KeyJ' ? 'left' : 'right');
     return;
   }
-  if (getCarriedRadioRemote()) {
+  if (getCarriedMediaRemote()) {
     if (code === 'Tab') {
       cycleFocusedItemCommand(shiftKey);
       return;
     }
     if (code === 'Space') {
       radioRemoteControlCommand(shiftKey ? 'station_previous' : 'station_next');
-      return;
-    }
-    if (code === 'ArrowRight') {
-      radioRemoteControlCommand('station_next');
-      return;
-    }
-    if (code === 'ArrowLeft') {
-      radioRemoteControlCommand('station_previous');
-      return;
-    }
-    if (code === 'ArrowUp') {
-      radioRemoteControlCommand('volume_up');
-      return;
-    }
-    if (code === 'ArrowDown') {
-      radioRemoteControlCommand('volume_down');
       return;
     }
     if (code === 'Period') {
@@ -4486,6 +4536,7 @@ const itemPropertyEditor = createItemPropertyEditor({
   setReplaceTextOnNextType: (value) => {
     replaceTextOnNextType = value;
   },
+  onUserActivity: recordUserActivity,
   suppressItemPropertyEchoMs: (ms) => {
     suppressItemPropertyEchoUntilMs = Math.max(suppressItemPropertyEchoUntilMs, Date.now() + Math.max(0, ms));
   },
@@ -4701,5 +4752,12 @@ if (STARTED_FROM_VERSION_RELOAD || initialExternalAuthAssertion || initialAuthUs
     void connect();
   }, 0);
 } else {
-  void autoConnectFromSavedSessionCookie();
+  void autoConnectFromSavedSessionCookie().then(() => {
+    if (!isDesktopClient || state.running || mediaSession.isConnecting()) return;
+    const loginLink = dom.loginView.querySelector<HTMLAnchorElement>('a[href*="chatgrid_auth_start"]');
+    if (!dom.loginView.classList.contains('hidden') && loginLink) {
+      setConnectionStatus('Opening blind.software sign in...');
+      loginLink.click();
+    }
+  });
 }
