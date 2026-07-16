@@ -1,0 +1,11 @@
+.venv*/
+build/
+dist/
+*.spec
+__pycache__/
+*.py[cod]
+*.egg-info/
+windows/build/
+windows/dist/
+windows/release/
+macos/release/

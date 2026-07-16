@@ -1,0 +1,12 @@
+{
+  "version": "0.3.6",
+  "releaseNotes": "Moves desktop audio setup under File > Settings, removes the duplicate native status strip, hides non-navigation audio controls from the native world surface, and retains all connection, speech, and dialog fixes.",
+  "platforms": {
+    "windows": {
+      "url": "https://blind.software/chatgrid/downloads/ChatGridSetup-0.3.6.exe",
+      "fileName": "ChatGridSetup-0.3.6.exe",
+      "sha256": "1f78207f7550b7909cf18fe733a6c5a61af9719f708436466fd4e9e86b35da5a",
+      "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
+    }
+  }
+}
