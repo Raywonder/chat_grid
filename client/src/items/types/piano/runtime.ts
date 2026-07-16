@@ -103,6 +103,8 @@ type PianoControllerDeps = {
   signalingSend: (message: OutgoingMessage) => void;
   updateStatus: (message: string) => void;
   openHelpViewer: (lines: string[], returnMode: GameMode) => void;
+  requestMidiAccess?: (reason?: 'manual' | 'piano') => Promise<boolean>;
+  setMidiControlVisible?: (visible: boolean) => void;
 };
 
 /** Encapsulates all client-side piano item behavior and per-mode runtime state. */
@@ -240,7 +242,7 @@ export class PianoController {
   }
 
   /** Starts local piano key mode for one used piano item. */
-  async startUseMode(itemId: string): Promise<void> {
+  startUseMode(itemId: string): void {
     const item = this.deps.state.items.get(itemId);
     if (!item || item.type !== 'piano') return;
     this.activePianoItemId = itemId;
@@ -250,8 +252,10 @@ export class PianoController {
     this.activePianoMonophonicKey = null;
     this.activePianoRecordingState = 'idle';
     this.deps.state.mode = 'pianoUse';
-    await this.deps.audio.ensureContext();
-    this.deps.updateStatus(`using ${item.title}, press question mark for help.`);
+    void this.deps.audio.ensureContext().catch(() => undefined);
+    this.deps.setMidiControlVisible?.(true);
+    void this.deps.requestMidiAccess?.('piano');
+    this.deps.updateStatus(`using ${item.title}. Play A S D F G H J K L, W E T Y U O P, Escape exits.`);
     this.deps.audio.sfxUiBlip();
   }
 
@@ -272,7 +276,7 @@ export class PianoController {
     this.activePianoHeldOrder.length = 0;
     this.activePianoMonophonicKey = null;
     this.activePianoRecordingState = 'idle';
-    this.deps.state.mode = 'normal';
+    this.returnToNormalMode();
     if (announce) {
       this.deps.updateStatus('Stopped piano.');
       this.deps.audio.sfxUiCancel();
@@ -379,7 +383,7 @@ export class PianoController {
     }
     const itemId = this.activePianoItemId;
     if (!itemId) {
-      this.deps.state.mode = 'normal';
+      this.returnToNormalMode();
       return;
     }
     const item = this.deps.state.items.get(itemId);
@@ -458,6 +462,47 @@ export class PianoController {
     }
     this.activePianoMonophonicKey = fallbackCode;
     this.playLocalNote(item, itemId, fallbackCode, fallbackMidi, config);
+  }
+
+  /** Handles a physical MIDI note-on while piano mode is active. */
+  handleMidiNoteOn(midi: number, _velocity: number): void {
+    const itemId = this.activePianoItemId;
+    if (!itemId) {
+      this.returnToNormalMode();
+      return;
+    }
+    const item = this.deps.state.items.get(itemId);
+    if (!item || item.type !== 'piano') {
+      this.stopUseMode(false);
+      return;
+    }
+    const playedMidi = Math.max(0, Math.min(127, Math.round(midi)));
+    const keyId = `midi:${playedMidi}`;
+    if (this.activePianoKeys.has(keyId)) return;
+    const config = this.getPianoParams(item);
+    this.activePianoKeys.add(keyId);
+    this.activePianoKeyMidi.set(keyId, playedMidi);
+    this.activePianoHeldOrder.push(keyId);
+    if (config.voiceMode === 'mono') {
+      const previousCode = this.activePianoMonophonicKey;
+      if (previousCode && previousCode !== keyId) {
+        const previousMidi = this.activePianoKeyMidi.get(previousCode);
+        this.pianoSynth.noteOff(previousCode);
+        if (Number.isFinite(previousMidi)) {
+          this.deps.signalingSend({ type: 'item_piano_note', itemId, keyId: previousCode, midi: previousMidi, on: false });
+        }
+      }
+      this.activePianoMonophonicKey = keyId;
+    }
+    this.playLocalNote(item, itemId, keyId, playedMidi, config);
+  }
+
+  /** Handles a physical MIDI note-off while piano mode is active. */
+  handleMidiNoteOff(midi: number): void {
+    this.handleModeKeyUp({
+      code: `midi:${Math.max(0, Math.min(127, Math.round(midi)))}`,
+      shiftKey: false,
+    });
   }
 
   /** Plays one inbound piano note from another user using item spatial position. */
@@ -748,7 +793,7 @@ export class PianoController {
   private executeCommand(commandId: PianoModeCommandId): boolean {
     const itemId = this.activePianoItemId;
     if (!itemId) {
-      this.deps.state.mode = 'normal';
+      this.returnToNormalMode();
       return false;
     }
     if (commandId === 'openHelp') {
@@ -836,6 +881,11 @@ export class PianoController {
     return false;
   }
 
+  private returnToNormalMode(): void {
+    this.deps.state.mode = 'normal';
+    this.deps.setMidiControlVisible?.(false);
+  }
+
   private getPianoMidiForCode(input: Pick<ModeInput, 'code' | 'shiftKey'>): number | null {
     if (input.shiftKey) {
       return null;
@@ -860,7 +910,16 @@ export class PianoController {
   ): void {
     const ctx = this.deps.audio.context;
     const destination = this.deps.audio.getOutputDestinationNode();
-    if (!ctx || !destination) return;
+    if (!ctx || !destination) {
+      void this.deps.audio.ensureContext().then(() => {
+        if (!this.activePianoKeys.has(keyId) && !keyId.startsWith('__piano_')) return;
+        const liveItem = this.deps.state.items.get(itemId);
+        if (!liveItem || liveItem.type !== 'piano') return;
+        const liveConfig = this.getPianoParams(liveItem);
+        this.playLocalNote(liveItem, itemId, keyId, midi, liveConfig, sourceGroupId);
+      }).catch(() => undefined);
+      return;
+    }
     const sourceX = item.carrierId === this.deps.state.player.id ? this.deps.state.player.x : item.x;
     const sourceY = item.carrierId === this.deps.state.player.id ? this.deps.state.player.y : item.y;
     this.pianoSynth.noteOn(

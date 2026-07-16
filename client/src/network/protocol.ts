@@ -6,6 +6,8 @@ const actionMetadataSchema = z.object({
   tooltip: z.string().optional(),
 });
 
+const postureSchema = z.enum(['standing', 'sitting', 'lying', 'floor']);
+
 export const itemSchema = z.object({
   id: z.string(),
   type: z.string().min(1),
@@ -36,6 +38,11 @@ export const welcomeMessageSchema = z.object({
     locationId: z.string().optional(),
     x: z.number().int(),
     y: z.number().int(),
+    posture: postureSchema.optional(),
+    mood: z.string().optional(),
+    seatedItemId: z.string().nullable().optional(),
+    seatedOffset: z.number().optional(),
+    handHeldById: z.string().nullable().optional(),
   }),
   users: z.array(
     z.object({
@@ -45,6 +52,11 @@ export const welcomeMessageSchema = z.object({
       locationId: z.string().optional(),
       x: z.number().int(),
       y: z.number().int(),
+      posture: postureSchema.optional(),
+      mood: z.string().optional(),
+      seatedItemId: z.string().nullable().optional(),
+      seatedOffset: z.number().optional(),
+      handHeldById: z.string().nullable().optional(),
     }),
   ),
   items: z.array(itemSchema).optional(),
@@ -65,6 +77,8 @@ export const welcomeMessageSchema = z.object({
             description: z.string(),
             spawnX: z.number().int(),
             spawnY: z.number().int(),
+            ambienceKey: z.string().optional(),
+            ambienceName: z.string().optional(),
           }),
         )
         .optional(),
@@ -210,6 +224,10 @@ export const updatePositionSchema = z.object({
   locationId: z.string().optional(),
   x: z.number().int(),
   y: z.number().int(),
+  posture: postureSchema.optional(),
+  seatedItemId: z.string().nullable().optional(),
+  seatedOffset: z.number().optional(),
+  handHeldById: z.string().nullable().optional(),
 });
 
 export const locationChangedSchema = z.object({
@@ -236,6 +254,12 @@ export const updateNicknameSchema = z.object({
   nickname: z.string().min(1).max(32),
 });
 
+export const updateMoodSchema = z.object({
+  type: z.literal('update_mood'),
+  id: z.string(),
+  mood: z.string(),
+});
+
 export const userLeftSchema = z.object({
   type: z.literal('user_left'),
   id: z.string(),
@@ -248,6 +272,38 @@ export const chatMessageSchema = z.object({
   senderNickname: z.string().optional(),
   system: z.boolean().optional(),
   action: z.boolean().optional(),
+});
+
+export const directMessageSchema = z.object({
+  type: z.literal('direct_message'),
+  message: z.string(),
+  senderId: z.string(),
+  senderNickname: z.string(),
+  targetId: z.string(),
+  targetNickname: z.string(),
+  outgoing: z.boolean().optional(),
+});
+
+export const socialActionSchema = z.object({
+  type: z.literal('social_action'),
+  actionId: z.string(),
+  actorId: z.string(),
+  actorNickname: z.string(),
+  targetId: z.string().nullable().optional(),
+  targetNickname: z.string().nullable().optional(),
+  message: z.string(),
+  sound: z.string().nullable().optional(),
+  x: z.number().int(),
+  y: z.number().int(),
+  range: z.number().int().positive().optional(),
+});
+
+export const userActionResultSchema = z.object({
+  type: z.literal('user_action_result'),
+  ok: z.boolean(),
+  actionId: z.string(),
+  message: z.string(),
+  targetId: z.string().nullable().optional(),
 });
 
 export const pongSchema = z.object({
@@ -276,7 +332,7 @@ export const itemRemoveSchema = z.object({
 export const itemActionResultSchema = z.object({
   type: z.literal('item_action_result'),
   ok: z.boolean(),
-  action: z.enum(['add', 'pickup', 'drop', 'delete', 'transfer', 'use', 'secondary_use', 'update']),
+  action: z.enum(['add', 'pickup', 'drop', 'delete', 'transfer', 'use', 'secondary_use', 'interact', 'update']),
   message: z.string(),
   itemId: z.string().optional(),
 });
@@ -300,6 +356,17 @@ export const itemUseSoundSchema = z.object({
   x: z.number().int(),
   y: z.number().int(),
   range: z.number().int().positive().optional(),
+});
+
+export const itemGameLaunchSchema = z.object({
+  type: z.literal('item_game_launch'),
+  itemId: z.string(),
+  title: z.string(),
+  url: z.string(),
+  actorId: z.string(),
+  actorNickname: z.string(),
+  x: z.number().int(),
+  y: z.number().int(),
 });
 
 export const itemClockAnnounceSchema = z.object({
@@ -381,19 +448,44 @@ export const adminUsersListSchema = z.object({
 
 export const adminPlatformOverviewSchema = z.object({
   type: z.literal('admin_platform_overview'),
+  scope: z.enum(['platform', 'owned_content']).optional(),
   serverVersion: z.string(),
   expectedClientRevision: z.string().nullable().optional(),
   connectedUsers: z.number().int().nonnegative(),
   itemCount: z.number().int().nonnegative(),
   serviceLinkCount: z.number().int().nonnegative(),
+  ownedContentCount: z.number().int().nonnegative().optional(),
   links: z.array(
     z.object({
+      itemId: z.string(),
       title: z.string(),
       kind: z.string(),
       locationId: z.string(),
       x: z.number().int(),
       y: z.number().int(),
       url: z.string().nullable().optional(),
+      author: z.string().nullable().optional(),
+      verificationStatus: z.string().nullable().optional(),
+      ownerName: z.string().nullable().optional(),
+      ownedByCurrentUser: z.boolean().optional(),
+    }),
+  ),
+});
+
+export const adminNotificationsListSchema = z.object({
+  type: z.literal('admin_notifications_list'),
+  scope: z.enum(['own', 'admin']).optional(),
+  unreadCount: z.number().int().nonnegative(),
+  notifications: z.array(
+    z.object({
+      id: z.string(),
+      createdAt: z.number().int(),
+      kind: z.string(),
+      title: z.string(),
+      message: z.string(),
+      targetUserId: z.string().nullable().optional(),
+      actorUserId: z.string().nullable().optional(),
+      read: z.boolean().optional(),
     }),
   ),
 });
@@ -410,8 +502,19 @@ export const adminActionResultSchema = z.object({
     'user_ban',
     'user_unban',
     'user_delete',
+    'notifications_mark_read',
+    'blindsoftware_admin_sync',
   ]),
   message: z.string(),
+});
+
+export const ntfyPreferencesSchema = z.object({
+  type: z.literal('ntfy_preferences'),
+  enabled: z.boolean(),
+  configured: z.boolean(),
+  topic: z.string(),
+  subscriptionUrl: z.string(),
+  message: z.string().optional(),
 });
 
 export const incomingMessageSchema = z.discriminatedUnion('type', [
@@ -423,8 +526,12 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   locationChangedSchema,
   teleportCompleteSchema,
   updateNicknameSchema,
+  updateMoodSchema,
   userLeftSchema,
   chatMessageSchema,
+  directMessageSchema,
+  socialActionSchema,
+  userActionResultSchema,
   pongSchema,
   nicknameResultSchema,
   itemUpsertSchema,
@@ -432,6 +539,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   itemActionResultSchema,
   itemTransferTargetsSchema,
   itemUseSoundSchema,
+  itemGameLaunchSchema,
   itemClockAnnounceSchema,
   itemPianoNoteSchema,
   itemPianoStatusSchema,
@@ -439,7 +547,9 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   adminRolesListSchema,
   adminUsersListSchema,
   adminPlatformOverviewSchema,
+  adminNotificationsListSchema,
   adminActionResultSchema,
+  ntfyPreferencesSchema,
 ]);
 
 export type IncomingMessage = z.infer<typeof incomingMessageSchema>;
@@ -450,32 +560,96 @@ export type OutgoingMessage =
   | { type: 'auth_resume'; sessionToken: string }
   | { type: 'auth_external'; assertion: string }
   | { type: 'auth_logout' }
+  | { type: 'ntfy_preferences_get' }
+  | { type: 'ntfy_preferences_update'; enabled: boolean; rotateTopic?: boolean }
   | { type: 'welcome_ready' }
   | { type: 'admin_roles_list' }
   | { type: 'admin_role_create'; name: string }
   | { type: 'admin_role_update_permissions'; role: string; permissions: string[] }
   | { type: 'admin_role_delete'; role: string; replacementRole: string }
   | { type: 'admin_users_list'; action?: 'set_role' | 'ban' | 'unban' | 'delete_account' }
-  | { type: 'admin_platform_overview' }
+  | { type: 'admin_platform_overview'; scope?: 'platform' | 'owned_content' }
+  | { type: 'admin_notifications_list'; scope?: 'own' | 'admin' }
+  | { type: 'admin_notification_mark_read'; scope?: 'own' | 'admin'; notificationId?: string }
+  | { type: 'admin_blindsoftware_sync' }
   | { type: 'admin_user_set_role'; username: string; role: string }
   | { type: 'admin_user_ban'; username: string }
   | { type: 'admin_user_unban'; username: string }
   | { type: 'admin_user_delete'; username: string }
   | { type: 'signal'; targetId: string; sdp?: RTCSessionDescriptionInit; ice?: RTCIceCandidateInit }
   | { type: 'update_position'; x: number; y: number }
+  | { type: 'posture_move'; action: 'shift_left' | 'shift_right' | 'stand' | 'return_to_bed' }
   | { type: 'change_location'; locationId: string }
   | { type: 'teleport_complete'; x: number; y: number }
   | { type: 'update_nickname'; nickname: string }
+  | { type: 'update_mood'; mood: string }
   | { type: 'chat_message'; message: string }
+  | { type: 'direct_message'; targetId: string; message: string }
+  | {
+      type: 'user_action';
+      actionId:
+        | 'hug'
+        | 'tap_shoulder'
+        | 'announce_focus'
+        | 'wave'
+        | 'high_five'
+        | 'fist_bump'
+        | 'cheer'
+        | 'clap'
+        | 'laugh'
+        | 'smile'
+        | 'wink'
+        | 'nod'
+        | 'shake_head'
+        | 'bow'
+        | 'dance'
+        | 'spin'
+        | 'jump'
+        | 'shrug'
+        | 'facepalm'
+        | 'gasp'
+        | 'sigh'
+        | 'comfort'
+        | 'pat_back'
+        | 'poke'
+        | 'boop'
+        | 'salute'
+        | 'point'
+        | 'thumbs_up'
+        | 'heart'
+        | 'sparkle'
+        | 'celebrate'
+        | 'tease'
+        | 'playful_smack'
+        | 'whisper'
+        | 'listen'
+        | 'sit_with'
+        | 'step_back'
+        | 'take_left_hand'
+        | 'take_right_hand'
+        | 'release_hand';
+      targetId: string;
+    }
   | { type: 'ping'; clientSentAt: number }
   | { type: 'item_add'; itemType: string }
-  | { type: 'item_pickup'; itemId: string }
-  | { type: 'item_drop'; itemId: string; x: number; y: number }
+  | { type: 'item_pickup'; itemId: string; moveAttached?: boolean }
+  | { type: 'item_drop'; itemId: string; x: number; y: number; moveAttached?: boolean }
   | { type: 'item_delete'; itemId: string }
   | { type: 'item_transfer_targets'; itemId: string }
   | { type: 'item_transfer'; itemId: string; targetUserId: string }
   | { type: 'item_use'; itemId: string }
   | { type: 'item_secondary_use'; itemId: string }
+  | {
+      type: 'item_remote_control';
+      itemId: string;
+      action: 'station_next' | 'station_previous' | 'volume_up' | 'volume_down';
+    }
+  | {
+      type: 'item_interact';
+      itemId: string;
+      targetItemId?: string;
+      action: 'place_on' | 'shove_off' | 'repair' | 'replace' | 'move_surface_left' | 'move_surface_right';
+    }
   | { type: 'item_piano_note'; itemId: string; keyId: string; midi: number; on: boolean }
   | { type: 'item_piano_recording'; itemId: string; action: 'toggle_record' | 'playback' | 'stop_playback' | 'stop_record' }
   | {

@@ -77,6 +77,26 @@ export class ItemBehaviorRegistry {
     return false;
   }
 
+  /** Gives item behaviors first chance to consume realtime MIDI note-on events. */
+  handleMidiNoteOn(mode: GameMode, midi: number, velocity: number): boolean {
+    for (const behavior of this.behaviors) {
+      if (behavior.handleMidiNoteOn?.(mode, midi, velocity)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Gives item behaviors first chance to consume realtime MIDI note-off events. */
+  handleMidiNoteOff(mode: GameMode, midi: number): boolean {
+    for (const behavior of this.behaviors) {
+      if (behavior.handleMidiNoteOff?.(mode, midi)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** Returns whether any item-owned mode supports opening the command palette. */
   canOpenModeCommandPalette(mode: GameMode): boolean {
     for (const behavior of this.behaviors) {

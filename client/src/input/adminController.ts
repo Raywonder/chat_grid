@@ -25,6 +25,15 @@ export type AdminUserSummary = {
   status: 'active' | 'disabled';
 };
 
+export type AdminNotificationSummary = {
+  id: string;
+  createdAt: number;
+  kind: string;
+  title: string;
+  message: string;
+  read?: boolean;
+};
+
 export type AdminPendingUserMutation =
   | { action: 'set_role'; username: string; role: string }
   | { action: 'ban'; username: string }
@@ -58,6 +67,7 @@ export function createAdminController(deps: AdminControllerDeps): {
   handleAdminRolesList: (message: Extract<IncomingMessage, { type: 'admin_roles_list' }>) => void;
   handleAdminUsersList: (message: Extract<IncomingMessage, { type: 'admin_users_list' }>) => void;
   handleAdminPlatformOverview: (message: Extract<IncomingMessage, { type: 'admin_platform_overview' }>) => void;
+  handleAdminNotificationsList: (message: Extract<IncomingMessage, { type: 'admin_notifications_list' }>) => void;
   handleAdminActionResult: (message: Extract<IncomingMessage, { type: 'admin_action_result' }>) => void;
   handleAdminMenuModeInput: (code: string, key: string) => void;
   handleAdminRoleListModeInput: (code: string, key: string) => void;
@@ -161,17 +171,48 @@ export function createAdminController(deps: AdminControllerDeps): {
   }
 
   function handleAdminPlatformOverview(message: Extract<IncomingMessage, { type: 'admin_platform_overview' }>): void {
+    if (message.scope === 'owned_content') {
+      const ownedSummary =
+        message.links.length > 0
+          ? message.links
+              .slice(0, 8)
+              .map((entry) => `${entry.title}, ${entry.kind}, ${entry.locationId} at ${entry.x}, ${entry.y}`)
+              .join('; ')
+          : 'No owned content found.';
+      deps.updateStatus(
+        `Owned content monitor. ${message.ownedContentCount ?? message.links.length} owned items. ${ownedSummary}`,
+      );
+      deps.sfxUiBlip();
+      return;
+    }
     const linkSummary =
       message.links.length > 0
         ? message.links
             .slice(0, 6)
-            .map((entry) => `${entry.title} in ${entry.locationId} at ${entry.x}, ${entry.y}`)
+            .map((entry) => {
+              const author = entry.author ? ` by ${entry.author}` : '';
+              const status = entry.verificationStatus ? `, ${entry.verificationStatus.replaceAll('_', ' ')}` : '';
+              return `${entry.title}${author}${status} in ${entry.locationId} at ${entry.x}, ${entry.y}`;
+            })
             .join('; ')
-        : 'No service links seeded.';
+        : 'No platform links seeded.';
     const revision = message.expectedClientRevision ? ` Client ${message.expectedClientRevision}.` : '';
     deps.updateStatus(
       `Platform overview. Server ${message.serverVersion}.${revision} ${message.connectedUsers} connected. ${message.itemCount} items, ${message.serviceLinkCount} platform links. ${linkSummary}`,
     );
+    deps.sfxUiBlip();
+  }
+
+  function handleAdminNotificationsList(message: Extract<IncomingMessage, { type: 'admin_notifications_list' }>): void {
+    const scopeLabel = message.scope === 'admin' ? 'Admin notifications' : 'My notifications';
+    const summary =
+      message.notifications.length > 0
+        ? message.notifications
+            .slice(0, 8)
+            .map((entry) => `${entry.read ? 'read' : 'unread'} ${entry.title}: ${entry.message}`)
+            .join('; ')
+        : 'No notifications.';
+    deps.updateStatus(`${scopeLabel}. ${message.unreadCount} unread. ${summary}`);
     deps.sfxUiBlip();
   }
 
@@ -279,8 +320,38 @@ export function createAdminController(deps: AdminControllerDeps): {
       const selected = adminMenuActions[adminMenuIndex];
       if (!selected) return;
       if (selected.id === 'platform_overview') {
-        deps.signalingSend({ type: 'admin_platform_overview' });
+        deps.signalingSend({ type: 'admin_platform_overview', scope: 'platform' });
         deps.updateStatus('Loading platform overview...');
+        return;
+      }
+      if (selected.id === 'owned_content') {
+        deps.signalingSend({ type: 'admin_platform_overview', scope: 'owned_content' });
+        deps.updateStatus('Loading owned content...');
+        return;
+      }
+      if (selected.id === 'blindsoftware_admin_sync') {
+        deps.signalingSend({ type: 'admin_blindsoftware_sync' });
+        deps.updateStatus('Running BlindSoftware admin sync...');
+        return;
+      }
+      if (selected.id === 'my_notifications') {
+        deps.signalingSend({ type: 'admin_notifications_list', scope: 'own' });
+        deps.updateStatus('Loading notifications...');
+        return;
+      }
+      if (selected.id === 'mark_my_notifications_read') {
+        deps.signalingSend({ type: 'admin_notification_mark_read', scope: 'own' });
+        deps.updateStatus('Marking notifications read...');
+        return;
+      }
+      if (selected.id === 'admin_notifications') {
+        deps.signalingSend({ type: 'admin_notifications_list', scope: 'admin' });
+        deps.updateStatus('Loading admin notifications...');
+        return;
+      }
+      if (selected.id === 'mark_all_notifications_read') {
+        deps.signalingSend({ type: 'admin_notification_mark_read', scope: 'admin' });
+        deps.updateStatus('Marking admin notifications read...');
         return;
       }
       if (selected.id === 'manage_roles') {
@@ -615,6 +686,7 @@ export function createAdminController(deps: AdminControllerDeps): {
     handleAdminRolesList,
     handleAdminUsersList,
     handleAdminPlatformOverview,
+    handleAdminNotificationsList,
     handleAdminActionResult,
     handleAdminMenuModeInput,
     handleAdminRoleListModeInput,

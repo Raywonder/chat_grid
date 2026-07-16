@@ -1,0 +1,23 @@
+[Unit]
+Description=Chat Grid Clawdia companion presence
+After=network.target chat-grid.service
+Requires=chat-grid.service
+PartOf=chat-grid.service
+
+[Service]
+Type=simple
+User=tappedin
+Group=tappedin
+WorkingDirectory=/home/tappedin/.openclaw/workspace/projects/chat_grid/server
+Environment=PATH=/home/tappedin/.openclaw/workspace/projects/chat_grid/server/.venv/bin:/usr/bin:/bin
+EnvironmentFile=/home/tappedin/.openclaw/state/chatgrid-companion.env
+Environment=CHGRID_COMPANION_STATE_FILE=/home/tappedin/.openclaw/workspace/projects/chat_grid/server/runtime/companion.state.json
+ExecStartPre=/usr/bin/mkdir -p /home/tappedin/.openclaw/workspace/projects/chat_grid/server/runtime
+ExecStart=/home/tappedin/.openclaw/workspace/projects/chat_grid/server/.venv/bin/python /home/tappedin/.openclaw/workspace/projects/chat_grid/server/tools/companion_client.py
+StandardOutput=append:/home/tappedin/.openclaw/workspace/projects/chat_grid/server/runtime/companion.log
+StandardError=append:/home/tappedin/.openclaw/workspace/projects/chat_grid/server/runtime/companion.log
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

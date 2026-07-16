@@ -8,6 +8,7 @@ import { getProxyUrlForMedia, shouldProxyExternalMediaUrl } from './audio/mediaU
 import { ItemEmitRuntime } from './audio/itemEmitRuntime';
 import { BillboardRuntime } from './audio/billboardRuntime';
 import { ClockAnnouncer } from './audio/clockAnnouncer';
+import { HumanPresenceRuntime } from './audio/humanPresenceRuntime';
 import { normalizeDegrees } from './audio/spatial';
 import {
   applyPastedText,
@@ -432,11 +433,11 @@ const LOCATION_AMBIENCE_PROFILES: Record<string, Omit<LocationAmbienceProfile, '
   arcade_glow: { loopUrl: withBase('sounds/ambience/arcade_glow.ogg?v=20260714-arcade-loop'), loopGain: 0.5, rootHz: 130.81, colorHz: 196, airHz: 392, noiseHz: 1800, noiseQ: 2.4, gain: 0.052, noiseGain: 0.012, wave: 'square' },
   office_focus: { loopUrl: withBase('sounds/ambience/office_focus.ogg'), loopGain: 0.42, rootHz: 73.42, colorHz: 146.83, airHz: 293.66, noiseHz: 560, noiseQ: 0.9, gain: 0.047, noiseGain: 0.014, wave: 'sine' },
   neighborhood_evening: { loopUrl: withBase('sounds/ambience/neighborhood_evening.ogg'), loopGain: 0.48, rootHz: 87.31, colorHz: 130.81, airHz: 261.63, noiseHz: 820, noiseQ: 0.9, gain: 0.049, noiseGain: 0.02, wave: 'triangle' },
-  front_entry: { loopUrl: withBase('sounds/ambience/front_entry.ogg'), loopGain: 0.42, rootHz: 92.5, colorHz: 185, airHz: 277.18, noiseHz: 650, noiseQ: 1, gain: 0.045, noiseGain: 0.014, wave: 'sine' },
-  living_room_warmth: { loopUrl: withBase('sounds/ambience/living_room_warmth.ogg'), loopGain: 0.5, rootHz: 65.41, colorHz: 130.81, airHz: 196, noiseHz: 500, noiseQ: 0.8, gain: 0.05, noiseGain: 0.012, wave: 'triangle' },
-  studio_current: { loopUrl: withBase('sounds/ambience/studio_current.ogg'), loopGain: 0.42, rootHz: 55, colorHz: 110, airHz: 220, noiseHz: 1250, noiseQ: 1.6, gain: 0.052, noiseGain: 0.018, wave: 'sawtooth' },
-  kitchen_soft_clatter: { loopUrl: withBase('sounds/ambience/kitchen_soft_clatter.ogg'), loopGain: 0.35, rootHz: 104, colorHz: 156, airHz: 312, noiseHz: 980, noiseQ: 1.3, gain: 0.048, noiseGain: 0.019, wave: 'triangle' },
-  bedroom_quiet: { loopUrl: withBase('sounds/ambience/bedroom_quiet.ogg'), loopGain: 0.55, rootHz: 61.74, colorHz: 123.47, airHz: 185, noiseHz: 420, noiseQ: 0.7, gain: 0.038, noiseGain: 0.01, wave: 'sine' },
+  front_entry: { loopUrl: withBase('sounds/ambience/front_entry.ogg?v=20260716-long-room-beds'), loopGain: 0.42, rootHz: 92.5, colorHz: 185, airHz: 277.18, noiseHz: 650, noiseQ: 1, gain: 0.045, noiseGain: 0.014, wave: 'sine' },
+  living_room_warmth: { loopUrl: withBase('sounds/ambience/living_room_warmth.ogg?v=20260716-long-room-beds'), loopGain: 0.5, rootHz: 65.41, colorHz: 130.81, airHz: 196, noiseHz: 500, noiseQ: 0.8, gain: 0.05, noiseGain: 0.012, wave: 'triangle' },
+  studio_current: { loopUrl: withBase('sounds/ambience/studio_current.ogg?v=20260716-long-room-beds'), loopGain: 0.42, rootHz: 55, colorHz: 110, airHz: 220, noiseHz: 1250, noiseQ: 1.6, gain: 0.052, noiseGain: 0.018, wave: 'sawtooth' },
+  kitchen_soft_clatter: { loopUrl: withBase('sounds/ambience/kitchen_soft_clatter.ogg?v=20260716-long-room-beds'), loopGain: 0.35, rootHz: 104, colorHz: 156, airHz: 312, noiseHz: 980, noiseQ: 1.3, gain: 0.048, noiseGain: 0.019, wave: 'triangle' },
+  bedroom_quiet: { loopUrl: withBase('sounds/ambience/bedroom_quiet.ogg?v=20260716-long-room-beds'), loopGain: 0.55, rootHz: 61.74, colorHz: 123.47, airHz: 185, noiseHz: 420, noiseQ: 0.7, gain: 0.038, noiseGain: 0.01, wave: 'sine' },
   relaxation_ocean: { loopUrl: withBase('sounds/ambience/relaxation_bowls.ogg?v=20260714-singing-bowls'), loopGain: 0.52, rootHz: 74, colorHz: 148, airHz: 222, noiseHz: 360, noiseQ: 0.65, gain: 0.042, noiseGain: 0.026, wave: 'sine' },
 };
 const STREAM_LOCATION_AMBIENCE_BASE: Omit<LocationAmbienceProfile, 'key' | 'name' | 'loopUrl' | 'loopGain'> = {
@@ -470,9 +471,6 @@ const IDLE_AUTO_REST_RADIUS = 4;
 const IDLE_AUTO_REST_AFTER_MS = 2 * 60 * 60 * 1000;
 const IDLE_AUTO_REST_CHECK_MS = 60 * 1000;
 const LIE_DOWN_MOODS = new Set(['dreamy', 'resting', 'sleepy', 'tired']);
-const SEATED_BINAURAL_STEP = 0.25;
-const SEATED_BINAURAL_LIMIT = 1.25;
-
 const state = createInitialState();
 const renderer = new CanvasRenderer(dom.canvas);
 const audio = new AudioEngine();
@@ -502,6 +500,7 @@ const billboardRuntime = new BillboardRuntime(audio, getItemSpatialConfig, (mess
   pushChatMessage(message);
 }, shouldSpeakItemAnnouncement);
 const clockAnnouncer = new ClockAnnouncer(audio, () => getListenerPosition());
+const humanPresenceRuntime = new HumanPresenceRuntime(audio, resolveIncomingSoundUrl);
 const initialExternalAuthAssertion = consumeExternalAuthAssertion();
 const isDesktopClient = new URL(window.location.href).searchParams.get('desktop') === '1'
   || Boolean((window as Window & { chatGridDesktop?: unknown }).chatGridDesktop);
@@ -683,7 +682,11 @@ let userActionTargetId: string | null = null;
 let heartbeatTimerId: number | null = null;
 let heartbeatNextPingId = -1;
 let heartbeatAwaitingPong = false;
+let heartbeatMissedIntervals = 0;
 let reconnectInFlight = false;
+let browserAudioRecoveryInFlight = false;
+let backgroundAudioRecoveryTimerId: number | null = null;
+const BACKGROUND_AUDIO_RECOVERY_INTERVAL_MS = 12_000;
 let activeServerInstanceId: string | null = null;
 let reloadScheduledForVersionMismatch = false;
 let peerNegotiationReady = false;
@@ -858,7 +861,10 @@ function profileForLocationAmbience(location: WorldLocationOption | undefined): 
 }
 
 function preloadLocationAmbienceSounds(): void {
-  audio.preloadSamples(Object.values(LOCATION_AMBIENCE_PROFILES).map((profile) => profile.loopUrl));
+  audio.preloadSamples([
+    ...Object.values(LOCATION_AMBIENCE_PROFILES).map((profile) => profile.loopUrl),
+    ...FOOTSTEP_SOUND_URLS,
+  ]);
   audio.preloadSamples([
     TELEPORT_START_SOUND_URL,
     TELEPORT_SOUND_URL,
@@ -1460,9 +1466,6 @@ async function refreshAudioSubscriptionsForListeners(
   lastSubscriptionRefreshTileX = tileX;
   lastSubscriptionRefreshTileY = tileY;
   try {
-    if (force) {
-      radioRuntime.recoverActivePlayback();
-    }
     await radioRuntime.sync(state.items.values(), listenerPositions);
     await itemEmitRuntime.sync(state.items.values(), listenerPositions);
   } finally {
@@ -1765,6 +1768,7 @@ function openInteractiveItem(item: WorldItem): boolean {
   dom.interactiveItemOpenLink.href = url;
   dom.interactiveItemFrame.src = interactiveItemFrameUrl(item, url);
   dom.interactiveItemPanel.classList.remove('hidden');
+  dom.interactiveItemPanel.hidden = false;
   dom.interactiveItemPanel.scrollIntoView({ block: 'start', behavior: 'smooth' });
   dom.interactiveItemFrame.addEventListener(
     'load',
@@ -1846,6 +1850,7 @@ function closeInteractiveItem(): boolean {
   if (dom.interactiveItemPanel.classList.contains('hidden')) return false;
   dom.interactiveItemFrame.removeAttribute('src');
   dom.interactiveItemPanel.classList.add('hidden');
+  dom.interactiveItemPanel.hidden = true;
   updateStatus('Interactive item closed.');
   audio.sfxUiCancel();
   dom.canvas.focus();
@@ -2686,6 +2691,13 @@ function gameLoop(): void {
   }
   audio.updateSpatialAudio(peerManager.getPeers(), listenerPosition);
   audio.updateSpatialSamples(listenerPosition);
+  humanPresenceRuntime.setEnabled(getAudioLayers().world);
+  humanPresenceRuntime.update({
+    player: state.player,
+    peers: state.peers.values(),
+    currentLocationId,
+    listenerPosition,
+  });
   radioRuntime.updateSpatialAudio(state.items, listenerPosition);
   itemEmitRuntime.updateSpatialAudio(state.items, listenerPosition);
   billboardRuntime.update(state.items, listenerPosition);
@@ -2717,23 +2729,24 @@ function handleMovement(): void {
 
   if (state.player.posture !== 'standing') {
     state.player.lastMoveTime = now;
+    if (state.player.posture === 'floor') {
+      if (dy > 0) {
+        signaling.send({ type: 'posture_move', action: 'stand' });
+        updateStatus('You begin standing up from the floor.');
+      } else if (dy < 0) {
+        signaling.send({ type: 'posture_move', action: 'return_to_bed' });
+        updateStatus('You reach back toward the bed.');
+      }
+      return;
+    }
     if (dx !== 0 && dy === 0) {
-      const nextOffset = Math.max(
-        -SEATED_BINAURAL_LIMIT,
-        Math.min(SEATED_BINAURAL_LIMIT, state.player.seatedOffset + dx * SEATED_BINAURAL_STEP),
-      );
-      state.player.seatedOffset = nextOffset;
-      void refreshAudioSubscriptions(true);
-      updateStatus(
-        dx < 0
-          ? 'You shift your listening position left on the couch.'
-          : 'You shift your listening position right on the couch.',
-      );
+      signaling.send({ type: 'posture_move', action: dx < 0 ? 'shift_left' : 'shift_right' });
+      updateStatus(dx < 0 ? 'You shift left.' : 'You shift right.');
       audio.sfxUiBlip();
       return;
     }
-    signaling.send({ type: 'update_position', x: state.player.x + dx, y: state.player.y + dy });
-    updateStatus('Stand up before moving away from the furniture.');
+    signaling.send({ type: 'posture_move', action: 'stand' });
+    updateStatus('You begin standing up from the furniture.');
     audio.sfxUiCancel();
     return;
   }
@@ -2814,6 +2827,7 @@ function stopHeartbeat(): void {
     heartbeatTimerId = null;
   }
   heartbeatAwaitingPong = false;
+  heartbeatMissedIntervals = 0;
 }
 
 /** Sends one heartbeat ping packet using reserved negative ids. */
@@ -2827,12 +2841,17 @@ function sendHeartbeatPing(): void {
 function startHeartbeat(): void {
   stopHeartbeat();
   heartbeatAwaitingPong = false;
+  heartbeatMissedIntervals = 0;
   sendHeartbeatPing();
   heartbeatTimerId = window.setInterval(() => {
     if (!state.running) return;
     if (heartbeatAwaitingPong) {
-      void reconnectAfterHeartbeatTimeout();
-      return;
+      heartbeatMissedIntervals += 1;
+      const toleratedMisses = document.hidden ? 9 : 3;
+      if (heartbeatMissedIntervals >= toleratedMisses) {
+        void reconnectAfterHeartbeatTimeout();
+        return;
+      }
     }
     sendHeartbeatPing();
   }, HEARTBEAT_INTERVAL_MS);
@@ -2856,7 +2875,7 @@ async function reconnectWithRetry(reason: 'heartbeat' | 'socketClose'): Promise<
   if (reason === 'heartbeat') {
     pushChatMessage('Connection stale. Reconnecting...');
   }
-  disconnect();
+  prepareTransientReconnect();
   for (let attempt = 1; attempt <= RECONNECT_MAX_ATTEMPTS; attempt += 1) {
     await new Promise((resolve) => window.setTimeout(resolve, RECONNECT_DELAY_MS));
     await connect();
@@ -2875,6 +2894,19 @@ async function reconnectWithRetry(reason: 'heartbeat' | 'socketClose'): Promise<
   pushChatMessage('Reconnect failed after 3 attempts. Press Connect to retry.');
   audio.sfxUiCancel();
   reconnectInFlight = false;
+  disconnect();
+}
+
+/** Preserves world/media playback while signaling performs a short reconnect. */
+function prepareTransientReconnect(): void {
+  signaling.disconnect();
+  peerManager.cleanupAll();
+  peerNegotiationReady = false;
+  pendingSignalMessages = [];
+  state.running = false;
+  state.keysPressed = {};
+  mediaSession.setConnecting(false);
+  updateConnectAvailability();
 }
 
 /** Sends current auth request over signaling websocket after socket open. */
@@ -2886,13 +2918,11 @@ function sendAuthRequest(): void {
 function handleAuthRequired(message: Extract<IncomingMessage, { type: 'auth_required' }>): void {
   applyGridBranding(message.gridName, message.welcomeMessage);
   const expectedClientRevision = String(message.expectedClientRevision ?? '').trim();
-  if (!reloadScheduledForVersionMismatch && expectedClientRevision && expectedClientRevision !== APP_CLIENT_REVISION) {
+  if (expectedClientRevision && expectedClientRevision !== APP_CLIENT_REVISION) {
     const serverVersion = String(message.serverVersion ?? '').trim() || 'unknown';
-    pushChatMessage(
-      `Server ${serverVersion} expects client ${expectedClientRevision}. Checking for an updated client...`,
+    console.info(
+      `Server ${serverVersion} reports client ${expectedClientRevision}; public version metadata remains authoritative.`,
     );
-    scheduleClientUpdateReload({ releaseVersion: '', clientRevision: expectedClientRevision });
-    return;
   }
   authController.handleAuthRequired(message);
 }
@@ -3077,14 +3107,57 @@ async function activatePeerNegotiation(): Promise<void> {
   }
 }
 
-/** Drops stale voice/media runtimes so reconnects rebuild full streams cleanly. */
+/** Drops stale peer voice state; persistent world/media graphs reconcile in place. */
 function resetRealtimeStreamsForReconnect(): void {
   peerNegotiationReady = false;
   pendingSignalMessages = [];
   peerManager.cleanupAll();
-  radioRuntime.resetPlaybackRecovery();
-  itemEmitRuntime.resetPlaybackRecovery();
 }
+
+/** Restarts suspended browser audio and reconciles streams after tab/app focus returns. */
+async function recoverBrowserAudio(force = true): Promise<void> {
+  if (browserAudioRecoveryInFlight) return;
+  const playbackNeedsRepair = radioRuntime.hasPlaybackIssue() || itemEmitRuntime.hasPlaybackIssue();
+  if (!force && audio.context?.state === 'running' && !playbackNeedsRepair) return;
+  browserAudioRecoveryInFlight = true;
+  try {
+    await audio.ensureContext();
+    if (!state.running) return;
+    radioRuntime.recoverActivePlayback();
+    itemEmitRuntime.recoverActivePlayback();
+    // Buffer-source ambience cannot be restarted after Chrome stops it while a
+    // tab is backgrounded. Clear its runtime so applyAudioLayerState rebuilds
+    // the current room ambience instead of accepting a stale matching key.
+    if (force || audio.context?.state !== 'running') {
+      audio.stopLocationAmbience();
+    }
+    await refreshAudioSubscriptions(true);
+    await applyAudioLayerState();
+  } finally {
+    browserAudioRecoveryInFlight = false;
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) void recoverBrowserAudio(true);
+});
+window.addEventListener('focus', () => void recoverBrowserAudio(true));
+window.addEventListener('pageshow', () => void recoverBrowserAudio(true));
+
+// Desktop shells, installed PWAs, and mobile browsers do not always emit a
+// useful focus event after an audio device, network, or app-suspension change.
+// Keep a quiet watchdog that only acts when the API context or an authoritative
+// server-backed media/object runtime actually needs repair.
+backgroundAudioRecoveryTimerId = window.setInterval(
+  () => void recoverBrowserAudio(false),
+  BACKGROUND_AUDIO_RECOVERY_INTERVAL_MS,
+);
+window.addEventListener('pagehide', () => {
+  if (backgroundAudioRecoveryTimerId !== null) {
+    window.clearInterval(backgroundAudioRecoveryTimerId);
+    backgroundAudioRecoveryTimerId = null;
+  }
+}, { once: true });
 
 const onAppMessage = createOnMessageHandler({
   getWorldGridSize: () => worldGridSize,
@@ -3212,6 +3285,7 @@ const onAppMessage = createOnMessageHandler({
 async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   if (message.type === 'pong' && message.clientSentAt < 0) {
     heartbeatAwaitingPong = false;
+    heartbeatMissedIntervals = 0;
     return;
   }
   let restartAnnouncement: string | null = null;
@@ -3230,14 +3304,10 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
       ? `Reconnected to server. Version ${incomingServerVersion}.`
       : `Connected to server. Version ${incomingServerVersion}.`;
     playSelfLoginSound = !reconnectInFlight;
-    if (
-      !reloadScheduledForVersionMismatch &&
-      expectedClientRevision &&
-      expectedClientRevision !== APP_CLIENT_REVISION
-    ) {
-      pushChatMessage(`Server expects client ${expectedClientRevision}. Checking for an updated client...`);
-      scheduleClientUpdateReload({ releaseVersion: '', clientRevision: expectedClientRevision });
-      return;
+    if (expectedClientRevision && expectedClientRevision !== APP_CLIENT_REVISION) {
+      console.info(
+        `Server reports client ${expectedClientRevision}; public version metadata remains authoritative.`,
+      );
     }
     if (activeServerInstanceId && incomingInstanceId && activeServerInstanceId !== incomingInstanceId) {
       restartAnnouncement = 'Server restarted.';
@@ -4636,6 +4706,7 @@ async function populateAudioDevices(): Promise<void> {
 function openSettings(): void {
   lastFocusedElement = document.activeElement;
   dom.settingsModal.classList.remove('hidden');
+  dom.settingsModal.hidden = false;
   syncAnnouncementSettingsControls();
   void populateAudioDevices();
   if (state.running) signaling.send({ type: 'ntfy_preferences_get' });
@@ -4655,6 +4726,7 @@ dom.rotateNtfyTopicButton.addEventListener('click', () => {
 /** Closes settings modal and restores focus back to prior element or game canvas. */
 function closeSettings(): void {
   dom.settingsModal.classList.add('hidden');
+  dom.settingsModal.hidden = true;
   if (lastFocusedElement instanceof HTMLElement) {
     lastFocusedElement.focus();
   } else {
@@ -4666,6 +4738,7 @@ setupKeyboardInputHandlers({
   dom: {
     settingsModal: dom.settingsModal,
     canvas: dom.canvas,
+    focusGridButton: dom.focusGridButton,
   },
   state,
   isTextEditingMode,
@@ -4687,6 +4760,8 @@ setupKeyboardInputHandlers({
     replaceTextOnNextType = value;
   },
   closeInteractiveItem,
+  onUserActivity: recordUserActivity,
+  isDesktopClient,
 });
 
 dom.readGuideButton.addEventListener('click', () => {
@@ -4720,6 +4795,7 @@ setupDomUiHandlers({
   openSettings,
   closeSettings,
   updateStatus,
+  getGridName: () => activeGridName,
   sfxUiBlip: () => audio.sfxUiBlip(),
   setupLocalMedia,
   setPreferredInput: (id, name) => {

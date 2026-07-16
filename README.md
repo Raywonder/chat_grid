@@ -73,5 +73,9 @@ Contributions and ideas are welcome. The grid is already home to several rather 
 This project has been largely coded using AI tools, with a lot of human prompting and hand-holding to enforce best practices. All ideas for improving the project or its design are welcome.
 
 ## License
-- MIT
-This project is licensed under the MIT License. See `LICENSE`.
+
+The source code is licensed under the MIT License. See `LICENSE`.
+
+Media, voices, station branding, feeds, and other non-code material may have
+separate terms. See `THIRD_PARTY_NOTICES.md` and
+`docs/asset-licensing.md` before redistributing a web or desktop build.

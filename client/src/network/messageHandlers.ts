@@ -33,7 +33,7 @@ type MessageHandlerDeps = {
       nickname: string;
       x: number;
       y: number;
-      posture?: 'standing' | 'sitting' | 'lying';
+      posture?: 'standing' | 'sitting' | 'lying' | 'floor';
       seatedItemId?: string | null;
       seatedOffset?: number;
       handHeldById?: string | null;
@@ -48,7 +48,7 @@ type MessageHandlerDeps = {
         locationId?: string;
         x: number;
         y: number;
-        posture?: 'standing' | 'sitting' | 'lying';
+        posture?: 'standing' | 'sitting' | 'lying' | 'floor';
         seatedItemId?: string | null;
         seatedOffset?: number;
         handHeldById?: string | null;
@@ -205,7 +205,9 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.dom.canvas.classList.remove('hidden');
         deps.dom.instructions.classList.remove('hidden');
         document.getElementById('joinGuide')?.classList.add('hidden');
-        document.getElementById('gridDashboard')?.classList.remove('hidden');
+        const dashboard = document.getElementById('gridDashboard');
+        dashboard?.classList.remove('hidden');
+        if (dashboard) dashboard.hidden = false;
         // Do not drop users into application mode before they deliberately
         // activate it. Put keyboard/screen-reader focus on the explicit entry
         // button; Enter or Space then transfers focus to the world canvas.

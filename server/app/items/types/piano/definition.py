@@ -26,10 +26,10 @@ DEFAULT_PARAMS: dict = {
     "instrument": "piano",
     "voiceMode": "poly",
     "octave": 0,
-    "attack": 15,
-    "decay": 45,
-    "release": 35,
-    "brightness": 55,
+    "attack": 3,
+    "decay": 55,
+    "release": 45,
+    "brightness": 68,
     "emitRange": 15,
     "songId": "unterlandersheimweh",
 }
@@ -60,7 +60,7 @@ INSTRUMENT_OPTIONS: tuple[str, ...] = (
 VOICE_MODE_OPTIONS: tuple[str, ...] = ("poly", "mono")
 
 DEFAULT_ENVELOPE_BY_INSTRUMENT: dict[str, tuple[int, int, int, int, str, int]] = {
-    "piano": (15, 45, 35, 55, "poly", 0),
+    "piano": (3, 55, 45, 68, "poly", 0),
     "electric_piano": (12, 40, 30, 62, "poly", 0),
     "guitar": (8, 35, 25, 50, "poly", 0),
     "organ": (25, 70, 45, 48, "poly", 0),

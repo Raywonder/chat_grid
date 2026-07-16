@@ -9,6 +9,8 @@ export function createPianoBehavior(deps: ItemBehaviorDeps): ItemBehavior {
     signalingSend: deps.signalingSend,
     updateStatus: deps.updateStatus,
     openHelpViewer: deps.openHelpViewer,
+    requestMidiAccess: deps.requestMidiAccess,
+    setMidiControlVisible: deps.setMidiControlVisible,
   });
 
   return {
@@ -45,6 +47,16 @@ export function createPianoBehavior(deps: ItemBehaviorDeps): ItemBehavior {
     handleModeKeyUp: (mode, input) => {
       if (mode !== 'pianoUse') return false;
       controller.handleModeKeyUp(input);
+      return true;
+    },
+    handleMidiNoteOn: (mode, midi, velocity) => {
+      if (mode !== 'pianoUse') return false;
+      controller.handleMidiNoteOn(midi, velocity);
+      return true;
+    },
+    handleMidiNoteOff: (mode, midi) => {
+      if (mode !== 'pianoUse') return false;
+      controller.handleMidiNoteOff(midi);
       return true;
     },
     canOpenModeCommandPalette: (mode) => mode === 'pianoUse',

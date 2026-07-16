@@ -115,13 +115,13 @@ async def test_radio_use_toggles_enabled(monkeypatch: pytest.MonkeyPatch) -> Non
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
         send_payloads.append(packet)
 
-    async def fake_broadcast(
-        packet: object, exclude: ServerConnection | None = None
+    async def fake_broadcast_location(
+        location_id: str, packet: object, exclude: ServerConnection | None = None
     ) -> None:
         broadcast_payloads.append(packet)
 
     monkeypatch.setattr(server, "_send", fake_send)
-    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+    monkeypatch.setattr(server, "_broadcast_location", fake_broadcast_location)
     monkeypatch.setattr(server.item_service, "now_ms", lambda: now_ms)
 
     assert item.params.get("enabled") is True
@@ -259,6 +259,268 @@ async def test_radio_media_fields_update_validate(
 
 
 @pytest.mark.asyncio
+async def test_house_radio_remote_tunes_nearest_room_radio(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(
+            websocket=ws,
+            id="u1",
+            nickname="tester",
+            location_id="raywonder_house_living_room",
+            x=19,
+            y=21,
+        ),
+        permissions={"item.use"},
+    )
+    server.clients[ws] = client
+    remote = server.items["seed-raywonder-living-room-radio-remote"]
+    radio = server.items["seed-raywonder-living-room-radio"]
+
+    send_payloads: list[object] = []
+    broadcast_items: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast_item(item: object) -> None:
+        broadcast_items.append(item)
+
+    async def fake_resolve_radio(item: object) -> None:
+        return
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+    monkeypatch.setattr(server, "_resolve_radio_playback_before_broadcast", fake_resolve_radio)
+
+    assert radio.params["stationIndex"] == 0
+    await server._handle_message(
+        client, json.dumps({"type": "item_use", "itemId": remote.id})
+    )
+
+    synced_radios = [
+        item
+        for item in server.items.values()
+        if item.type == "radio_station"
+        and item.locationId.startswith("raywonder_house_")
+        and item.locationId != "raywonder_house_relaxation_room"
+    ]
+    relaxation_radio = server.items["seed-raywonder-relaxation-ocean-radio"]
+    bedroom_radio = server.items["seed-raywonder-bedroom-bedside-radio"]
+    assert synced_radios
+    assert all(item.params["stationIndex"] == 1 for item in synced_radios)
+    assert all(item.params["stationName"] == "DivineCreations radio" for item in synced_radios)
+    assert bedroom_radio.params["enabled"] is False
+    assert all(
+        item.params["enabled"] is True
+        for item in synced_radios
+        if item.id != bedroom_radio.id
+    )
+    assert relaxation_radio.params["stationName"] == "TappedIn 30 minute relaxation"
+    assert {getattr(item, "id", "") for item in broadcast_items} == {
+        item.id for item in synced_radios
+    }
+    item_result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert item_result.ok is True
+    assert "Remote tuned" in item_result.message
+    assert "DivineCreations radio" in item_result.message
+
+
+@pytest.mark.asyncio
+async def test_house_radio_remote_syncs_all_house_radios_to_target_station(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(
+            websocket=ws,
+            id="u1",
+            nickname="tester",
+            location_id="raywonder_house_living_room",
+            x=19,
+            y=21,
+        ),
+        permissions={"item.use"},
+    )
+    server.clients[ws] = client
+    remote = server.items["seed-raywonder-living-room-radio-remote"]
+    living_radio = server.items["seed-raywonder-living-room-radio"]
+    living_radio.params["stationIndex"] = 8
+    living_radio.params["streamUrl"] = living_radio.params["stationPresets"][8][
+        "streamUrl"
+    ]
+    living_radio.params["stationName"] = living_radio.params["stationPresets"][8][
+        "title"
+    ]
+
+    send_payloads: list[object] = []
+    broadcast_items: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast_item(item: object) -> None:
+        broadcast_items.append(item)
+
+    async def fake_resolve_radio(item: object) -> None:
+        return
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+    monkeypatch.setattr(server, "_resolve_radio_playback_before_broadcast", fake_resolve_radio)
+
+    await server._handle_message(
+        client, json.dumps({"type": "item_secondary_use", "itemId": remote.id})
+    )
+
+    synced_radios = [
+        item
+        for item in server.items.values()
+        if item.type == "radio_station"
+        and item.locationId.startswith("raywonder_house_")
+        and item.locationId != "raywonder_house_relaxation_room"
+    ]
+    relaxation_radio = server.items["seed-raywonder-relaxation-ocean-radio"]
+    bedroom_radio = server.items["seed-raywonder-bedroom-bedside-radio"]
+    assert synced_radios
+    assert all(item.params["stationIndex"] == 8 for item in synced_radios)
+    assert all(item.params["stationName"] == "ACB Media 1" for item in synced_radios)
+    assert bedroom_radio.params["enabled"] is False
+    assert all(
+        item.params["enabled"] is True
+        for item in synced_radios
+        if item.id != bedroom_radio.id
+    )
+    assert relaxation_radio.params["stationName"] == "TappedIn 30 minute relaxation"
+    assert relaxation_radio.params["stationIndex"] != 8
+    assert {getattr(item, "id", "") for item in broadcast_items} == {
+        item.id for item in synced_radios
+    }
+    item_result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert item_result.ok is True
+    assert "Synced" in item_result.message
+    assert "ACB Media 1" in item_result.message
+
+
+@pytest.mark.asyncio
+async def test_house_keeper_repairs_broken_room_radio(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(
+            websocket=ws,
+            id="u1",
+            nickname="tester",
+            location_id="raywonder_house_living_room",
+            x=19,
+            y=20,
+        ),
+        permissions={"item.use"},
+    )
+    server.clients[ws] = client
+    keeper = server.items["seed-raywonder-entry-house-keeper"]
+    keeper.locationId = "raywonder_house_living_room"
+    keeper.x = 19
+    keeper.y = 20
+    radio = server.items["seed-raywonder-living-room-radio"]
+    radio.params["enabled"] = False
+    radio.params["stationIndex"] = 999
+    radio.params["streamUrl"] = "htt*broken"
+    radio.params["playbackUrl"] = "htt*cached"
+    radio.params["stationName"] = "Broken station"
+
+    send_payloads: list[object] = []
+    broadcast_items: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast_item(item: object) -> None:
+        broadcast_items.append(item)
+
+    async def fake_resolve_radio(item: object) -> None:
+        return None
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+    monkeypatch.setattr(server, "_resolve_radio_playback_before_broadcast", fake_resolve_radio)
+
+    await server._handle_message(
+        client, json.dumps({"type": "item_use", "itemId": keeper.id})
+    )
+
+    assert radio.params["enabled"] is True
+    expected_index = 999 % len(radio.params["stationPresets"])
+    expected_station = radio.params["stationPresets"][expected_index]
+    assert radio.params["stationIndex"] == expected_index
+    assert radio.params["stationName"] == expected_station["title"]
+    assert radio.params["streamUrl"] == expected_station["streamUrl"]
+    assert radio.params["playbackUrl"] == ""
+    assert {getattr(item, "id", "") for item in broadcast_items} == {radio.id}
+    item_result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert item_result.ok is True
+    assert "fixed 1 item" in item_result.message
+    assert "Living room radio" in item_result.message
+
+
+@pytest.mark.asyncio
+async def test_house_keeper_auto_check_moves_and_repairs_room_radio(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    keeper = server.items["seed-raywonder-entry-house-keeper"]
+    keeper.locationId = "raywonder_house_living_room"
+    keeper.x = 19
+    keeper.y = 20
+    keeper.params["checkIntervalHours"] = 1
+    keeper.params["lastAutoCheckAt"] = 0
+    radio = server.items["seed-raywonder-living-room-radio"]
+    radio.params["enabled"] = False
+    radio.params["streamUrl"] = "htt*broken"
+    radio.params["playbackUrl"] = "htt*cached"
+
+    broadcast_items: list[object] = []
+    now_ms = 123_000
+
+    async def fake_broadcast_item(item: object) -> None:
+        broadcast_items.append(item)
+
+    async def fake_resolve_radio(item: object) -> None:
+        return None
+
+    monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+    monkeypatch.setattr(server, "_resolve_radio_playback_before_broadcast", fake_resolve_radio)
+    monkeypatch.setattr(server.item_service, "now_ms", lambda: now_ms)
+
+    start_position = (keeper.x, keeper.y)
+
+    did_run = await server._run_house_keeper_auto_check(keeper)
+
+    assert did_run is True
+    assert abs(keeper.x - start_position[0]) + abs(keeper.y - start_position[1]) == 1
+    assert radio.params["enabled"] is True
+    assert radio.params["streamUrl"]
+    assert radio.params["playbackUrl"] == ""
+    assert keeper.params["lastAutoCheckAt"] == now_ms
+    assert "Auto checked room; fixed 1 item" in keeper.params["lastAutoCheckSummary"]
+    assert {getattr(item, "id", "") for item in broadcast_items} >= {
+        keeper.id,
+        radio.id,
+    }
+
+    broadcast_items.clear()
+    did_run_again = await server._run_house_keeper_auto_check(keeper)
+
+    assert did_run_again is False
+    assert broadcast_items == []
+
+
+@pytest.mark.asyncio
 async def test_item_update_strips_unknown_params(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -363,8 +625,15 @@ async def test_clock_use_reports_time_without_use_sound_packet(
     ) -> None:
         broadcast_payloads.append(packet)
 
+    async def fake_broadcast_location(
+        location_id: str, packet: object, exclude: ServerConnection | None = None
+    ) -> None:
+        broadcast_payloads.append(packet)
+
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+    monkeypatch.setattr(server, "_broadcast_location", fake_broadcast_location)
+    monkeypatch.setattr(server, "_format_clock_display_time", lambda _params: "4:32 PM")
     monkeypatch.setattr(server.item_service, "now_ms", lambda: 30_000)
     await server._handle_message(
         client, json.dumps({"type": "item_use", "itemId": item.id})
@@ -372,7 +641,7 @@ async def test_clock_use_reports_time_without_use_sound_packet(
 
     item_result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
     assert item_result.ok is True
-    assert item_result.message == ""
+    assert item_result.message == "It's 4:32 PM."
     assert not any(
         getattr(packet, "type", "") == "item_use_sound" for packet in broadcast_payloads
     )
@@ -419,6 +688,33 @@ async def test_clock_timezone_update_validates(monkeypatch: pytest.MonkeyPatch) 
     )
     assert _last_packet_of_type(send_payloads, ItemActionResultPacket).ok is True
     assert item.params.get("timeZone") == "Europe/Berlin"
+
+    await server._handle_message(
+        client,
+        json.dumps(
+            {
+                "type": "item_update",
+                "itemId": item.id,
+                "params": {"announceIntervalMinutes": 1},
+            }
+        ),
+    )
+    assert _last_packet_of_type(send_payloads, ItemActionResultPacket).ok is True
+    assert item.params.get("announceIntervalMinutes") == 1
+
+    await server._handle_message(
+        client,
+        json.dumps(
+            {
+                "type": "item_update",
+                "itemId": item.id,
+                "params": {"announceIntervalMinutes": 61},
+            }
+        ),
+    )
+    item_result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert item_result.ok is False
+    assert "announceintervalminutes must be from 1 to 60" in item_result.message.lower()
 
     await server._handle_message(
         client,
@@ -514,6 +810,47 @@ async def test_failed_wheel_use_does_not_consume_cooldown(
 
 
 @pytest.mark.asyncio
+async def test_wheel_use_broadcasts_spin_sound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6),
+        permissions={"item.use"},
+    )
+    server.clients[ws] = client
+    item = server.item_service.default_item(client, "wheel")
+    item.params["spaces"] = "yes, no"
+    server.item_service.add_item(item)
+
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
+        return
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+    monkeypatch.setattr(server.item_service, "now_ms", lambda: 50_000)
+
+    await server._handle_message(
+        client, json.dumps({"type": "item_use", "itemId": item.id})
+    )
+
+    assert _last_packet_of_type(send_payloads, ItemActionResultPacket).ok is True
+    sound_packets = _packets_of_type(send_payloads, ItemUseSoundPacket)
+    assert sound_packets
+    assert sound_packets[-1].sound == "sounds/spin.ogg"
+    assert sound_packets[-1].x == 5
+    assert sound_packets[-1].y == 6
+
+
+@pytest.mark.asyncio
 async def test_widget_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
@@ -556,6 +893,9 @@ async def test_widget_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
                     "emitSoundTempo": 60,
                     "emitEffect": "reverb",
                     "emitEffectValue": 63.2,
+                    "ambienceScope": "location",
+                    "ambienceName": "Mountain river",
+                    "ambiencePriority": 82,
                     "useSound": "ping.ogg",
                     "emitSound": "https://example.com/ambient.ogg",
                 },
@@ -571,6 +911,9 @@ async def test_widget_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
     assert item.params.get("emitSoundTempo") == 60
     assert item.params.get("emitEffect") == "reverb"
     assert item.params.get("emitEffectValue") == 63.2
+    assert item.params.get("ambienceScope") == "location"
+    assert item.params.get("ambienceName") == "Mountain river"
+    assert item.params.get("ambiencePriority") == 82
     assert item.params.get("useSound") == "sounds/ping.ogg"
     assert item.params.get("emitSound") == "https://example.com/ambient.ogg"
 
@@ -579,9 +922,7 @@ async def test_widget_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert _last_packet_of_type(send_payloads, ItemActionResultPacket).ok is True
     assert item.params.get("enabled") is False
-    assert any(
-        getattr(packet, "type", "") == "item_use_sound" for packet in broadcast_payloads
-    )
+    assert any(getattr(packet, "type", "") == "item_use_sound" for packet in send_payloads)
 
     await server._handle_message(
         client,
@@ -620,6 +961,20 @@ async def test_widget_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
     item_result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
     assert item_result.ok is False
     assert "emitsoundtempo must be between 0 and 100" in item_result.message.lower()
+
+    await server._handle_message(
+        client,
+        json.dumps(
+            {
+                "type": "item_update",
+                "itemId": item.id,
+                "params": {"ambienceScope": "section"},
+            }
+        ),
+    )
+    item_result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert item_result.ok is False
+    assert "ambiencescope must be one of tile, location, off" in item_result.message.lower()
 
 
 @pytest.mark.asyncio
@@ -663,7 +1018,7 @@ async def test_carried_item_use_sound_uses_carrier_position(
         client, json.dumps({"type": "item_use", "itemId": item.id})
     )
     assert _last_packet_of_type(send_payloads, ItemActionResultPacket).ok is True
-    sound_packets = _packets_of_type(broadcast_payloads, ItemUseSoundPacket)
+    sound_packets = _packets_of_type(send_payloads, ItemUseSoundPacket)
     assert sound_packets
     assert sound_packets[-1].x == 9
     assert sound_packets[-1].y == 10
@@ -832,17 +1187,16 @@ async def test_piano_note_packet_broadcasts(monkeypatch: pytest.MonkeyPatch) -> 
         ),
     )
 
-    assert not send_payloads
-    assert broadcast_payloads
-    packet = _last_packet_of_type(broadcast_payloads, ItemPianoNoteBroadcastPacket)
+    assert send_payloads
+    packet = _last_packet_of_type(send_payloads, ItemPianoNoteBroadcastPacket)
     assert packet.itemId == item.id
     assert packet.instrument == "organ"
     assert packet.voiceMode == "poly"
     assert packet.octave == 0
     assert packet.attack == 20
     assert packet.decay == 60
-    assert packet.release == 35
-    assert packet.brightness == 55
+    assert packet.release == 45
+    assert packet.brightness == 68
     assert packet.emitRange == 12
 
 
@@ -855,13 +1209,19 @@ async def test_piano_note_key_cap(monkeypatch: pytest.MonkeyPatch) -> None:
         permissions={"item.use"},
     )
     server.clients[ws_sender] = sender
+    ws_listener = _fake_ws()
+    listener = _activate_client(
+        ClientConnection(websocket=ws_listener, id="u2", nickname="listener", x=7, y=6)
+    )
+    server.clients[ws_listener] = listener
     item = server.item_service.default_item(sender, "piano")
     server.item_service.add_item(item)
 
+    send_payloads: list[object] = []
     broadcast_payloads: list[object] = []
 
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
-        return
+        send_payloads.append(packet)
 
     async def fake_broadcast(
         packet: object, exclude: ServerConnection | None = None
@@ -871,20 +1231,22 @@ async def test_piano_note_key_cap(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    for index in range(12):
+    for index, key_id in enumerate(
+        ("KeyA", "KeyS", "KeyD", "KeyF", "KeyG", "KeyH", "KeyJ", "KeyK", "KeyL", "Semicolon", "Quote", "KeyZ")
+    ):
         await server._handle_message(
             sender,
             json.dumps(
                 {
                     "type": "item_piano_note",
                     "itemId": item.id,
-                    "keyId": f"Key{index}",
+                    "keyId": key_id,
                     "midi": 60,
                     "on": True,
                 }
             ),
         )
-    assert len(broadcast_payloads) == 12
+    assert len(_packets_of_type(send_payloads, ItemPianoNoteBroadcastPacket)) == 12
 
     # 13th distinct held key is dropped by cap.
     await server._handle_message(
@@ -893,13 +1255,13 @@ async def test_piano_note_key_cap(monkeypatch: pytest.MonkeyPatch) -> None:
             {
                 "type": "item_piano_note",
                 "itemId": item.id,
-                "keyId": "KeyOverflow",
+                "keyId": "KeyX",
                 "midi": 60,
                 "on": True,
             }
         ),
     )
-    assert len(broadcast_payloads) == 12
+    assert len(_packets_of_type(send_payloads, ItemPianoNoteBroadcastPacket)) == 12
 
 
 @pytest.mark.asyncio

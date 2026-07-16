@@ -92,6 +92,123 @@ function proxy_write_callback($ch, $chunk)
     return $len;
 }
 
+function is_hls_playlist_url($url)
+{
+    $parts = parse_url($url);
+    if ($parts === false) {
+        return false;
+    }
+    $path = isset($parts['path']) ? strtolower((string) $parts['path']) : '';
+    return substr($path, -5) === '.m3u8';
+}
+
+function proxy_url_for_target($targetUrl)
+{
+    $script = isset($_SERVER['SCRIPT_NAME']) ? (string) $_SERVER['SCRIPT_NAME'] : '/media_proxy.php';
+    return $script . '?url=' . rawurlencode($targetUrl);
+}
+
+function rewrite_hls_uri_attribute($line, $baseUrl)
+{
+    return preg_replace_callback(
+        '/URI="([^"]+)"/',
+        function ($matches) use ($baseUrl) {
+            $resolved = resolve_redirect_url($baseUrl, $matches[1]);
+            if ($resolved === '') {
+                return $matches[0];
+            }
+            return 'URI="' . proxy_url_for_target($resolved) . '"';
+        },
+        $line
+    );
+}
+
+function rewrite_hls_playlist($body, $baseUrl)
+{
+    $lines = preg_split("/(\r\n|\n|\r)/", (string) $body, -1, PREG_SPLIT_DELIM_CAPTURE);
+    if (!is_array($lines)) {
+        return $body;
+    }
+
+    $rewritten = '';
+    $count = count($lines);
+    for ($i = 0; $i < $count; $i += 1) {
+        $line = $lines[$i];
+        $newline = '';
+        if ($i + 1 < $count && preg_match("/^(\r\n|\n|\r)$/", $lines[$i + 1])) {
+            $newline = $lines[$i + 1];
+            $i += 1;
+        }
+
+        $trimmed = trim((string) $line);
+        if ($trimmed === '') {
+            $rewritten .= $line . $newline;
+            continue;
+        }
+        if (substr($trimmed, 0, 1) === '#') {
+            $rewritten .= rewrite_hls_uri_attribute($line, $baseUrl) . $newline;
+            continue;
+        }
+        $resolved = resolve_redirect_url($baseUrl, $trimmed);
+        $rewritten .= ($resolved !== '' ? proxy_url_for_target($resolved) : $line) . $newline;
+    }
+    return $rewritten;
+}
+
+function apply_proxy_cookie_jar($ch, $cookieFile)
+{
+    if ($cookieFile === '') {
+        return;
+    }
+    curl_setopt($ch, CURLOPT_COOKIEFILE, $cookieFile);
+    curl_setopt($ch, CURLOPT_COOKIEJAR, $cookieFile);
+}
+
+function fetch_rewritten_hls_playlist($url, $requestHeaders, $method, $cookieFile)
+{
+    $ch = curl_init();
+    if (!$ch) {
+        send_text(500, 'proxy init failed');
+    }
+
+    $GLOBALS['CHGRID_PROXY_STATUS'] = 200;
+    $GLOBALS['CHGRID_PROXY_UP_HEADERS'] = array();
+    $GLOBALS['CHGRID_PROXY_HEADERS_SENT'] = false;
+
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+    curl_setopt($ch, CURLOPT_MAXREDIRS, 0);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+    curl_setopt($ch, CURLOPT_HEADER, false);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_NOSIGNAL, true);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'ChatGridMediaProxy/1.0');
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
+    curl_setopt($ch, CURLOPT_HEADERFUNCTION, 'proxy_header_callback');
+    apply_proxy_cookie_jar($ch, $cookieFile);
+    if ($method === 'HEAD') {
+        curl_setopt($ch, CURLOPT_NOBODY, true);
+    }
+
+    $body = curl_exec($ch);
+    if ($body === false) {
+        $err = curl_error($ch);
+        curl_close($ch);
+        send_text(502, 'upstream fetch failed: ' . $err);
+    }
+    curl_close($ch);
+
+    $status = isset($GLOBALS['CHGRID_PROXY_STATUS']) ? (int) $GLOBALS['CHGRID_PROXY_STATUS'] : 200;
+    set_status($status);
+    header('Content-Type: application/vnd.apple.mpegurl; charset=utf-8');
+    header('Cache-Control: no-store');
+    if ($method !== 'HEAD') {
+        echo rewrite_hls_playlist((string) $body, $url);
+    }
+    exit;
+}
+
 function set_status($code)
 {
     $map = array(
@@ -434,7 +551,7 @@ function normalize_dropbox_url($url)
     return $scheme . '://' . $auth . $hostPort . $path . $queryString . $fragment;
 }
 
-function resolve_safe_redirect_chain($initialUrl, $allowlistSuffixes, $requestHeaders, $maxRedirects, &$error)
+function resolve_safe_redirect_chain($initialUrl, $allowlistSuffixes, $requestHeaders, $maxRedirects, $cookieFile, &$error)
 {
     $error = '';
     $currentUrl = $initialUrl;
@@ -465,6 +582,7 @@ function resolve_safe_redirect_chain($initialUrl, $allowlistSuffixes, $requestHe
         curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
         curl_setopt($ch, CURLOPT_HEADERFUNCTION, 'proxy_header_callback');
         curl_setopt($ch, CURLOPT_NOBODY, true);
+        apply_proxy_cookie_jar($ch, $cookieFile);
 
         $ok = curl_exec($ch);
         if ($ok === false) {
@@ -545,8 +663,22 @@ if ($range !== '') {
     $requestHeaders[] = 'Range: ' . $range;
 }
 
+$cookieFile = tempnam(sys_get_temp_dir(), 'chgrid_proxy_cookie_');
+if ($cookieFile === false) {
+    $cookieFile = '';
+} else {
+    register_shutdown_function(
+        function ($path) {
+            if ($path !== '' && is_file($path)) {
+                @unlink($path);
+            }
+        },
+        $cookieFile
+    );
+}
+
 $resolveError = '';
-$finalUrl = resolve_safe_redirect_chain($rawUrl, $allowlistSuffixes, $requestHeaders, 5, $resolveError);
+$finalUrl = resolve_safe_redirect_chain($rawUrl, $allowlistSuffixes, $requestHeaders, 5, $cookieFile, $resolveError);
 if ($finalUrl === '') {
     if (strpos($resolveError, 'invalid url') === 0 || strpos($resolveError, 'unsupported scheme') === 0) {
         send_text(400, $resolveError);
@@ -564,6 +696,10 @@ if ($finalUrl === '') {
     send_text(502, $resolveError !== '' ? $resolveError : 'redirect resolution failed');
 }
 
+if ($range === '' && is_hls_playlist_url($finalUrl)) {
+    fetch_rewritten_hls_playlist($finalUrl, $requestHeaders, $method, $cookieFile);
+}
+
 curl_setopt($ch, CURLOPT_URL, $finalUrl);
 curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
 curl_setopt($ch, CURLOPT_MAXREDIRS, 0);
@@ -576,6 +712,7 @@ curl_setopt($ch, CURLOPT_USERAGENT, 'ChatGridMediaProxy/1.0');
 curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
 curl_setopt($ch, CURLOPT_HEADERFUNCTION, 'proxy_header_callback');
 curl_setopt($ch, CURLOPT_WRITEFUNCTION, 'proxy_write_callback');
+apply_proxy_cookie_jar($ch, $cookieFile);
 if ($method === 'HEAD') {
     curl_setopt($ch, CURLOPT_NOBODY, true);
 }

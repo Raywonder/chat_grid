@@ -52,11 +52,13 @@ export function createAuthController(deps: AuthControllerDeps): {
   updateConnectAvailability: () => void;
   hasPermission: (key: string) => boolean;
   getVoiceSendAllowed: () => boolean;
+  reapplyVoiceSendPermission: () => void;
   getAuthUserId: () => string;
   sendAuthRequest: () => void;
   handleAuthRequired: (message: Extract<IncomingMessage, { type: 'auth_required' }>) => void;
   handleAuthResult: (message: Extract<IncomingMessage, { type: 'auth_result' }>) => Promise<void>;
   handleAuthPermissions: (message: Extract<IncomingMessage, { type: 'auth_permissions' }>) => void;
+  setSavedSessionCookieAvailable: (available: boolean) => void;
   applyWelcomeAuth: (
     auth: WelcomeAuth,
     adminMenuActions: Array<{ id: string; label: string; tooltip?: string }> | null | undefined,
@@ -70,6 +72,7 @@ export function createAuthController(deps: AuthControllerDeps): {
   let voiceSendAllowed = true;
   let pendingAuthRequest = false;
   let externalAuthAssertion = deps.initialExternalAuthAssertion.trim();
+  let savedSessionCookieAvailable = false;
 
   function sanitizeAuthUsername(value: string): string {
     const maxLength = authPolicy?.usernameMaxLength ?? 128;
@@ -136,11 +139,13 @@ export function createAuthController(deps: AuthControllerDeps): {
   function resetSavedSessionHint(): void {
     authUserId = '';
     authUsername = '';
+    savedSessionCookieAvailable = false;
     deps.saveAuthUsername('');
   }
 
   function updateConnectAvailability(): void {
-    const hasSavedSessionHint = sanitizeAuthUsername(authUsername).length > 0;
+    const hasSavedUsernameHint = sanitizeAuthUsername(authUsername).length > 0;
+    const hasSavedSessionHint = hasSavedUsernameHint || savedSessionCookieAvailable;
     const hasExternalAuth = externalAuthAssertion.length > 0;
     const showLogout = deps.isRunning() || hasSavedSessionHint;
     deps.dom.logoutButton.classList.toggle('hidden', !showLogout);
@@ -153,7 +158,9 @@ export function createAuthController(deps: AuthControllerDeps): {
       return;
     }
     if (hasSavedSessionHint) {
-      deps.dom.authSessionText.textContent = `Logged in as ${sanitizeAuthUsername(authUsername)}.`;
+      deps.dom.authSessionText.textContent = hasSavedUsernameHint
+        ? `Logged in as ${sanitizeAuthUsername(authUsername)}.`
+        : 'Logged in with your saved blind.software session.';
       deps.dom.loginView.classList.add('hidden');
       deps.dom.authSessionView.classList.remove('hidden');
     } else {
@@ -161,7 +168,9 @@ export function createAuthController(deps: AuthControllerDeps): {
       deps.dom.authSessionView.classList.add('hidden');
     }
     const authReady = hasExternalAuth || hasSavedSessionHint;
-    deps.dom.connectButton.textContent = hasSavedSessionHint
+    deps.dom.connectButton.textContent = deps.isConnecting()
+      ? 'Connecting...'
+      : hasSavedSessionHint
       ? 'Connect'
       : hasExternalAuth
         ? 'Continue with blind.software'
@@ -180,7 +189,7 @@ export function createAuthController(deps: AuthControllerDeps): {
     const packet = buildAuthRequestPacket();
     if (!packet) {
       pendingAuthRequest = false;
-      if (sanitizeAuthUsername(authUsername).length > 0) {
+      if (sanitizeAuthUsername(authUsername).length > 0 || savedSessionCookieAvailable) {
         deps.setConnectionStatus('Restoring saved session...');
       } else {
         deps.setConnectionStatus('Sign in with blind.software to join the grid.');
@@ -211,7 +220,7 @@ export function createAuthController(deps: AuthControllerDeps): {
         deps.signalingSend(packet);
         return;
       }
-      if (sanitizeAuthUsername(authUsername).length > 0) {
+      if (sanitizeAuthUsername(authUsername).length > 0 || savedSessionCookieAvailable) {
         resetSavedSessionHint();
       }
       deps.setConnecting(false);
@@ -289,7 +298,9 @@ export function createAuthController(deps: AuthControllerDeps): {
     }
     applyAuthPermissions(message.role, message.permissions);
     deps.onServerAdminMenuActions(message.adminMenuActions);
-    deps.setConnectionStatus('Authenticated. Joining world...');
+    // The persistent connection status is already an ARIA live region, so this
+    // is announced before the world view takes focus in browsers and shells.
+    deps.setConnectionStatus('Sign in successful. Joining Chat Grid...');
   }
 
   function handleAuthPermissions(message: Extract<IncomingMessage, { type: 'auth_permissions' }>): void {
@@ -329,6 +340,11 @@ export function createAuthController(deps: AuthControllerDeps): {
     updateConnectAvailability();
   }
 
+  function setSavedSessionCookieAvailable(available: boolean): void {
+    savedSessionCookieAvailable = available;
+    updateConnectAvailability();
+  }
+
   function setupUiHandlers(uiDeps: AuthUiDeps): void {
     deps.dom.logoutButton.addEventListener('click', () => {
       logOutAccount();
@@ -347,11 +363,13 @@ export function createAuthController(deps: AuthControllerDeps): {
     updateConnectAvailability,
     hasPermission: (key: string) => authPermissions.has(key),
     getVoiceSendAllowed: () => voiceSendAllowed,
+    reapplyVoiceSendPermission: applyVoiceSendPermission,
     getAuthUserId: () => authUserId,
     sendAuthRequest,
     handleAuthRequired,
     handleAuthResult,
     handleAuthPermissions,
+    setSavedSessionCookieAvailable,
     applyWelcomeAuth,
     logOutAccount,
   };

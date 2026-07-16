@@ -35,7 +35,9 @@ export type GameMode =
   | 'micGainEdit'
   | 'effectSelect'
   | 'listUsers'
+  | 'userActionMenu'
   | 'listItems'
+  | 'listLocations'
   | 'addItem'
   | 'selectItem'
   | 'itemProperties'
@@ -59,6 +61,11 @@ export type Player = {
   nickname: string;
   x: number;
   y: number;
+  posture: 'standing' | 'sitting' | 'lying' | 'floor';
+  mood: string;
+  seatedItemId: string | null;
+  seatedOffset: number;
+  handHeldById: string | null;
   lastMoveTime: number;
 };
 
@@ -69,6 +76,11 @@ export type PeerState = {
   locationId?: string;
   x: number;
   y: number;
+  posture?: 'standing' | 'sitting' | 'lying' | 'floor';
+  mood?: string;
+  seatedItemId?: string | null;
+  seatedOffset?: number;
+  handHeldById?: string | null;
 };
 
 export type GameState = {
@@ -86,10 +98,14 @@ export type GameState = {
   selectionContext: SelectionContext;
   selectedItemIndex: number;
   selectedItemId: string | null;
+  focusedItemId: string | null;
+  directMessageTargetId: string | null;
+  directMessageTargetName: string | null;
   itemPropertyKeys: string[];
   itemPropertyIndex: number;
   editingPropertyKey: string | null;
   itemPropertyOptionValues: string[];
+  itemPropertyOptionLabels: string[];
   itemPropertyOptionIndex: number;
   effectSelectIndex: number;
   addItemTypeIndex: number;
@@ -116,10 +132,14 @@ export function createInitialState(): GameState {
     selectionContext: null,
     selectedItemIndex: 0,
     selectedItemId: null,
+    focusedItemId: null,
+    directMessageTargetId: null,
+    directMessageTargetName: null,
     itemPropertyKeys: [],
     itemPropertyIndex: 0,
     editingPropertyKey: null,
     itemPropertyOptionValues: [],
+    itemPropertyOptionLabels: [],
     itemPropertyOptionIndex: 0,
     effectSelectIndex: 0,
     addItemTypeIndex: 0,
@@ -129,6 +149,11 @@ export function createInitialState(): GameState {
       nickname: 'anon',
       x: 20,
       y: 20,
+      posture: 'standing',
+      mood: 'settled',
+      seatedItemId: null,
+      seatedOffset: 0,
+      handHeldById: null,
       lastMoveTime: 0,
     },
     peers: new Map(),
@@ -181,5 +206,6 @@ export function getNearestItem(state: GameState): { itemId: string | null; dista
 
 export function isItemQuiet(item: WorldItem): boolean {
   const visibility = String(item.params.itemVisibility ?? '').trim().toLowerCase();
-  return visibility === 'quiet' || visibility === 'hidden';
+  const mode = String(item.params.billboardMode ?? '').trim().toLowerCase();
+  return visibility === 'quiet' || visibility === 'hidden' || mode === 'audio_only';
 }

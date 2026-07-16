@@ -17,6 +17,9 @@ EDITABLE_PROPERTIES: tuple[str, ...] = (
     "emitLoopDelay",
     "emitEffect",
     "emitEffectValue",
+    "ambienceScope",
+    "ambienceName",
+    "ambiencePriority",
     "useSound",
     "emitSound",
 )
@@ -39,6 +42,9 @@ DEFAULT_PARAMS: dict = {
     "emitLoopDelay": 0,
     "emitEffect": "off",
     "emitEffectValue": 50,
+    "ambienceScope": "tile",
+    "ambienceName": "",
+    "ambiencePriority": 50,
     "useSound": "",
     "emitSound": "",
 }
@@ -54,6 +60,9 @@ PARAM_KEYS: tuple[str, ...] = (
     "emitLoopDelay",
     "emitEffect",
     "emitEffectValue",
+    "ambienceScope",
+    "ambienceName",
+    "ambiencePriority",
     "useSound",
     "emitSound",
 )
@@ -65,6 +74,7 @@ EFFECT_OPTIONS: tuple[str, ...] = (
     "low_pass",
     "off",
 )
+AMBIENCE_SCOPE_OPTIONS: tuple[str, ...] = ("tile", "location", "off")
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
     "title": {
@@ -122,6 +132,26 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "valueType": "number",
         "tooltip": "Amount for emit effect.",
         "range": {"min": 0, "max": 100, "step": 0.1},
+    },
+    "ambienceScope": {
+        "valueType": "list",
+        "label": "Ambience scope",
+        "tooltip": "Choose whether this stream plays from its tile, fills the whole current location as ambience, or stays silent.",
+        "options": list(AMBIENCE_SCOPE_OPTIONS),
+    },
+    "ambienceName": {
+        "valueType": "text",
+        "label": "Ambience name",
+        "tooltip": "Optional spoken name when this widget is used as the location ambience.",
+        "maxLength": 80,
+        "visibleWhen": {"ambienceScope": "location"},
+    },
+    "ambiencePriority": {
+        "valueType": "number",
+        "label": "Ambience priority",
+        "tooltip": "When more than one widget offers location ambience, the highest priority wins.",
+        "range": {"min": 0, "max": 100, "step": 1},
+        "visibleWhen": {"ambienceScope": "location"},
     },
     "useSound": {
         "valueType": "sound",

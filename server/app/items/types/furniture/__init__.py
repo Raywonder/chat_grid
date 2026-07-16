@@ -1,0 +1,1 @@
+"""Furniture item type package."""

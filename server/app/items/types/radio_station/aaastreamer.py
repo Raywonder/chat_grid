@@ -11,7 +11,6 @@ from urllib.parse import urljoin, urlsplit
 
 from ....network_security import open_validated_public_url, validate_public_media_url
 
-AAASTREAMER_HOST = "aaastreamer.devinecreations.net"
 STATION_PAGE_MAX_BYTES = 1_048_576
 API_RESPONSE_MAX_BYTES = 262_144
 _STREAM_ID_RE = re.compile(r'data-stream-id=["\']([^"\']+)["\']')
@@ -28,14 +27,20 @@ class AaaStreamerPlayback:
 
 
 def is_aaastreamer_station_url(url: str) -> bool:
-    """Return whether a URL is a public AAAStreamer station page."""
+    """Return whether a URL has the public AAAStreamer station-page shape.
+
+    AAAStreamer installs can live on more than one hostname. The stable public
+    station-page contract is the `/s/<slug>` path plus page/API metadata; the
+    resolver confirms that contract by parsing the fetched page before returning
+    a playback URL.
+    """
 
     try:
         parts = urlsplit(validate_public_media_url(url, field_name="streamUrl"))
     except ValueError:
         return False
     path_parts = [part for part in parts.path.split("/") if part]
-    return parts.hostname == AAASTREAMER_HOST and len(path_parts) == 2 and path_parts[0] == "s"
+    return len(path_parts) == 2 and path_parts[0] == "s"
 
 
 def _stream_id_from_html(html_text: str) -> str:
@@ -57,7 +62,9 @@ def _playback_url_from_html(html_text: str, station_url: str) -> str:
     )
 
 
-def _playback_from_api_payload(payload: object) -> AaaStreamerPlayback | None:
+def _playback_from_api_payload(
+    payload: object, *, station_url: str
+) -> AaaStreamerPlayback | None:
     """Build playback metadata from one AAAStreamer public API payload."""
 
     if not isinstance(payload, dict) or payload.get("success") is not True:
@@ -68,13 +75,17 @@ def _playback_from_api_payload(payload: object) -> AaaStreamerPlayback | None:
     playback_url = str(stream.get("playbackUrl") or stream.get("hlsUrl") or "").strip()
     if not playback_url:
         return None
-    playback_url = validate_public_media_url(playback_url, field_name="playbackUrl")
+    playback_url = validate_public_media_url(
+        urljoin(station_url, playback_url), field_name="playbackUrl"
+    )
     now_playing = stream.get("nowPlaying")
     now_title = ""
     if isinstance(now_playing, dict):
         now_title = str(
             now_playing.get("title") or now_playing.get("label") or ""
         ).strip()
+    elif isinstance(now_playing, str):
+        now_title = now_playing.strip()
     title = str(stream.get("title") or "").strip()
     return AaaStreamerPlayback(
         title=title[:160],
@@ -112,7 +123,7 @@ def resolve_aaastreamer_playback(
                     payload = json.loads(
                         response.read(API_RESPONSE_MAX_BYTES).decode("utf-8")
                     )
-                resolved = _playback_from_api_payload(payload)
+                resolved = _playback_from_api_payload(payload, station_url=station_url)
                 if resolved is not None:
                     return resolved
             except (OSError, URLError, ValueError, json.JSONDecodeError):

@@ -50,6 +50,7 @@ PERMISSIONS: tuple[str, ...] = (
     "role.manage",
     "server.manage_settings",
     "server.allow_reboot",
+    "notifications.read.any",
 )
 
 PERMISSION_DESCRIPTIONS: dict[str, str] = {
@@ -72,6 +73,7 @@ PERMISSION_DESCRIPTIONS: dict[str, str] = {
     "role.manage": "Allow creating, editing, and deleting roles.",
     "server.manage_settings": "Allow changing server settings.",
     "server.allow_reboot": "Allow scheduling a server reboot from chat command.",
+    "notifications.read.any": "Allow reading and managing admin-wide notifications.",
 }
 
 DEFAULT_ROLE_PERMISSIONS: dict[str, set[str]] = {
@@ -141,6 +143,35 @@ class AuthSession:
     session_id: str
     token: str
     user: AuthUser
+
+
+@dataclass(frozen=True)
+class EcryptoAccountSummary:
+    """Per-user eCrypto account summary linked to a Chat Grid auth user."""
+
+    account_id: str
+    user_id: str
+    username: str
+    test_balance: int
+    wallet_count: int
+    real_wallet_count: int
+    test_wallet_count: int
+    external_identity_count: int = 0
+
+
+@dataclass(frozen=True)
+class EcryptoWalletSummary:
+    """Connected blockchain wallet metadata for one eCrypto account."""
+
+    id: str
+    account_id: str
+    chain: str
+    address: str
+    network_mode: str
+    label: str | None
+    source_label: str | None
+    verified_at_ms: int | None
+    created_at_ms: int
 
 
 class AuthError(ValueError):
@@ -597,6 +628,272 @@ class AuthService:
             return None
         return str(row["id"])
 
+    def ensure_ecrypto_account(self, user_id: str) -> EcryptoAccountSummary:
+        """Create and return the eCrypto account auto-linked to one auth user."""
+
+        user = self.get_user_by_id(user_id)
+        if user is None:
+            raise AuthError("User not found.")
+        user_id_value = int(user.id)
+        now_ms = self.now_ms()
+        self._db_execute(
+            """
+            INSERT OR IGNORE INTO ecrypto_accounts
+                (user_id, account_status, created_at_ms, updated_at_ms)
+            VALUES (?, 'active', ?, ?)
+            """,
+            (user_id_value, now_ms, now_ms),
+        )
+        self._db_commit()
+        return self.get_ecrypto_account_summary(user.id)
+
+    def get_ecrypto_account_summary(self, user_id: str) -> EcryptoAccountSummary:
+        """Return one user's eCrypto account, creating it when needed."""
+
+        user = self.get_user_by_id(user_id)
+        if user is None:
+            raise AuthError("User not found.")
+        row = self._db_fetchone(
+            "SELECT id FROM ecrypto_accounts WHERE user_id = ?", (int(user.id),)
+        )
+        if row is None:
+            return self.ensure_ecrypto_account(user.id)
+        account_id = int(row["id"])
+        balance = self._ecrypto_test_balance_for_account(account_id)
+        wallets = self.list_ecrypto_wallets(user.id)
+        return EcryptoAccountSummary(
+            account_id=str(account_id),
+            user_id=user.id,
+            username=user.username,
+            test_balance=balance,
+            wallet_count=len(wallets),
+            real_wallet_count=sum(
+                1 for wallet in wallets if wallet.network_mode == "real"
+            ),
+            test_wallet_count=sum(
+                1 for wallet in wallets if wallet.network_mode == "test"
+            ),
+            external_identity_count=self._external_identity_count_for_user(int(user.id)),
+        )
+
+    def list_ecrypto_wallets(self, user_id: str) -> list[EcryptoWalletSummary]:
+        """Return blockchain wallets connected to one user's eCrypto account."""
+
+        user = self.get_user_by_id(user_id)
+        if user is None:
+            raise AuthError("User not found.")
+        account_row = self._db_fetchone(
+            "SELECT id FROM ecrypto_accounts WHERE user_id = ?", (int(user.id),)
+        )
+        if account_row is None:
+            self.ensure_ecrypto_account(user.id)
+            account_row = self._db_fetchone(
+                "SELECT id FROM ecrypto_accounts WHERE user_id = ?", (int(user.id),)
+            )
+        if account_row is None:
+            raise AuthError("eCrypto account unavailable.")
+        rows = self._db_fetchall(
+            """
+            SELECT id, account_id, chain, address, network_mode, label, source_label, verified_at_ms, created_at_ms
+            FROM ecrypto_wallets
+            WHERE account_id = ?
+            ORDER BY network_mode ASC, chain ASC, created_at_ms ASC
+            """,
+            (int(account_row["id"]),),
+        )
+        return [
+            EcryptoWalletSummary(
+                id=str(row["id"]),
+                account_id=str(row["account_id"]),
+                chain=str(row["chain"]),
+                address=str(row["address"]),
+                network_mode=str(row["network_mode"]),
+                label=str(row["label"]) if row["label"] is not None else None,
+                source_label=(
+                    str(row["source_label"])
+                    if "source_label" in row.keys() and row["source_label"] is not None
+                    else None
+                ),
+                verified_at_ms=(
+                    int(row["verified_at_ms"])
+                    if row["verified_at_ms"] is not None
+                    else None
+                ),
+                created_at_ms=int(row["created_at_ms"]),
+            )
+            for row in rows
+        ]
+
+    def connect_ecrypto_wallet(
+        self,
+        user_id: str,
+        *,
+        chain: str,
+        address: str,
+        network_mode: str,
+        label: str | None = None,
+        source_label: str | None = None,
+        verified: bool = False,
+    ) -> EcryptoWalletSummary:
+        """Attach or update a wallet link for one eCrypto account."""
+
+        summary = self.ensure_ecrypto_account(user_id)
+        normalized_chain = self._normalize_ecrypto_token(chain, field_name="chain")
+        normalized_address = self._normalize_wallet_address(address)
+        normalized_mode = network_mode.strip().casefold()
+        if normalized_mode not in {"test", "real"}:
+            raise AuthError("Network mode must be test or real.")
+        clean_label = str(label or "").strip()[:80] or None
+        clean_source = self._normalize_wallet_source_label(source_label)
+        now_ms = self.now_ms()
+        verified_at_ms = now_ms if verified else None
+        self._db_execute(
+            """
+            INSERT INTO ecrypto_wallets
+                (account_id, chain, address, network_mode, label, source_label, verified_at_ms, created_at_ms, updated_at_ms)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(account_id, chain, address, network_mode)
+            DO UPDATE SET
+                label = excluded.label,
+                source_label = COALESCE(excluded.source_label, ecrypto_wallets.source_label),
+                verified_at_ms = COALESCE(excluded.verified_at_ms, ecrypto_wallets.verified_at_ms),
+                updated_at_ms = excluded.updated_at_ms
+            """,
+            (
+                int(summary.account_id),
+                normalized_chain,
+                normalized_address,
+                normalized_mode,
+                clean_label,
+                clean_source,
+                verified_at_ms,
+                now_ms,
+                now_ms,
+            ),
+        )
+        self._db_commit()
+        row = self._db_fetchone(
+            """
+            SELECT id, account_id, chain, address, network_mode, label, source_label, verified_at_ms, created_at_ms
+            FROM ecrypto_wallets
+            WHERE account_id = ? AND chain = ? AND address = ? AND network_mode = ?
+            """,
+            (
+                int(summary.account_id),
+                normalized_chain,
+                normalized_address,
+                normalized_mode,
+            ),
+        )
+        if row is None:
+            raise AuthError("Wallet link was not saved.")
+        return EcryptoWalletSummary(
+            id=str(row["id"]),
+            account_id=str(row["account_id"]),
+            chain=str(row["chain"]),
+            address=str(row["address"]),
+            network_mode=str(row["network_mode"]),
+            label=str(row["label"]) if row["label"] is not None else None,
+            source_label=(
+                str(row["source_label"])
+                if "source_label" in row.keys() and row["source_label"] is not None
+                else None
+            ),
+            verified_at_ms=(
+                int(row["verified_at_ms"]) if row["verified_at_ms"] is not None else None
+            ),
+            created_at_ms=int(row["created_at_ms"]),
+        )
+
+    def list_ecrypto_account_summaries(self) -> list[EcryptoAccountSummary]:
+        """Return safe per-user eCrypto summaries for admin/agent inventory views."""
+
+        rows = self._db_fetchall(
+            """
+            SELECT u.id
+            FROM users u
+            WHERE u.status = 'active'
+            ORDER BY u.username COLLATE NOCASE ASC
+            """
+        )
+        return [self.get_ecrypto_account_summary(str(row["id"])) for row in rows]
+
+    def ecrypto_test_deposit(
+        self, user_id: str, amount: int, *, memo: str = "test deposit"
+    ) -> EcryptoAccountSummary:
+        """Credit one user's test-chain eCrypto balance."""
+
+        if amount <= 0:
+            raise AuthError("Amount must be positive.")
+        if amount > 1_000_000:
+            raise AuthError("Amount is too large for one test deposit.")
+        summary = self.ensure_ecrypto_account(user_id)
+        now_ms = self.now_ms()
+        self._insert_ecrypto_ledger_entry(
+            account_id=int(summary.account_id),
+            direction="credit",
+            amount=amount,
+            network_mode="test",
+            chain="ecrypto-test",
+            memo=memo[:200],
+            counterparty_account_id=None,
+            tx_ref=f"test-faucet-{now_ms}",
+            now_ms=now_ms,
+        )
+        self._db_commit()
+        return self.get_ecrypto_account_summary(user_id)
+
+    def ecrypto_test_transfer(
+        self,
+        from_user_id: str,
+        to_user_id: str,
+        amount: int,
+        *,
+        memo: str = "",
+    ) -> tuple[EcryptoAccountSummary, EcryptoAccountSummary]:
+        """Move test-chain eCrypto between two linked Chat Grid accounts."""
+
+        if amount <= 0:
+            raise AuthError("Amount must be positive.")
+        if amount > 1_000_000:
+            raise AuthError("Amount is too large for one test transfer.")
+        sender = self.ensure_ecrypto_account(from_user_id)
+        recipient = self.ensure_ecrypto_account(to_user_id)
+        if sender.account_id == recipient.account_id:
+            raise AuthError("Choose another user for a transfer.")
+        if sender.test_balance < amount:
+            raise AuthError("Insufficient test eCrypto balance.")
+        now_ms = self.now_ms()
+        tx_ref = f"test-transfer-{now_ms}-{sender.account_id}-{recipient.account_id}"
+        clean_memo = str(memo or "").strip()[:200]
+        self._insert_ecrypto_ledger_entry(
+            account_id=int(sender.account_id),
+            direction="debit",
+            amount=amount,
+            network_mode="test",
+            chain="ecrypto-test",
+            memo=clean_memo,
+            counterparty_account_id=int(recipient.account_id),
+            tx_ref=tx_ref,
+            now_ms=now_ms,
+        )
+        self._insert_ecrypto_ledger_entry(
+            account_id=int(recipient.account_id),
+            direction="credit",
+            amount=amount,
+            network_mode="test",
+            chain="ecrypto-test",
+            memo=clean_memo,
+            counterparty_account_id=int(sender.account_id),
+            tx_ref=tx_ref,
+            now_ms=now_ms,
+        )
+        self._db_commit()
+        return (
+            self.get_ecrypto_account_summary(from_user_id),
+            self.get_ecrypto_account_summary(to_user_id),
+        )
+
     def register(
         self,
         username: str,
@@ -991,6 +1288,36 @@ class AuthService:
         except sqlite3.IntegrityError:
             self._db_rollback()
 
+    def get_ntfy_preferences(self, user_id: str) -> dict[str, object]:
+        """Return persisted ntfy delivery preferences for one identity."""
+
+        try:
+            user_id_value = int(user_id)
+        except (TypeError, ValueError):
+            return {"enabled": False, "topic": ""}
+        row = self._db_fetchone(
+            "SELECT ntfy_enabled, ntfy_topic FROM users WHERE id = ?", (user_id_value,)
+        )
+        if row is None:
+            return {"enabled": False, "topic": ""}
+        return {"enabled": bool(row["ntfy_enabled"]), "topic": str(row["ntfy_topic"] or "")}
+
+    def update_ntfy_preferences(
+        self, user_id: str, *, enabled: bool, rotate_topic: bool = False
+    ) -> dict[str, object]:
+        """Persist opt-in state and lazily create or rotate a private topic."""
+
+        current = self.get_ntfy_preferences(user_id)
+        topic = str(current["topic"])
+        if enabled and (not topic or rotate_topic):
+            topic = f"chatgrid-user-{secrets.token_hex(16)}"
+        self._db_execute(
+            "UPDATE users SET ntfy_enabled = ?, ntfy_topic = ?, updated_at_ms = ? WHERE id = ?",
+            (1 if enabled else 0, topic, self.now_ms(), int(user_id)),
+        )
+        self._db_commit()
+        return {"enabled": bool(enabled), "topic": topic}
+
     @staticmethod
     def now_ms() -> int:
         """Return unix epoch timestamp in milliseconds."""
@@ -1072,6 +1399,14 @@ class AuthService:
             self._db_execute("ALTER TABLE users ADD COLUMN last_login_at_ms INTEGER")
         if "email" not in user_cols:
             self._db_execute("ALTER TABLE users ADD COLUMN email TEXT")
+        if "ntfy_enabled" not in user_cols:
+            self._db_execute(
+                "ALTER TABLE users ADD COLUMN ntfy_enabled INTEGER NOT NULL DEFAULT 0"
+            )
+        if "ntfy_topic" not in user_cols:
+            self._db_execute(
+                "ALTER TABLE users ADD COLUMN ntfy_topic TEXT NOT NULL DEFAULT ''"
+            )
 
         self._db_execute(
             """
@@ -1130,6 +1465,60 @@ class AuthService:
             )
             """
         )
+        self._db_execute(
+            """
+            CREATE TABLE IF NOT EXISTS ecrypto_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL UNIQUE,
+                account_status TEXT NOT NULL CHECK(account_status IN ('active', 'disabled')) DEFAULT 'active',
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        self._db_execute(
+            """
+            CREATE TABLE IF NOT EXISTS ecrypto_wallets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL,
+                chain TEXT NOT NULL,
+                address TEXT NOT NULL,
+                network_mode TEXT NOT NULL CHECK(network_mode IN ('test', 'real')),
+                label TEXT,
+                source_label TEXT,
+                verified_at_ms INTEGER,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                UNIQUE(account_id, chain, address, network_mode),
+                FOREIGN KEY(account_id) REFERENCES ecrypto_accounts(id) ON DELETE CASCADE
+            )
+            """
+        )
+        ecrypto_wallet_cols = {
+            str(row["name"])
+            for row in self._db_fetchall("PRAGMA table_info(ecrypto_wallets)")
+        }
+        if "source_label" not in ecrypto_wallet_cols:
+            self._db_execute("ALTER TABLE ecrypto_wallets ADD COLUMN source_label TEXT")
+        self._db_execute(
+            """
+            CREATE TABLE IF NOT EXISTS ecrypto_ledger (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL,
+                direction TEXT NOT NULL CHECK(direction IN ('credit', 'debit')),
+                amount INTEGER NOT NULL CHECK(amount > 0),
+                network_mode TEXT NOT NULL CHECK(network_mode IN ('test', 'real')),
+                chain TEXT NOT NULL,
+                memo TEXT,
+                counterparty_account_id INTEGER,
+                tx_ref TEXT,
+                created_at_ms INTEGER NOT NULL,
+                FOREIGN KEY(account_id) REFERENCES ecrypto_accounts(id) ON DELETE CASCADE,
+                FOREIGN KEY(counterparty_account_id) REFERENCES ecrypto_accounts(id) ON DELETE SET NULL
+            )
+            """
+        )
 
         self._seed_permissions_and_roles()
         self._backfill_user_roles()
@@ -1160,6 +1549,18 @@ class AuthService:
         )
         self._db_execute(
             "CREATE INDEX IF NOT EXISTS idx_external_auth_nonces_expires ON external_auth_nonces(expires_at_ms)"
+        )
+        self._db_execute(
+            "CREATE INDEX IF NOT EXISTS idx_ecrypto_accounts_user_id ON ecrypto_accounts(user_id)"
+        )
+        self._db_execute(
+            "CREATE INDEX IF NOT EXISTS idx_ecrypto_wallets_account_id ON ecrypto_wallets(account_id)"
+        )
+        self._db_execute(
+            "CREATE INDEX IF NOT EXISTS idx_ecrypto_ledger_account_id ON ecrypto_ledger(account_id)"
+        )
+        self._db_execute(
+            "CREATE INDEX IF NOT EXISTS idx_ecrypto_ledger_created ON ecrypto_ledger(created_at_ms)"
         )
         self._db_commit()
 
@@ -1500,6 +1901,114 @@ class AuthService:
 
         with self._conn_lock:
             self._conn.rollback()
+
+    @staticmethod
+    def _normalize_ecrypto_token(value: str, *, field_name: str) -> str:
+        """Normalize one eCrypto chain/token identifier."""
+
+        token = str(value or "").strip().casefold()
+        if not token:
+            raise AuthError(f"{field_name} is required.")
+        if len(token) > 48:
+            raise AuthError(f"{field_name} is too long.")
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_.:-]*", token):
+            raise AuthError(
+                f"{field_name} can use letters, numbers, underscore, dash, dot, or colon."
+            )
+        return token
+
+    @staticmethod
+    def _normalize_wallet_address(value: str) -> str:
+        """Normalize and lightly validate a connected wallet address."""
+
+        address = str(value or "").strip()
+        if not address:
+            raise AuthError("Wallet address is required.")
+        if len(address) > 160:
+            raise AuthError("Wallet address is too long.")
+        if any(char.isspace() for char in address):
+            raise AuthError("Wallet address cannot contain spaces.")
+        if not re.fullmatch(r"[A-Za-z0-9:_./=+-]+", address):
+            raise AuthError("Wallet address contains unsupported characters.")
+        return address
+
+    @staticmethod
+    def _normalize_wallet_source_label(value: str | None) -> str | None:
+        """Normalize a safe source note for where a wallet reference came from."""
+
+        source = str(value or "").strip()
+        if not source:
+            return None
+        if len(source) > 80:
+            raise AuthError("Wallet source label is too long.")
+        if any(char in source for char in "\r\n\t"):
+            raise AuthError("Wallet source label cannot contain control whitespace.")
+        return source
+
+    def _external_identity_count_for_user(self, user_id: int) -> int:
+        """Return count of verified external identities tied to one user."""
+
+        row = self._db_fetchone(
+            "SELECT COUNT(*) AS c FROM external_identities WHERE user_id = ?",
+            (user_id,),
+        )
+        return int(row["c"]) if row is not None else 0
+
+    def _ecrypto_test_balance_for_account(self, account_id: int) -> int:
+        """Return signed test-chain balance for one eCrypto account."""
+
+        row = self._db_fetchone(
+            """
+            SELECT
+                COALESCE(SUM(
+                    CASE direction
+                        WHEN 'credit' THEN amount
+                        WHEN 'debit' THEN -amount
+                        ELSE 0
+                    END
+                ), 0) AS balance
+            FROM ecrypto_ledger
+            WHERE account_id = ? AND network_mode = 'test'
+            """,
+            (account_id,),
+        )
+        if row is None:
+            return 0
+        return int(row["balance"])
+
+    def _insert_ecrypto_ledger_entry(
+        self,
+        *,
+        account_id: int,
+        direction: str,
+        amount: int,
+        network_mode: str,
+        chain: str,
+        memo: str,
+        counterparty_account_id: int | None,
+        tx_ref: str,
+        now_ms: int,
+    ) -> None:
+        """Insert one normalized eCrypto ledger entry without committing."""
+
+        self._db_execute(
+            """
+            INSERT INTO ecrypto_ledger
+                (account_id, direction, amount, network_mode, chain, memo, counterparty_account_id, tx_ref, created_at_ms)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                account_id,
+                direction,
+                amount,
+                network_mode,
+                chain,
+                memo,
+                counterparty_account_id,
+                tx_ref,
+                now_ms,
+            ),
+        )
 
     def _row_to_user(self, row: sqlite3.Row) -> AuthUser:
         """Convert a DB row into AuthUser."""

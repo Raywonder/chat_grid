@@ -153,7 +153,7 @@ class MainFrame(wx.Frame):
         self.SetMenuBar(menu_bar)
         self.Bind(wx.EVT_MENU, lambda _event: self._reload(), id=reconnect_id)
         self.Bind(wx.EVT_MENU, lambda _event: self._restart_webview(), id=restart_world_id)
-        self.Bind(wx.EVT_MENU, lambda _event: self.web.SetFocus(), id=focus_world_id)
+        self.Bind(wx.EVT_MENU, lambda _event: self._focus_world(), id=focus_world_id)
         self.Bind(wx.EVT_MENU, self._show_settings, id=wx.ID_PREFERENCES)
         self.Bind(wx.EVT_MENU, lambda _event: self.Hide(), id=tray_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.request_exit(), id=wx.ID_EXIT)
@@ -163,7 +163,20 @@ class MainFrame(wx.Frame):
     def _create_webview(self) -> wx.html2.WebView:
         """Create and bind one replaceable Edge WebView world surface."""
         assert self.panel is not None
-        web = wx.html2.WebView.New(self.panel, backend=wx.html2.WebViewBackendEdge)
+        try:
+            web = wx.html2.WebView.New(self.panel, backend=wx.html2.WebViewBackendEdge)
+            if not web:
+                raise RuntimeError("Edge WebView2 backend returned no window")
+            LOGGER.info("Using Edge WebView2 backend")
+        except Exception:
+            # Some otherwise supported Windows systems have an absent, damaged,
+            # or incompatible WebView2 runtime.  Do not let that close the whole
+            # native shell before the user can reach its accessible File menu.
+            LOGGER.exception("Edge WebView2 initialization failed; using default backend")
+            web = wx.html2.WebView.New(self.panel)
+            if not web:
+                raise RuntimeError("No usable wx.html2 WebView backend is installed")
+            LOGGER.info("Using default wx.html2 WebView backend")
         web.SetName("Chat Grid world")
         web.Bind(wx.html2.EVT_WEBVIEW_LOADED, self._on_loaded)
         web.Bind(wx.html2.EVT_WEBVIEW_ERROR, self._on_error)
@@ -192,6 +205,27 @@ class MainFrame(wx.Frame):
         self._announce("Chat Grid loaded. Session and reconnect monitoring are active.")
         if self.settings.auto_connect:
             self.web.RunScript("setTimeout(() => document.getElementById('connectButton')?.click(), 500);")
+        # Native WebView focus alone does not activate the web world's
+        # application-level keyboard contract.  Activate the same accessible
+        # control that browser users select so movement, chat, and item keys
+        # are ready when the desktop world receives focus.
+        self.web.RunScript(
+            "(() => {"
+            "let attempts = 0;"
+            "const activate = () => {"
+            "const button = document.getElementById('focusGridButton');"
+            "if (button && !button.classList.contains('hidden')) { button.click(); return; }"
+            "if (++attempts < 80) setTimeout(activate, 250);"
+            "};"
+            "activate();"
+            "})();"
+        )
+        wx.CallLater(1000, self.web.SetFocus)
+
+    def _focus_world(self) -> None:
+        """Activate web world controls and move native focus into the renderer."""
+        self.web.RunScript("document.getElementById('focusGridButton')?.click();")
+        self.web.SetFocus()
 
     def _on_error(self, event: wx.html2.WebViewEvent) -> None:
         LOGGER.warning("WebView load error: %s", event.GetString())
@@ -342,6 +376,20 @@ def main() -> int:
     activation = SingleInstanceActivation()
     if not activation.is_owner:
         return 0
-    app = ChatGridApp(activation)
-    app.MainLoop()
-    return 0
+    try:
+        LOGGER.info("Starting Chat Grid %s on Python %s", __version__, sys.version)
+        app = ChatGridApp(activation)
+        app.MainLoop()
+        return 0
+    except Exception:
+        LOGGER.exception("Fatal desktop startup failure")
+        try:
+            wx.MessageBox(
+                "Chat Grid could not start. A diagnostic log was saved to "
+                f"{root / 'chat-grid.log'}.",
+                "Chat Grid startup error",
+                wx.OK | wx.ICON_ERROR,
+            )
+        except Exception:
+            pass
+        return 1

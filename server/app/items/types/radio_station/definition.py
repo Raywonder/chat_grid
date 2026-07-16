@@ -7,17 +7,21 @@ TOOLTIP = "Can play stations from the Internet. Tune multiple to the same statio
 EDITABLE_PROPERTIES: tuple[str, ...] = (
     "title",
     "streamUrl",
+    "stationIndex",
     "enabled",
     "speakerRole",
     "linkedMediaGroup",
     "syncWithPrimary",
     "itemVisibility",
+    "stationSwitchSound",
     "mediaVolume",
     "mediaChannel",
     "mediaEffect",
     "mediaEffectValue",
     "facing",
     "emitRange",
+    "surfaceId",
+    "surfaceTitle",
 )
 CAPABILITIES: tuple[str, ...] = ("editable", "carryable", "deletable", "usable")
 USE_SOUND: str | None = None
@@ -30,6 +34,8 @@ DEFAULT_PARAMS: dict = {
     "streamUrl": "",
     "playbackUrl": "",
     "enabled": True,
+    "stationIndex": 0,
+    "stationPresets": [],
     "mediaVolume": 50,
     "mediaChannel": "stereo",
     "mediaEffect": "off",
@@ -38,15 +44,22 @@ DEFAULT_PARAMS: dict = {
     "linkedMediaGroup": "",
     "syncWithPrimary": False,
     "itemVisibility": "shown",
+    "stationSwitchSound": "",
     "stationName": "",
     "nowPlaying": "",
+    "playStartedAt": 0,
     "facing": 0,
     "emitRange": 10,
+    "surfaceId": "",
+    "surfaceTitle": "",
+    "surfaceOrder": 0,
 }
 PARAM_KEYS: tuple[str, ...] = (
     "streamUrl",
     "playbackUrl",
     "enabled",
+    "stationIndex",
+    "stationPresets",
     "mediaVolume",
     "mediaChannel",
     "mediaEffect",
@@ -55,16 +68,22 @@ PARAM_KEYS: tuple[str, ...] = (
     "linkedMediaGroup",
     "syncWithPrimary",
     "itemVisibility",
+    "stationSwitchSound",
     "stationName",
     "nowPlaying",
+    "playStartedAt",
     "facing",
     "emitRange",
+    "surfaceId",
+    "surfaceTitle",
+    "surfaceOrder",
 )
 
 CHANNEL_OPTIONS: tuple[str, ...] = ("stereo", "mono", "left", "right")
 SPEAKER_ROLE_OPTIONS: tuple[str, ...] = (
     "primary",
     "sub",
+    "low",
     "mid",
     "high",
     "high_low_bass",
@@ -96,12 +115,23 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
     },
     "enabled": {
         "valueType": "boolean",
-        "tooltip": "Turns playback on or off for this radio.",
+        "tooltip": "Power switch for this radio.",
+    },
+    "stationIndex": {
+        "valueType": "number",
+        "label": "Station knob",
+        "tooltip": "Station preset number. Use left/right here or Shift+Enter on the radio to tune.",
+        "range": {"min": 0, "max": 99, "step": 1},
+    },
+    "stationPresets": {
+        "valueType": "text",
+        "label": "Station presets",
+        "tooltip": "Server-managed station preset list for bundled radios.",
     },
     "mediaVolume": {
         "valueType": "number",
-        "tooltip": "Playback media volume percent for this radio.",
-        "range": {"min": 0, "max": 100, "step": 1},
+        "tooltip": "Playback media volume percent for this radio or speaker. Values above 100 can boost a quiet speaker.",
+        "range": {"min": 0, "max": 1000, "step": 1},
     },
     "mediaChannel": {
         "valueType": "list",
@@ -128,7 +158,7 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
     "linkedMediaGroup": {
         "valueType": "text",
         "label": "Linked media group",
-        "tooltip": "Shared group name used to sync related primary, sub, mid, and high media items.",
+        "tooltip": "Shared group name used to sync related primary, sub, low, mid, and high media items. In the browser, Enter opens nearby linked speaker systems so users do not have to type the group key.",
         "maxLength": 80,
     },
     "syncWithPrimary": {
@@ -142,6 +172,12 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "label": "Item visibility",
         "tooltip": "Quiet items stay playable but are omitted from ordinary nearby item lists.",
         "options": list(VISIBILITY_OPTIONS),
+    },
+    "stationSwitchSound": {
+        "valueType": "text",
+        "label": "Station switch sound",
+        "tooltip": "Optional sound file played when this radio tunes to a station.",
+        "maxLength": 2048,
     },
     "stationName": {
         "valueType": "text",
@@ -161,5 +197,23 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "valueType": "number",
         "tooltip": "Maximum distance in squares for this radio's emitted audio.",
         "range": {"min": 5, "max": 20, "step": 1},
+    },
+    "surfaceId": {
+        "valueType": "text",
+        "label": "Surface id",
+        "tooltip": "Server-managed id of the shelf, table, counter, or other surface holding this radio.",
+        "maxLength": 80,
+    },
+    "surfaceTitle": {
+        "valueType": "text",
+        "label": "Surface title",
+        "tooltip": "Server-managed display name of the surface holding this radio.",
+        "maxLength": 120,
+    },
+    "surfaceOrder": {
+        "valueType": "number",
+        "label": "Surface order",
+        "tooltip": "Server-managed left-to-right or shelf order for radios sitting on the same surface.",
+        "range": {"min": 0, "max": 20, "step": 1},
     },
 }

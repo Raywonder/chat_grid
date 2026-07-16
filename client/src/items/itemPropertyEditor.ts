@@ -3,6 +3,44 @@ import { getEditSessionAction } from '../input/editSession';
 import { formatSteppedNumber, snapNumberToStep } from '../input/numeric';
 import { type WorldItem } from '../state/gameState';
 
+const MINUTES_PER_DAY = 24 * 60;
+
+function parseClockAlarmTime(value: unknown): number | null {
+  const raw = String(value ?? '').trim();
+  let match = /^([01]?\d|2[0-3]):([0-5]\d)$/u.exec(raw);
+  if (match) {
+    return Number(match[1]) * 60 + Number(match[2]);
+  }
+  match = /^(0?[1-9]|1[0-2]):([0-5]\d)\s*([AaPp][Mm])$/u.exec(raw);
+  if (!match) return null;
+  const hour12 = Number(match[1]);
+  const minute = Number(match[2]);
+  const meridiem = match[3].toUpperCase();
+  const hour24 = meridiem === 'AM' ? (hour12 === 12 ? 0 : hour12) : hour12 === 12 ? 12 : hour12 + 12;
+  return hour24 * 60 + minute;
+}
+
+function formatClockAlarmTime(totalMinutes: number, use24Hour: boolean): string {
+  const normalized = ((Math.round(totalMinutes) % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+  const hour24 = Math.floor(normalized / 60);
+  const minute = normalized % 60;
+  if (use24Hour) {
+    return `${String(hour24).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  }
+  const meridiem = hour24 < 12 ? 'AM' : 'PM';
+  const hour12 = hour24 % 12 || 12;
+  return `${hour12}:${String(minute).padStart(2, '0')} ${meridiem}`;
+}
+
+function isClockAlarmTimeProperty(item: WorldItem, propertyKey: string): boolean {
+  return item.type === 'clock' && propertyKey === 'alarmTime';
+}
+
+function stepClockAlarmTime(value: unknown, use24Hour: boolean, deltaMinutes: number): string {
+  const current = parseClockAlarmTime(value) ?? 0;
+  return formatClockAlarmTime(current + deltaMinutes, use24Hour);
+}
+
 /**
  * Dependencies required to drive item property inspect/edit flows.
  */
@@ -12,6 +50,7 @@ type EditorDeps = {
     selectedItemId: string | null;
     editingPropertyKey: string | null;
     itemPropertyOptionValues: string[];
+    itemPropertyOptionLabels: string[];
     itemPropertyOptionIndex: number;
     itemPropertyKeys: string[];
     itemPropertyIndex: number;
@@ -23,7 +62,7 @@ type EditorDeps = {
   getItemPropertyValue: (item: WorldItem, key: string) => string;
   itemPropertyLabel: (key: string) => string;
   isItemPropertyEditable: (item: WorldItem, key: string) => boolean;
-  getItemPropertyOptionValues: (itemType: WorldItem['type'], key: string) => string[] | undefined;
+  getItemPropertyOptionValues: (item: WorldItem, key: string) => string[] | undefined;
   openItemPropertyOptionSelect: (item: WorldItem, key: string) => void;
   describeItemPropertyHelp: (item: WorldItem, key: string) => string;
   getItemPropertyMetadata: (
@@ -63,6 +102,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
       deps.state.mode = 'normal';
       deps.state.editingPropertyKey = null;
       deps.state.itemPropertyOptionValues = [];
+      deps.state.itemPropertyOptionLabels = [];
       deps.state.itemPropertyOptionIndex = 0;
       return;
     }
@@ -71,6 +111,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
       deps.state.mode = 'normal';
       deps.state.editingPropertyKey = null;
       deps.state.itemPropertyOptionValues = [];
+      deps.state.itemPropertyOptionLabels = [];
       deps.state.itemPropertyOptionIndex = 0;
       deps.updateStatus('Item no longer exists.');
       deps.sfxUiCancel();
@@ -98,7 +139,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
         deps.sfxUiCancel();
         return;
       }
-      const options = deps.getItemPropertyOptionValues(item.type, selectedKey);
+      const options = deps.getItemPropertyOptionValues(item, selectedKey);
       if (options && options.length > 0) {
         const currentRaw = String(item.params[selectedKey] ?? '').trim().toLowerCase();
         const currentIndex = Math.max(
@@ -163,6 +204,17 @@ export function createItemPropertyEditor(deps: EditorDeps): {
         }
         return;
       }
+      if (isClockAlarmTimeProperty(item, selectedKey)) {
+        const deltaMinutes = code === 'ArrowRight' ? 1 : code === 'ArrowLeft' ? -1 : code === 'PageUp' ? 60 : -60;
+        const use24Hour = item.params.use24Hour === true;
+        const nextValue = stepClockAlarmTime(item.params[selectedKey], use24Hour, deltaMinutes);
+        deps.suppressItemPropertyEchoMs(600);
+        deps.signalingSend({ type: 'item_update', itemId, params: { [selectedKey]: nextValue } });
+        deps.onPreviewPropertyChange?.(item, selectedKey, nextValue);
+        deps.updateStatus(nextValue);
+        deps.sfxUiBlip();
+        return;
+      }
       deps.sfxUiCancel();
       return;
     }
@@ -183,7 +235,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
         deps.sfxUiBlip();
         return;
       }
-      if (deps.getItemPropertyOptionValues(item.type, selectedKey)) {
+      if (deps.getItemPropertyOptionValues(item, selectedKey)) {
         deps.openItemPropertyOptionSelect(item, selectedKey);
         return;
       }
@@ -211,6 +263,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
       deps.state.itemPropertyIndex = 0;
       deps.state.editingPropertyKey = null;
       deps.state.itemPropertyOptionValues = [];
+      deps.state.itemPropertyOptionLabels = [];
       deps.state.itemPropertyOptionIndex = 0;
       deps.updateStatus('Closed item properties.');
       deps.sfxUiCancel();
@@ -267,6 +320,18 @@ export function createItemPropertyEditor(deps: EditorDeps): {
         }
         return;
       }
+      if (isClockAlarmTimeProperty(item, propertyKey)) {
+        const deltaMinutes = code === 'ArrowUp' ? 1 : code === 'ArrowDown' ? -1 : code === 'PageUp' ? 60 : -60;
+        const use24Hour = item.params.use24Hour === true;
+        const nextValue = stepClockAlarmTime(deps.state.nicknameInput || item.params[propertyKey], use24Hour, deltaMinutes);
+        deps.state.nicknameInput = nextValue;
+        deps.state.cursorPos = deps.state.nicknameInput.length;
+        deps.setReplaceTextOnNextType(false);
+        deps.onPreviewPropertyChange?.(item, propertyKey, nextValue);
+        deps.updateStatus(nextValue);
+        deps.sfxUiBlip();
+        return;
+      }
     }
     const editAction = getEditSessionAction(code);
     if (editAction === 'submit') {
@@ -312,7 +377,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
       } else if (valueType === 'number') {
         if (!submitNumericParam(propertyKey)) return;
       } else if (valueType === 'list') {
-        const options = deps.getItemPropertyOptionValues(item.type, propertyKey) ?? [];
+        const options = deps.getItemPropertyOptionValues(item, propertyKey) ?? [];
         if (options.length === 0) {
           deps.updateStatus(`${deps.itemPropertyLabel(propertyKey)} has no options.`);
           deps.sfxUiCancel();
@@ -358,6 +423,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
       deps.state.mode = 'itemProperties';
       deps.state.editingPropertyKey = null;
       deps.state.itemPropertyOptionValues = [];
+      deps.state.itemPropertyOptionLabels = [];
       deps.state.itemPropertyOptionIndex = 0;
       return;
     }
@@ -368,7 +434,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
       const delta = code === 'PageUp' ? -jump : jump;
       const nextIndex = (deps.state.itemPropertyOptionIndex + delta + length * 1000) % length;
       deps.state.itemPropertyOptionIndex = nextIndex;
-      deps.updateStatus(deps.state.itemPropertyOptionValues[nextIndex]);
+      deps.updateStatus(deps.state.itemPropertyOptionLabels[nextIndex] ?? deps.state.itemPropertyOptionValues[nextIndex]);
       deps.sfxUiBlip();
       return;
     }
@@ -382,7 +448,10 @@ export function createItemPropertyEditor(deps: EditorDeps): {
     );
     if (control.type === 'move') {
       deps.state.itemPropertyOptionIndex = control.index;
-      deps.updateStatus(deps.state.itemPropertyOptionValues[deps.state.itemPropertyOptionIndex]);
+      deps.updateStatus(
+        deps.state.itemPropertyOptionLabels[deps.state.itemPropertyOptionIndex] ??
+          deps.state.itemPropertyOptionValues[deps.state.itemPropertyOptionIndex],
+      );
       deps.sfxUiBlip();
       return;
     }
@@ -397,6 +466,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
       deps.state.mode = 'itemProperties';
       deps.state.editingPropertyKey = null;
       deps.state.itemPropertyOptionValues = [];
+      deps.state.itemPropertyOptionLabels = [];
       deps.state.itemPropertyOptionIndex = 0;
       return;
     }
@@ -405,6 +475,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
       deps.state.mode = 'itemProperties';
       deps.state.editingPropertyKey = null;
       deps.state.itemPropertyOptionValues = [];
+      deps.state.itemPropertyOptionLabels = [];
       deps.state.itemPropertyOptionIndex = 0;
       deps.updateStatus('Cancelled.');
       deps.sfxUiCancel();

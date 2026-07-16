@@ -92,6 +92,7 @@ export function runDisconnectFlow(deps: ConnectFlowDeps): void {
   deps.state.itemPropertyIndex = 0;
   deps.state.editingPropertyKey = null;
   deps.state.itemPropertyOptionValues = [];
+  deps.state.itemPropertyOptionLabels = [];
   deps.state.itemPropertyOptionIndex = 0;
   deps.state.effectSelectIndex = 0;
 
@@ -102,7 +103,9 @@ export function runDisconnectFlow(deps: ConnectFlowDeps): void {
   deps.dom.canvas.classList.add('hidden');
   deps.dom.instructions.classList.add('hidden');
   document.getElementById('joinGuide')?.classList.remove('hidden');
-  document.getElementById('gridDashboard')?.classList.add('hidden');
+  const dashboard = document.getElementById('gridDashboard');
+  dashboard?.classList.add('hidden');
+  if (dashboard) dashboard.hidden = true;
   deps.updateConnectAvailability();
 
   deps.updateStatus('Disconnected.');

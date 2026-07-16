@@ -5,7 +5,7 @@ from __future__ import annotations
 from ....models import WorldItem
 from ...sound_policy import enforce_max_length, normalize_sound_reference
 from ...helpers import keep_only_known_params, parse_bool_like
-from .definition import EFFECT_OPTIONS, PARAM_KEYS
+from .definition import AMBIENCE_SCOPE_OPTIONS, EFFECT_OPTIONS, PARAM_KEYS
 
 
 def validate_update(item: WorldItem, next_params: dict) -> dict:
@@ -109,6 +109,32 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     if not (0 <= emit_effect_value <= 100):
         raise ValueError("emitEffectValue must be between 0 and 100.")
     next_params["emitEffectValue"] = round(emit_effect_value, 1)
+
+    ambience_scope = (
+        str(next_params.get("ambienceScope", item.params.get("ambienceScope", "tile")))
+        .strip()
+        .lower()
+    )
+    if ambience_scope not in AMBIENCE_SCOPE_OPTIONS:
+        raise ValueError("ambienceScope must be one of tile, location, off.")
+    next_params["ambienceScope"] = ambience_scope
+
+    ambience_name = str(
+        next_params.get("ambienceName", item.params.get("ambienceName", ""))
+    ).strip()
+    next_params["ambienceName"] = ambience_name[:80]
+
+    try:
+        ambience_priority = int(
+            next_params.get(
+                "ambiencePriority", item.params.get("ambiencePriority", 50)
+            )
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("ambiencePriority must be an integer between 0 and 100.") from exc
+    if not (0 <= ambience_priority <= 100):
+        raise ValueError("ambiencePriority must be between 0 and 100.")
+    next_params["ambiencePriority"] = ambience_priority
 
     next_params["useSound"] = enforce_max_length(
         normalize_sound_reference(

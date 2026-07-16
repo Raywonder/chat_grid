@@ -9,6 +9,7 @@ EDITABLE_PROPERTIES: tuple[str, ...] = (
     "timeZone",
     "use24Hour",
     "topOfHourAnnounce",
+    "announceIntervalMinutes",
     "alarmEnabled",
     "alarmTime",
 )
@@ -20,6 +21,7 @@ EMIT_RANGE = 10
 DIRECTIONAL = False
 DEFAULT_TITLE = "clock"
 DEFAULT_TIME_ZONE = "America/Detroit"
+DEFAULT_ANNOUNCE_INTERVAL_MINUTES = 60
 TIME_ZONE_OPTIONS: tuple[str, ...] = (
     "America/Anchorage",
     "America/Argentina/Buenos_Aires",
@@ -66,6 +68,7 @@ DEFAULT_PARAMS: dict = {
     "timeZone": DEFAULT_TIME_ZONE,
     "use24Hour": False,
     "topOfHourAnnounce": True,
+    "announceIntervalMinutes": DEFAULT_ANNOUNCE_INTERVAL_MINUTES,
     "alarmEnabled": False,
     "alarmTime": "12:00 AM",
 }
@@ -73,6 +76,7 @@ PARAM_KEYS: tuple[str, ...] = (
     "timeZone",
     "use24Hour",
     "topOfHourAnnounce",
+    "announceIntervalMinutes",
     "alarmEnabled",
     "alarmTime",
 )
@@ -94,7 +98,13 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
     },
     "topOfHourAnnounce": {
         "valueType": "boolean",
-        "tooltip": "Automatically announce time at the top of each hour.",
+        "tooltip": "Automatically announce time on the configured minute interval.",
+    },
+    "announceIntervalMinutes": {
+        "valueType": "number",
+        "tooltip": "Automatic clock announcement interval in minutes. Use 1 for every minute, 60 for hourly.",
+        "range": {"min": 1, "max": 60, "step": 1},
+        "visibleWhen": {"topOfHourAnnounce": True},
     },
     "alarmEnabled": {
         "valueType": "boolean",

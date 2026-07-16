@@ -1,6 +1,30 @@
 {
   "sections": [
     {
+      "date": "July 14, 2026",
+      "items": [
+        "Fixed world audio recovery so walking no longer repeatedly restarts nearby sounds, intentional loop delays remain quiet, and footstep samples preload with room ambience.",
+        "Audio now checks itself quietly in the background across browser and desktop shells, rebuilding paused server streams from current radio, TV, object, and location state with a gentle fade-in.",
+        "The Raywonder entry, living room, studio, kitchen, and bedroom now use 96-second layered ambience beds instead of short eight-second loops.",
+        "Clock announcements now layer in selected archived bell and chime cues: a soft chime for manual use, a clear bell for top-of-hour announcements, and a gentle alert for alarms.",
+        "Spatial fading for continuous radios and item emitters is now slower and more natural, so nearby clocks, shelves, radios, and other room objects can overlap instead of cutting each other off too quickly.",
+        "Billboards can now use real MP3/OGG voice assets through a voiceAssetUrl field; those voices play spatially from the billboard and keep moving correctly as the listener walks, with browser speech synthesis kept only as fallback.",
+        "Item use, edit, inspect, management, pickup, and item lists now prefer the item you last focused or used instead of jumping back to the first item when several items share a square or shelf.",
+        "Door-style room and house transitions now use real generated door-open and door-close one-shots instead of the old soft loop cue.",
+        "Universal radio remote station changes now sync the house radios outside the relaxation room, including the kitchen radio, while the relaxation room keeps its own calm audio.",
+        "Added a short-range kitchen fridge hum as an item-layer appliance sound.",
+        "Added opt-in house keeper helper agents for in-world house repairs; they can check rooms and sweep houses for supported issues such as radios not working.",
+        "Expanded human user actions in the Shift+Enter menu and chat slash commands, including wave, high-five, fist bump, cheer, clap, laugh, smile, wink, nod, dance, comfort, poke, boop, playful smack, listen, and more.",
+        "Space in the user-action menu can now choose from a wider automatic reaction set.",
+        "Shift+2 through Shift+9 now cover the remaining direct audio/settings toggles, including item/media/world layers, announcement mode, item beacons, stereo/mono, mute, and voice layer.",
+        "Dropping a carried house object now automatically places it on the focused open furniture surface, and furniture surface slots now cap how many objects fit.",
+        "User lists and user actions now announce a person's room/location when they are elsewhere in a house or world space.",
+        "Clock alarm times can now be adjusted with arrow keys and Page Up/Page Down, so manual typing is optional.",
+        "Replaced placeholder-style action tones with generated ElevenLabs one-shot assets for UI confirmation, cancel, navigation, tile pings, and the wheel flourish.",
+        "Added interactive-fiction style movement narration for walking, portals, location changes, nearby users, and square contents."
+      ]
+    },
+    {
       "date": "March 8, 2026",
       "items": [
         "First public release, v0.1.0.",

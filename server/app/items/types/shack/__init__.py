@@ -1,0 +1,1 @@
+"""Shack item type."""

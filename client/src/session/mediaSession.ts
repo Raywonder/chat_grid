@@ -120,8 +120,15 @@ export class MediaSession {
     }
 
     let temporaryStream: MediaStream | null = null;
+    let microphonePermissionUnavailable = false;
     try {
-      temporaryStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      try {
+        temporaryStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch {
+        // Device enumeration still returns default/generic devices when capture
+        // permission is blocked. Do not leave both selectors empty.
+        microphonePermissionUnavailable = true;
+      }
       const devices = await navigator.mediaDevices.enumerateDevices();
       const { dom } = this.options;
       dom.audioInputSelect.innerHTML = '';
@@ -134,6 +141,13 @@ export class MediaSession {
         if (device.kind === 'audiooutput') {
           dom.audioOutputSelect.add(new Option(device.label || `Speaker ${dom.audioOutputSelect.length + 1}`, device.deviceId));
         }
+      }
+
+      if (dom.audioInputSelect.options.length === 0) {
+        dom.audioInputSelect.add(new Option('Default microphone', ''));
+      }
+      if (dom.audioOutputSelect.options.length === 0) {
+        dom.audioOutputSelect.add(new Option('Default speakers', ''));
       }
 
       if (this.preferredInputDeviceId && Array.from(dom.audioInputSelect.options).some((option) => option.value === this.preferredInputDeviceId)) {
@@ -154,6 +168,11 @@ export class MediaSession {
       const sinkCapable = typeof (HTMLMediaElement.prototype as HTMLMediaElement & { setSinkId?: unknown }).setSinkId === 'function';
       dom.audioOutputSelect.disabled = !sinkCapable;
       this.updateDeviceSummary();
+      if (microphonePermissionUnavailable) {
+        this.options.updateStatus(
+          'Audio devices listed. Allow microphone access when prompted before joining the world.',
+        );
+      }
     } catch {
       this.options.updateStatus('Could not list devices.');
     } finally {

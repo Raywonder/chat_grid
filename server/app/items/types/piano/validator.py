@@ -6,6 +6,7 @@ from ....models import WorldItem
 from ...helpers import keep_only_known_params
 from .definition import (
     DEFAULT_ENVELOPE_BY_INSTRUMENT,
+    DEFAULT_PARAMS,
     INSTRUMENT_OPTIONS,
     PARAM_KEYS,
     VOICE_MODE_OPTIONS,
@@ -43,27 +44,27 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     next_params["octave"] = octave
 
     try:
-        attack = int(next_params.get("attack", 15))
+        attack = int(next_params.get("attack", DEFAULT_PARAMS["attack"]))
     except (TypeError, ValueError) as exc:
         raise ValueError("attack must be an integer between 0 and 100.") from exc
     if not (0 <= attack <= 100):
         raise ValueError("attack must be between 0 and 100.")
     try:
-        decay = int(next_params.get("decay", 45))
+        decay = int(next_params.get("decay", DEFAULT_PARAMS["decay"]))
     except (TypeError, ValueError) as exc:
         raise ValueError("decay must be an integer between 0 and 100.") from exc
     if not (0 <= decay <= 100):
         raise ValueError("decay must be between 0 and 100.")
 
     try:
-        release = int(next_params.get("release", 35))
+        release = int(next_params.get("release", DEFAULT_PARAMS["release"]))
     except (TypeError, ValueError) as exc:
         raise ValueError("release must be an integer between 0 and 100.") from exc
     if not (0 <= release <= 100):
         raise ValueError("release must be between 0 and 100.")
 
     try:
-        brightness = int(next_params.get("brightness", 55))
+        brightness = int(next_params.get("brightness", DEFAULT_PARAMS["brightness"]))
     except (TypeError, ValueError) as exc:
         raise ValueError("brightness must be an integer between 0 and 100.") from exc
     if not (0 <= brightness <= 100):
@@ -72,7 +73,17 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     # When instrument changes, reset envelope to instrument-appropriate defaults.
     if instrument != previous_instrument:
         attack, decay, release, brightness, voice_mode, octave = (
-            DEFAULT_ENVELOPE_BY_INSTRUMENT.get(instrument, (15, 45, 35, 55, "poly", 0))
+            DEFAULT_ENVELOPE_BY_INSTRUMENT.get(
+                instrument,
+                (
+                    DEFAULT_PARAMS["attack"],
+                    DEFAULT_PARAMS["decay"],
+                    DEFAULT_PARAMS["release"],
+                    DEFAULT_PARAMS["brightness"],
+                    "poly",
+                    0,
+                ),
+            )
         )
         next_params["voiceMode"] = voice_mode
         next_params["octave"] = octave

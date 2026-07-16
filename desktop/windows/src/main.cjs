@@ -1,11 +1,21 @@
-const { app, BrowserWindow, Menu, dialog, shell, session } = require('electron');
+const { app, BrowserWindow, Menu, Tray, dialog, nativeImage, shell, session } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
-const DEFAULT_CHAT_GRID_URL = 'https://blind.software/chatgrid/';
+const DEFAULT_CHAT_GRID_URL = 'https://blind.software/chatgrid/?desktop=1';
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:']);
 
 let mainWindow = null;
+let tray = null;
+let isQuitting = false;
+let mainWindowUnresponsive = false;
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+}
+
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 function settingsPath() {
   return path.join(app.getPath('userData'), 'settings.json');
@@ -47,6 +57,51 @@ function getCurrentUrl() {
 function loadChatGrid(url = getCurrentUrl()) {
   if (!mainWindow) return;
   mainWindow.loadURL(url);
+}
+
+function showMainWindow({ recover = false } = {}) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    if (app.isReady()) createWindow();
+    return;
+  }
+  if (recover && (mainWindowUnresponsive || mainWindow.webContents.isCrashed())) {
+    loadChatGrid();
+    mainWindowUnresponsive = false;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  mainWindow.webContents.send('chat-grid-focus');
+}
+
+function createTrayIcon() {
+  const svg = encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">' +
+      '<rect width="32" height="32" rx="7" fill="#2563eb"/>' +
+      '<path d="M7 7h18v18H7zM13 7v18M19 7v18M7 13h18M7 19h18" fill="none" stroke="white" stroke-width="2"/>' +
+    '</svg>',
+  );
+  return nativeImage.createFromDataURL(`data:image/svg+xml;charset=UTF-8,${svg}`).resize({ width: 16, height: 16 });
+}
+
+function createTray() {
+  if (tray) return;
+  tray = new Tray(createTrayIcon());
+  tray.setToolTip('Chat Grid');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Open Chat Grid', click: () => showMainWindow({ recover: true }) },
+    { label: 'Reload Chat Grid', click: () => loadChatGrid() },
+    { type: 'separator' },
+    {
+      label: 'Quit Chat Grid',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      },
+    },
+  ]));
+  tray.on('click', () => showMainWindow({ recover: true }));
+  tray.on('double-click', () => showMainWindow({ recover: true }));
 }
 
 async function promptForChatGridUrl() {
@@ -146,21 +201,53 @@ function createWindow() {
     }
   });
 
+  mainWindow.on('unresponsive', () => {
+    mainWindowUnresponsive = true;
+  });
+
+  mainWindow.on('responsive', () => {
+    mainWindowUnresponsive = false;
+  });
+
+  mainWindow.on('minimize', (event) => {
+    event.preventDefault();
+    mainWindow?.hide();
+  });
+
+  mainWindow.on('close', (event) => {
+    if (isQuitting) return;
+    event.preventDefault();
+    mainWindow?.hide();
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+
   loadChatGrid();
 }
 
-app.whenReady().then(async () => {
+app.on('second-instance', () => {
+  showMainWindow({ recover: true });
+});
+
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+
+if (hasSingleInstanceLock) app.whenReady().then(async () => {
   await session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    const allowed = ['media', 'microphone', 'speaker-selection'].includes(permission);
+    const allowed = ['media', 'microphone', 'speaker-selection', 'midi', 'midiSysex'].includes(permission);
     callback(allowed);
   });
   createApplicationMenu();
   createWindow();
+  createTray();
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    showMainWindow({ recover: true });
   });
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  // The tray owns the app lifetime. Explicit Quit remains available in both menus.
 });

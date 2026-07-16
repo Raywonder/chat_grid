@@ -50,7 +50,7 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
     // retargets individual key events after focus changes.
     activateWorldControls();
     deps.dom.canvas.focus({ preventScroll: true });
-    deps.updateStatus(`${deps.getGridName()} world controls active. Arrow keys move. Tab and Shift Tab cycle items. Press F6 to leave the world controls.`);
+    deps.updateStatus(`${deps.getGridName()} world controls active. All available keys now go to the world. Arrow keys move. Tab and Shift Tab cycle items. Press F6 or Shift Escape to return to page navigation.`);
     deps.sfxUiBlip();
   };
 
@@ -99,7 +99,9 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
 
   deps.dom.settingsModal.addEventListener('keydown', (event) => {
     if (event.key !== 'Tab') return;
-    const focusable = Array.from(deps.dom.settingsModal.querySelectorAll<HTMLElement>('select, input, button'));
+    const focusable = Array.from(deps.dom.settingsModal.querySelectorAll<HTMLElement>('select, input, button')).filter(
+      (element) => !element.hidden && !element.hasAttribute('hidden') && !(element as HTMLButtonElement | HTMLInputElement).disabled,
+    );
     if (focusable.length === 0) return;
     const first = focusable[0];
     const last = focusable[focusable.length - 1];

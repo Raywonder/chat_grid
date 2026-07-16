@@ -9,6 +9,9 @@
   "scripts": {
     "start": "electron .",
     "start:local": "node scripts/start-local.cjs",
+    "build:web": "node scripts/build-web.cjs",
+    "prepackage:win": "npm run build:web",
+    "predist:win": "npm run build:web",
     "package:win": "electron-builder --win nsis portable",
     "dist:win": "electron-builder --win nsis"
   },
@@ -24,6 +27,9 @@
     },
     "files": [
       "src/**/*",
+      "web/**/*",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md",
       "package.json"
     ],
     "win": {
@@ -35,7 +41,8 @@
     "nsis": {
       "oneClick": false,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "license": "LICENSE"
     }
   }
 }

@@ -48,6 +48,10 @@ npm run package:win
 
 Artifacts are written to `desktop/windows/release/`.
 
+Packaging runs `npm run build:web` first. That builds the shared web client with
+relative asset paths and copies it to `desktop/windows/web/`, including the full
+`sounds/` tree for local desktop use and remote fallback packaging.
+
 ## Shortcuts
 
 - `Ctrl+Enter`: connect

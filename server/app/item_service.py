@@ -32,9 +32,9 @@ class ItemService:
         self.piano_songs: dict[str, dict] = {}
         self.load_state()
         if seed_builtin_items:
-            added = self.ensure_builtin_items()
-            if added:
-                LOGGER.info("seeded %d built-in world items", len(added))
+            changed = self.ensure_builtin_items()
+            if changed:
+                LOGGER.info("seeded or updated %d built-in world items", len(changed))
                 self.save_state()
         self.load_piano_songs()
 
@@ -73,7 +73,7 @@ class ItemService:
         )
 
     def ensure_builtin_items(self) -> list[WorldItem]:
-        """Insert missing built-in world items and return items added."""
+        """Insert/update built-in world items and return changed items."""
 
         return ensure_builtin_items(self.items, now_ms=self.now_ms())
 
@@ -95,6 +95,50 @@ class ItemService:
             if item.carrierId == client_id:
                 return item
         return None
+
+    def carried_items_for_client(self, client_id: str) -> list[WorldItem]:
+        """Return all items currently carried by a client."""
+
+        return [item for item in self.items.values() if item.carrierId == client_id]
+
+    @staticmethod
+    def _clean_group_value(value: object) -> str:
+        """Return a normalized item relationship key."""
+
+        if not isinstance(value, str):
+            return ""
+        return value.strip()
+
+    @classmethod
+    def assembly_key_for_item(cls, item: WorldItem) -> str:
+        """Return the key that makes an item move with linked parts."""
+
+        explicit_key = cls._clean_group_value(item.params.get("assemblyId"))
+        if explicit_key:
+            return f"assembly:{item.locationId}:{explicit_key}"
+
+        if item.type == "radio_station":
+            media_group = cls._clean_group_value(item.params.get("linkedMediaGroup"))
+            if media_group:
+                return f"radio:{item.locationId}:{media_group}"
+
+        return ""
+
+    def linked_assembly_for_item(self, root: WorldItem) -> list[WorldItem]:
+        """Return same-location items that should relocate with the root item."""
+
+        assembly_key = self.assembly_key_for_item(root)
+        if not assembly_key:
+            return [root]
+
+        linked = [
+            item
+            for item in self.items.values()
+            if item.locationId == root.locationId
+            and self.assembly_key_for_item(item) == assembly_key
+        ]
+        linked.sort(key=lambda item: (item.id != root.id, item.id))
+        return linked or [root]
 
     def items_on_square(self, x: int, y: int) -> list[WorldItem]:
         """Return non-carried items occupying a specific world coordinate."""
@@ -120,6 +164,23 @@ class ItemService:
                 item.updatedBy = "system"
                 item.updatedByName = "system"
                 changed.append(item)
+        return changed
+
+    def recover_stale_carried_items(
+        self, active_client_ids: set[str] | None = None
+    ) -> list[WorldItem]:
+        """Clear carrier ids that do not belong to currently connected clients."""
+
+        active = active_client_ids or set()
+        changed: list[WorldItem] = []
+        for item in self.items.values():
+            if item.carrierId is None or item.carrierId in active:
+                continue
+            item.carrierId = None
+            item.updatedAt = self.now_ms()
+            item.updatedBy = "system"
+            item.updatedByName = "system"
+            changed.append(item)
         return changed
 
     def load_state(self) -> None:

@@ -6,6 +6,7 @@ type KeyboardControllerDeps = {
   dom: {
     settingsModal: HTMLDivElement;
     canvas: HTMLCanvasElement;
+    focusGridButton: HTMLButtonElement;
   };
   state: {
     running: boolean;
@@ -27,6 +28,7 @@ type KeyboardControllerDeps = {
   updateStatus: (message: string) => void;
   setReplaceTextOnNextType: (value: boolean) => void;
   onUserActivity: () => void;
+  isDesktopClient: boolean;
 };
 
 /**
@@ -127,6 +129,24 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
       shiftKey: event.shiftKey,
     };
 
+    // In the browser, the activated world behaves like an application and
+    // owns every key Chrome delivers. F6 and Shift+Escape are explicit exits
+    // back to normal page navigation. Losing browser/tab focus naturally
+    // stops delivery without changing the user's chosen interaction state.
+    if (
+      !deps.isDesktopClient &&
+      areWorldControlsActive() &&
+      ((code === 'F6' && !event.shiftKey) || (code === 'Escape' && event.shiftKey))
+    ) {
+      deactivateWorldControls();
+      deps.state.keysPressed = {};
+      deps.dom.focusGridButton.focus({ preventScroll: true });
+      deps.updateStatus('Left Chat Grid world controls. Page navigation active.');
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+
     if (!deps.dom.settingsModal.classList.contains('hidden') && code === 'Escape') {
       deps.closeSettings();
       return;
@@ -144,20 +164,13 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     // the world.
     if (!areWorldControlsActive()) return;
     // Tab and Shift+Tab are world commands: they cycle focused items in both
-    // directions. F6 is the explicit browser escape back to page controls.
-    if (code === 'F6') {
-      deactivateWorldControls();
-      deps.state.keysPressed = {};
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      return;
-    }
+    // directions. F6 and Shift+Escape are handled above as browser-only exits.
     if (event.altKey) return;
     const allowedModifiedNormalShortcut = deps.state.mode === 'normal' && (code === 'KeyG' || code === 'KeyM');
     if (hasShortcutModifier && !deps.isTextEditingMode(deps.state.mode) && !allowedModifiedNormalShortcut) return;
     // The activated world is an application surface. Keep its keys from also
     // reaching page navigation, link handlers, or other document listeners.
-    // F6 is deliberately handled above so it can leave the world normally.
+    // F6 and Shift+Escape are deliberately handled above so they can leave the world.
     event.stopImmediatePropagation();
     if (deps.hasBlockedArrowTeleport(code)) {
       event.preventDefault();

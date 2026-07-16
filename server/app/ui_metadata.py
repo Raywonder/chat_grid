@@ -40,6 +40,42 @@ ADMIN_MENU_ACTION_DEFINITIONS: tuple[AdminMenuActionDefinition, ...] = (
         "permission": "server.manage_settings",
     },
     {
+        "id": "blindsoftware_admin_sync",
+        "label": "BlindSoftware admin sync",
+        "tooltip": "Refresh BlindSoftware-related Chat Grid admin integrations, including public billboards.",
+        "permission": "server.manage_settings",
+    },
+    {
+        "id": "owned_content",
+        "label": "Owned content",
+        "tooltip": "List content you own and where it sits on the grid.",
+        "permission": "item.edit.own",
+    },
+    {
+        "id": "my_notifications",
+        "label": "My notifications",
+        "tooltip": "Read notifications for your logged-in account.",
+        "permission": "chat.send",
+    },
+    {
+        "id": "mark_my_notifications_read",
+        "label": "Mark my notifications read",
+        "tooltip": "Mark your visible notifications as read.",
+        "permission": "chat.send",
+    },
+    {
+        "id": "admin_notifications",
+        "label": "Admin notifications",
+        "tooltip": "Read the admin-wide notification log.",
+        "permission": "notifications.read.any",
+    },
+    {
+        "id": "mark_all_notifications_read",
+        "label": "Mark all notifications read",
+        "tooltip": "Mark admin-visible notifications as read for your account.",
+        "permission": "notifications.read.any",
+    },
+    {
         "id": "manage_roles",
         "label": "Role management",
         "tooltip": "Manage roles and their permission sets.",
@@ -103,7 +139,7 @@ MAIN_MODE_SERVER_COMMAND_DEFINITIONS: tuple[MainModeServerCommandDefinition, ...
     {
         "id": "pickupDropItem",
         "label": "Pick up or drop item",
-        "tooltip": "Pick up an item or drop your carried item.",
+        "tooltip": "Pick up an item, place a carried small item on the focused open surface, or drop it on the floor.",
     },
     {
         "id": "openItemManagement",
