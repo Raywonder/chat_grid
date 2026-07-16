@@ -15,6 +15,7 @@ type KeyboardControllerDeps = {
   };
   isTextEditingMode: (mode: GameMode) => boolean;
   closeSettings: () => void;
+  closeInteractiveItem: () => boolean;
   hasBlockedArrowTeleport: (code: string) => boolean;
   handleModeInput: (input: ModeInput) => void;
   canOpenCommandPaletteInMode: (mode: GameMode) => boolean;
@@ -24,6 +25,7 @@ type KeyboardControllerDeps = {
   pasteIntoActiveTextInput: (text: string) => boolean;
   updateStatus: (message: string) => void;
   setReplaceTextOnNextType: (value: boolean) => void;
+  onUserActivity: () => void;
 };
 
 /**
@@ -31,6 +33,31 @@ type KeyboardControllerDeps = {
  */
 export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
   let internalClipboardText = '';
+  const nativeArrowReleaseTimers = new Map<string, number>();
+
+  const nativeWindow = window as Window & {
+    chatGridNativeKey?: (code: string) => boolean;
+  };
+  nativeWindow.chatGridNativeKey = (code: string): boolean => {
+    if (!deps.state.running || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(code)) {
+      return false;
+    }
+    if (deps.hasBlockedArrowTeleport(code)) return false;
+    deps.onUserActivity();
+    deps.dom.canvas.focus({ preventScroll: true });
+    deps.state.keysPressed[code] = true;
+    deps.handleModeInput({ code, key: code, ctrlKey: false, shiftKey: false });
+    const previousTimer = nativeArrowReleaseTimers.get(code);
+    if (previousTimer !== undefined) window.clearTimeout(previousTimer);
+    nativeArrowReleaseTimers.set(
+      code,
+      window.setTimeout(() => {
+        deps.state.keysPressed[code] = false;
+        nativeArrowReleaseTimers.delete(code);
+      }, 250),
+    );
+    return true;
+  };
 
   function isTypingKey(code: string): boolean {
     return code.startsWith('Key') || code === 'Space';
@@ -88,6 +115,7 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
   }
 
   document.addEventListener('keydown', (event) => {
+    deps.onUserActivity();
     const code = normalizeInputCode(event);
     if (!code) return;
     const hasShortcutModifier = event.ctrlKey || event.metaKey;
@@ -102,18 +130,33 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
       deps.closeSettings();
       return;
     }
+    if (code === 'Escape' && deps.closeInteractiveItem()) {
+      event.preventDefault();
+      return;
+    }
 
     if (!deps.state.running) return;
+    // Match the older, reliable browser interaction contract: the world only
+    // consumes keys after the user explicitly focuses its application canvas.
+    // Globally stealing ordinary keys fought NVDA browse/focus mode and could
+    // move focus away from controls before the screen reader handed input to
+    // the world.
     if (document.activeElement !== deps.dom.canvas) return;
     if (event.altKey) return;
-    if (hasShortcutModifier && !deps.isTextEditingMode(deps.state.mode)) return;
+    const allowedModifiedNormalShortcut = deps.state.mode === 'normal' && (code === 'KeyG' || code === 'KeyM');
+    if (hasShortcutModifier && !deps.isTextEditingMode(deps.state.mode) && !allowedModifiedNormalShortcut) return;
     if (deps.hasBlockedArrowTeleport(code)) {
       event.preventDefault();
       return;
     }
 
     const isNativePasteShortcut = hasShortcutModifier && deps.isTextEditingMode(deps.state.mode) && code === 'KeyV';
-    if ((deps.state.mode !== 'normal' || !code.startsWith('Arrow')) && !isNativePasteShortcut) {
+    // Once world controls own focus, movement keys must never fall through to
+    // browser scrolling or screen-reader virtual navigation.  NVDA and other
+    // readers reliably hand the arrows to a focused role=application target,
+    // but allowing the browser default here could immediately pull the user
+    // back out of that interaction model.
+    if (!isNativePasteShortcut) {
       event.preventDefault();
     }
 
