@@ -151,6 +151,10 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     if (event.altKey) return;
     const allowedModifiedNormalShortcut = deps.state.mode === 'normal' && (code === 'KeyG' || code === 'KeyM');
     if (hasShortcutModifier && !deps.isTextEditingMode(deps.state.mode) && !allowedModifiedNormalShortcut) return;
+    // The activated world is an application surface. Keep its keys from also
+    // reaching page navigation, link handlers, or other document listeners.
+    // Tab is deliberately handled above so it can leave the world normally.
+    event.stopImmediatePropagation();
     if (deps.hasBlockedArrowTeleport(code)) {
       event.preventDefault();
       return;
