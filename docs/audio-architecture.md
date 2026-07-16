@@ -38,13 +38,9 @@ Layer off prefers unsubscribe/cleanup instead of only muting:
 
 ## Location Ambience
 
-World locations advertise an `ambienceKey` and `ambienceName` from the server-owned location list. The browser maps those keys to low-volume looping sound files under `client/public/sounds/ambience/` and crossfades when the user enters another location. Each current location/room has its own loop file: Main City, Forest, Town Square, Arcade, Offices, Houses, and the Raywonder entry, living room, studio, kitchen, bedroom, and relaxation room. The Raywonder entry and primary rooms use layered 96-second beds so domestic room tone does not expose a short mechanical loop; the arcade and relaxation beds are also longer than the original map loops. The relaxation room uses an ocean-style loop and can also hold item/radio media from the relaxation library. When location data arrives, the client starts preloading the ambience loops for every known map/room profile. If an ambience file cannot be fetched or decoded, the browser falls back to the procedural bed for that same ambience key instead of going silent.
+World locations advertise an `ambienceKey` and `ambienceName` from the server-owned location list. The browser maps those keys to low-volume looping sound files under `client/public/sounds/ambience/` and crossfades when the user enters another location. Each current location/room has its own loop file: Main City, Forest, Town Square, Arcade, Offices, Houses, and the Raywonder entry, living room, studio, kitchen, bedroom, and relaxation room. The arcade loop is longer and slightly louder to keep the tonal bed steady across loop wraps. The relaxation room uses an ocean-style loop and can also hold item/radio media from the relaxation library. When location data arrives, the client starts preloading the ambience loops for every known map/room profile. If an ambience file cannot be fetched or decoded, the browser falls back to the procedural bed for that same ambience key instead of going silent.
 
 The public Town Square Café uses its own low-volume conversation and kitchen-clatter loop. It is a separate interior location so the café bed starts only after a visitor enters and never leaks across the whole Town Square. The World Cup TV corner is spatial world audio/metadata, while the normal café bed remains on the world ambience layer.
-
-## Human presence sounds
-
-Resting people may emit quiet, intermittent human-presence cues from their server-authoritative world position. Sitting can produce occasional light breathing; lying down can use slower breathing, a rare contented sigh, and one bedding-settle cue when posture changes. Mood selects between relaxed and sleepy breathing. These cues use real packaged audio assets, follow the world-audio layer toggle, respect the listener's spatial/mono output mode, and stay intentionally quieter and shorter-range than speech or media.
 
 Stream-capable widgets can override the built-in bed for their own location by setting `ambienceScope="location"` and an `emitSound` URL. The highest-priority enabled widget in the current location becomes the world ambience loop, useful for admin-added outdoor beds such as mountains, rivers, forests, or section-level room tone. Location ambience widgets are intentionally not also played as single-tile emitters; use `ambienceScope="tile"` for ordinary local emitters.
 
@@ -169,10 +165,6 @@ background ambience.
 
 Radio stream startup appends a cache-busting query token on runtime creation to avoid stale buffered playback after reconnect/layer re-enable.
 Forced reconnect syncs actively retry paused or errored shared radio elements, including HLS media-error recovery when available, so an already-subscribed nearby radio does not remain silent after transport reconnect.
-Brief signaling outages no longer tear down healthy world, radio, or item-media
-graphs. Browser visibility, focus, and page-show recovery resume the shared
-audio context and reconcile active streams; a final failed reconnect still
-performs normal cleanup.
 
 ## Remote HLS Playback
 

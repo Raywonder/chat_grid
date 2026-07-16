@@ -80,11 +80,7 @@ Core incoming message effects:
 
 - If websocket closes unexpectedly, client starts reconnect flow immediately.
 - While running, client also sends heartbeat `ping` every 10 seconds (fallback for silent half-open cases).
-- Reconnect begins after three missed heartbeat intervals while visible, or
-  nine while backgrounded, so ordinary browser throttling does not cause churn.
-- Short signaling reconnects preserve active world ambience, radio, and item
-  media graphs. Returning to a browser tab or app window resumes the audio
-  context and reconciles paused/stalled streams before rebuilding peer voice.
+- If one heartbeat `pong` is missed (10-second interval), client starts reconnect flow.
 - Reconnect flow waits 5 seconds and retries up to 3 times.
 - If reconnect lands on a different `welcome.serverInfo.instanceId`, client announces server restart.
 - Connect/reconnect status message is emitted from `welcome` and includes server version.
@@ -116,28 +112,6 @@ On disconnect:
 - `RadioStationRuntime`: shared stream sources + per-item output/effects/spatialization.
 - `ItemEmitRuntime`: per-item looping emit source + spatialization.
 - `AudioEngine`: shared audio context, samples, effects, voice graph.
-
-## Durable Companion Presence
-
-- `chat-grid-companion.service` starts with the signaling server and retries its
-  WebSocket connection until it receives an authenticated world `welcome`.
-- The companion restores its server-owned last location rather than forcing a
-  fixed home room. It may then move to any permitted location through the
-  command file.
-- Each connection, location, and position transition atomically updates
-  `server/runtime/companion.state.json`. A state is ready only when the systemd
-  service is active, the receipt says connected, a location is present, and the
-  receipt is fresh.
-- `scripts/chatgrid_presence.py ensure` is the session-start hook for proving a
-  live Grid presence. `status` reports without waiting, and `go LOCATION_ID`
-  requests a location change and waits for the matching world receipt.
-- After ten quiet seconds near furniture, the companion may automatically sit.
-  It reads the live furniture capacity and current users' `seatedItemId` values,
-  skips full seats, excludes beds/lie-only furniture from casual auto-sitting,
-  and waits at least a minute between attempts. Multi-person couches, benches,
-  sofas, and booths may be shared only while a place remains. The signaling
-  server performs the final authoritative capacity check to prevent races.
-
 ## Client update freshness
 
 The browser client loads `/version.js` as the shared release metadata source and also polls it while the page is open. The poll uses timestamped `no-store` requests so Chrome does not keep an old entrypoint after rapid deploys. The watcher checks both the live `CHGRID_CLIENT_REVISION` and the live HTML module asset URL; this catches stale tabs where an old hashed bundle sees a fresh `version.js` value and would otherwise think it is current. When either value differs from the running client, the client announces the update, reloads through a cache-busted URL, and the refreshed page automatically starts the normal connect flow.

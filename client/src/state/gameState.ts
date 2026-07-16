@@ -61,8 +61,7 @@ export type Player = {
   nickname: string;
   x: number;
   y: number;
-  posture: 'standing' | 'sitting' | 'lying' | 'floor';
-  mood: string;
+  posture: 'standing' | 'sitting' | 'lying';
   seatedItemId: string | null;
   seatedOffset: number;
   handHeldById: string | null;
@@ -76,8 +75,7 @@ export type PeerState = {
   locationId?: string;
   x: number;
   y: number;
-  posture?: 'standing' | 'sitting' | 'lying' | 'floor';
-  mood?: string;
+  posture?: 'standing' | 'sitting' | 'lying';
   seatedItemId?: string | null;
   seatedOffset?: number;
   handHeldById?: string | null;
@@ -150,7 +148,6 @@ export function createInitialState(): GameState {
       x: 20,
       y: 20,
       posture: 'standing',
-      mood: 'settled',
       seatedItemId: null,
       seatedOffset: 0,
       handHeldById: null,

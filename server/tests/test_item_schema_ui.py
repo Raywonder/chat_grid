@@ -89,8 +89,6 @@ def test_ui_definitions_are_complete_for_all_item_types() -> None:
     assert "carryable" in by_type["ecrypto_wallet"]["capabilities"]
     assert "enabled" not in by_type["ecrypto_wallet"]["editableProperties"]
     assert "real" in by_type["ecrypto_wallet"]["propertyMetadata"]["networkMode"]["options"]
-    furniture_kinds = by_type["furniture"]["propertyMetadata"]["furnitureKind"]["options"]
-    assert {"sofa", "booth", "stool", "loveseat"}.issubset(set(furniture_kinds))
 
 
 @pytest.mark.asyncio

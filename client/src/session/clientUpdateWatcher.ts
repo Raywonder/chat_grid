@@ -14,7 +14,6 @@ type ClientUpdateWatcherOptions = {
 };
 
 const VERSION_FETCH_TIMEOUT_MS = 5_000;
-const REQUIRED_STABLE_UPDATE_CHECKS = 2;
 
 function parseClientVersionMetadata(text: string): ClientVersionMetadata {
   const releaseMatch = text.match(/CHGRID_RELEASE_VERSION\s*=\s*"([^"]+)"/);
@@ -52,10 +51,7 @@ function normalizeEntrypointUrl(value: string | undefined): string {
   if (!value) return '';
   try {
     const url = new URL(value, window.location.href);
-    // Asset cache-busting query strings do not identify a different bundle.
-    // Comparing them caused cached browsers to mistake the same entrypoint for
-    // a new deployment and enter a reload loop.
-    return url.pathname;
+    return `${url.pathname}${url.search}`;
   } catch {
     return '';
   }
@@ -67,7 +63,7 @@ function parseIndexEntrypointUrl(text: string, indexUrl: string): string {
   if (!match?.[1]) return '';
   try {
     const url = new URL(match[1], new URL(indexUrl, window.location.href));
-    return url.pathname;
+    return `${url.pathname}${url.search}`;
   } catch {
     return '';
   }
@@ -96,36 +92,10 @@ async function fetchLiveEntrypointUrl(indexUrl: string): Promise<string> {
   }
 }
 
-async function entrypointIsReady(entrypointUrl: string): Promise<boolean> {
-  if (!entrypointUrl) return false;
-  const url = new URL(entrypointUrl, window.location.href);
-  url.searchParams.set('_', String(Date.now()));
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), VERSION_FETCH_TIMEOUT_MS);
-  try {
-    const response = await fetch(url.toString(), {
-      cache: 'no-store',
-      headers: {
-        'Cache-Control': 'no-cache',
-        Pragma: 'no-cache',
-      },
-      signal: controller.signal,
-    });
-    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-    return response.ok && (contentType.includes('javascript') || contentType.includes('text/plain'));
-  } catch {
-    return false;
-  } finally {
-    window.clearTimeout(timeoutId);
-  }
-}
-
 export function startClientUpdateWatcher(options: ClientUpdateWatcherOptions): () => void {
   let disposed = false;
   let checkInFlight = false;
   let updateHandled = false;
-  let pendingUpdateKey = '';
-  let pendingUpdateChecks = 0;
   const currentEntrypointUrl = normalizeEntrypointUrl(options.currentEntrypointUrl);
 
   const checkForUpdate = async (): Promise<void> => {
@@ -138,22 +108,7 @@ export function startClientUpdateWatcher(options: ClientUpdateWatcherOptions): (
       ]);
       const revisionChanged = !!metadata?.clientRevision && metadata.clientRevision !== options.currentRevision;
       const entrypointChanged = !!liveEntrypointUrl && liveEntrypointUrl !== currentEntrypointUrl;
-      if (!revisionChanged && !entrypointChanged) {
-        pendingUpdateKey = '';
-        pendingUpdateChecks = 0;
-        return;
-      }
-      // A deploy updates several files. Do not reload into the short interval
-      // where version.js/index.html advertise a bundle that is not readable yet.
-      if (!liveEntrypointUrl || !(await entrypointIsReady(liveEntrypointUrl))) return;
-      const updateKey = `${metadata?.clientRevision || ''}|${liveEntrypointUrl}`;
-      if (updateKey !== pendingUpdateKey) {
-        pendingUpdateKey = updateKey;
-        pendingUpdateChecks = 1;
-        return;
-      }
-      pendingUpdateChecks += 1;
-      if (pendingUpdateChecks < REQUIRED_STABLE_UPDATE_CHECKS) return;
+      if (!revisionChanged && !entrypointChanged) return;
       updateHandled = true;
       options.onUpdateAvailable({
         releaseVersion: metadata?.releaseVersion ?? '',

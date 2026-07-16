@@ -33,7 +33,7 @@ type MessageHandlerDeps = {
       nickname: string;
       x: number;
       y: number;
-      posture?: 'standing' | 'sitting' | 'lying' | 'floor';
+      posture?: 'standing' | 'sitting' | 'lying';
       seatedItemId?: string | null;
       seatedOffset?: number;
       handHeldById?: string | null;
@@ -48,7 +48,7 @@ type MessageHandlerDeps = {
         locationId?: string;
         x: number;
         y: number;
-        posture?: 'standing' | 'sitting' | 'lying' | 'floor';
+        posture?: 'standing' | 'sitting' | 'lying';
         seatedItemId?: string | null;
         seatedOffset?: number;
         handHeldById?: string | null;
@@ -195,7 +195,6 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.state.player.x = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.x));
         deps.state.player.y = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.y));
         deps.state.player.posture = message.player.posture ?? 'standing';
-        deps.state.player.mood = message.player.mood ?? 'settled';
         deps.state.player.seatedItemId = message.player.seatedItemId ?? null;
         deps.state.player.seatedOffset = message.player.seatedOffset ?? 0;
         deps.state.player.handHeldById = message.player.handHeldById ?? null;
@@ -208,10 +207,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         const dashboard = document.getElementById('gridDashboard');
         dashboard?.classList.remove('hidden');
         if (dashboard) dashboard.hidden = false;
-        // Do not drop users into application mode before they deliberately
-        // activate it. Put keyboard/screen-reader focus on the explicit entry
-        // button; Enter or Space then transfers focus to the world canvas.
-        deps.dom.focusGridButton.focus();
+        deps.dom.canvas.focus();
 
         deps.signalingSend({ type: 'update_position', x: deps.state.player.x, y: deps.state.player.y });
         deps.signalingSend({ type: 'update_nickname', nickname: deps.state.player.nickname });
@@ -345,17 +341,6 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           peer.nickname = deps.sanitizeName(message.nickname) || 'user...';
         }
         deps.peerManager.setPeerNickname(message.id, deps.sanitizeName(message.nickname) || 'user...');
-        break;
-      }
-
-      case 'update_mood': {
-        if (message.id === deps.state.player.id) {
-          deps.state.player.mood = message.mood;
-          deps.updateStatus(`Your mood is now ${message.mood}.`);
-        } else {
-          const peer = deps.state.peers.get(message.id);
-          if (peer) peer.mood = message.mood;
-        }
         break;
       }
 

@@ -25,11 +25,6 @@ class UpdatePositionPacket(BasePacket):
     y: int
 
 
-class PostureMovePacket(BasePacket):
-    type: Literal["posture_move"]
-    action: Literal["shift_left", "shift_right", "stand", "return_to_bed"]
-
-
 class ChangeLocationPacket(BasePacket):
     type: Literal["change_location"]
     locationId: str = Field(min_length=1, max_length=64)
@@ -44,11 +39,6 @@ class TeleportCompletePacket(BasePacket):
 class UpdateNicknamePacket(BasePacket):
     type: Literal["update_nickname"]
     nickname: str = Field(min_length=1, max_length=32)
-
-
-class UpdateMoodPacket(BasePacket):
-    type: Literal["update_mood"]
-    mood: str = Field(min_length=1, max_length=24)
 
 
 class ChatMessagePacket(BasePacket):
@@ -322,11 +312,9 @@ class ItemUpdatePacket(BasePacket):
 ClientPacket = (
     SignalPacket
     | UpdatePositionPacket
-    | PostureMovePacket
     | ChangeLocationPacket
     | TeleportCompletePacket
     | UpdateNicknamePacket
-    | UpdateMoodPacket
     | ChatMessagePacket
     | DirectMessagePacket
     | UserActionPacket
@@ -375,8 +363,7 @@ class RemoteUser(BaseModel):
     locationId: str = "city"
     x: int
     y: int
-    posture: Literal["standing", "sitting", "lying", "floor"] = "standing"
-    mood: str = "settled"
+    posture: Literal["standing", "sitting", "lying"] = "standing"
     seatedItemId: str | None = None
     seatedOffset: float = 0.0
     handHeldById: str | None = None
@@ -447,16 +434,10 @@ class BroadcastPositionPacket(BasePacket):
     locationId: str | None = None
     x: int
     y: int
-    posture: Literal["standing", "sitting", "lying", "floor"] = "standing"
+    posture: Literal["standing", "sitting", "lying"] = "standing"
     seatedItemId: str | None = None
     seatedOffset: float = 0.0
     handHeldById: str | None = None
-
-
-class BroadcastMoodPacket(BasePacket):
-    type: Literal["update_mood"]
-    id: str
-    mood: str
 
 
 class LocationChangedPacket(BasePacket):

@@ -15,8 +15,6 @@ type UiDom = {
   canvas: HTMLCanvasElement;
 };
 
-import { activateWorldControls } from '../input/worldControlFocus';
-
 /**
  * Dependency contract for binding DOM event handlers.
  */
@@ -43,17 +41,6 @@ type UiBindingsDeps = {
  * Attaches UI listeners (connect/settings/device changes) and focus traps.
  */
 export function setupUiHandlers(deps: UiBindingsDeps): void {
-  const focusWorldControls = (): void => {
-    // Preserve the older working browser contract: entering the world moves
-    // real DOM/accessibility focus to the application canvas. The activation
-    // flag is a capture-level fallback when Chrome or assistive technology
-    // retargets individual key events after focus changes.
-    activateWorldControls();
-    deps.dom.canvas.focus({ preventScroll: true });
-    deps.updateStatus(`${deps.getGridName()} world controls active. All available keys now go to the world. Arrow keys move. Tab and Shift Tab cycle items. Press F6 or Shift Escape to return to page navigation.`);
-    deps.sfxUiBlip();
-  };
-
   deps.dom.connectButton.addEventListener('click', () => {
     void deps.connect();
   });
@@ -62,7 +49,11 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
     deps.disconnect();
   });
 
-  deps.dom.focusGridButton.addEventListener('click', focusWorldControls);
+  deps.dom.focusGridButton.addEventListener('click', () => {
+    deps.dom.canvas.focus();
+    deps.updateStatus(`${deps.getGridName()} focused.`);
+    deps.sfxUiBlip();
+  });
 
   deps.dom.settingsButton.addEventListener('click', () => {
     deps.openSettings();

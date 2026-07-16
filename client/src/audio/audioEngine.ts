@@ -32,6 +32,7 @@ type SoundSpec = {
 
 type OutputMode = 'stereo' | 'mono';
 const ONE_SHOT_ATTACK_SECONDS = 0.02;
+const ONE_SHOT_START_BUFFER_SECONDS = 0.035;
 const PORTAL_ONE_SHOT_START_BUFFER_SECONDS = 0.02;
 const PORTAL_ONE_SHOT_GAIN_CAP = 0.72;
 const LOOP_SAMPLE_ATTACK_SECONDS = 0.08;
@@ -110,15 +111,6 @@ export class AudioEngine {
   private readonly sampleLoaders = new Map<string, Promise<AudioBuffer>>();
   private readonly activeSpatialSamples = new Set<ActiveSpatialSampleRuntime>();
   private locationAmbience: LocationAmbienceRuntime | null = null;
-  /**
-   * Monotonically increasing request generation for location ambience.
-   *
-   * Ambience is decoded asynchronously.  A room change can therefore happen
-   * while the previous room's asset is still loading.  Without a generation
-   * guard, the old request could install itself after the new room had already
-   * been selected, leaving two room beds playing at once.
-   */
-  private locationAmbienceGeneration = 0;
 
   private outboundSource: MediaStreamAudioSourceNode | null = null;
   private outboundInputGain: GainNode | null = null;
@@ -327,7 +319,6 @@ export class AudioEngine {
     if (this.locationAmbience?.key === profile.key) return;
 
     this.stopLocationAmbience();
-    const generation = this.locationAmbienceGeneration;
 
     if (profile.loopUrl) {
       const masterGain = audioCtx.createGain();
@@ -341,7 +332,7 @@ export class AudioEngine {
 
       try {
         const buffer = await this.getSampleBuffer(profile.loopUrl);
-        if (generation !== this.locationAmbienceGeneration) {
+        if (this.locationAmbience?.key === profile.key) {
           masterGain.disconnect();
           return;
         }
@@ -364,10 +355,6 @@ export class AudioEngine {
         }
       }
     }
-
-    // A failed asset must not make an obsolete room's synthesized fallback
-    // audible after the listener has already moved elsewhere.
-    if (generation !== this.locationAmbienceGeneration) return;
 
     const masterGain = audioCtx.createGain();
     masterGain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
@@ -422,7 +409,6 @@ export class AudioEngine {
   }
 
   stopLocationAmbience(): void {
-    this.locationAmbienceGeneration += 1;
     if (!this.audioCtx || !this.locationAmbience) {
       this.locationAmbience = null;
       return;
@@ -721,10 +707,7 @@ export class AudioEngine {
       const safePlaybackRate = this.normalizePlaybackRate(playbackRate);
       source.playbackRate.setValueAtTime(safePlaybackRate, audioCtx.currentTime);
       const isPortalSample = isPortalTravelSample(url);
-      // Ordinary spatial cues should begin on the current audio clock.  A
-      // future start paired with a future gain target made non-portal cues
-      // unreliable in browsers even though direct UI cues still worked.
-      const startAt = audioCtx.currentTime + (isPortalSample ? PORTAL_ONE_SHOT_START_BUFFER_SECONDS : 0);
+      const startAt = audioCtx.currentTime + (isPortalSample ? PORTAL_ONE_SHOT_START_BUFFER_SECONDS : ONE_SHOT_START_BUFFER_SECONDS);
       const effectiveGain = isPortalSample ? Math.min(gain, PORTAL_ONE_SHOT_GAIN_CAP) : gain;
       const gainNode = audioCtx.createGain();
       gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
@@ -879,7 +862,7 @@ export class AudioEngine {
       const source = audioCtx.createBufferSource();
       source.buffer = buffer;
       const isPortalSample = isPortalTravelSample(url);
-      const startAt = audioCtx.currentTime + (isPortalSample ? PORTAL_ONE_SHOT_START_BUFFER_SECONDS : 0);
+      const startAt = audioCtx.currentTime + (isPortalSample ? PORTAL_ONE_SHOT_START_BUFFER_SECONDS : ONE_SHOT_START_BUFFER_SECONDS);
       const effectiveGain = isPortalSample ? Math.min(gain, PORTAL_ONE_SHOT_GAIN_CAP) : gain;
       const gainNode = audioCtx.createGain();
       gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
@@ -1501,14 +1484,7 @@ export class AudioEngine {
       const targetTime = Math.max(this.audioCtx.currentTime, startAt ?? this.audioCtx.currentTime);
       sample.gainNode.gain.cancelScheduledValues(this.audioCtx.currentTime);
       sample.gainNode.gain.setValueAtTime(0, this.audioCtx.currentTime);
-      // For regular cues target the gain from now; only portal cues have a
-      // deliberate start buffer.  This keeps the buffer source and gain
-      // envelope on the same timeline across Chrome/WebKit implementations.
-      sample.gainNode.gain.setTargetAtTime(
-        gainValue,
-        targetTime > this.audioCtx.currentTime ? targetTime : this.audioCtx.currentTime,
-        ONE_SHOT_ATTACK_SECONDS,
-      );
+      sample.gainNode.gain.setTargetAtTime(gainValue, targetTime, ONE_SHOT_ATTACK_SECONDS);
       if (sample.pannerNode) {
         const panValue = mix?.pan ?? 0;
         const resolvedPan = this.outputMode === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));

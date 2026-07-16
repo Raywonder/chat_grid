@@ -103,7 +103,6 @@ from .models import (
     ClientPacket,
     DirectMessageBroadcastPacket,
     DirectMessagePacket,
-    BroadcastMoodPacket,
     ForwardSignalPacket,
     ItemActionResultPacket,
     ItemAddPacket,
@@ -137,9 +136,7 @@ from .models import (
     SocialActionPacket,
     TeleportCompletePacket,
     UpdateNicknamePacket,
-    UpdateMoodPacket,
     UpdatePositionPacket,
-    PostureMovePacket,
     UserActionPacket,
     UserActionResultPacket,
     UserLeftPacket,
@@ -6022,7 +6019,6 @@ class SignalingServer:
                 x=other.x,
                 y=other.y,
                 posture=other.posture if other.seated_item_id else "standing",
-                mood=other.mood,
                 seatedItemId=other.seated_item_id,
                 seatedOffset=other.seated_offset,
                 handHeldById=other.hand_held_by_id,
@@ -6043,7 +6039,6 @@ class SignalingServer:
                 x=client.x,
                 y=client.y,
                 posture=client.posture if client.seated_item_id else "standing",
-                mood=client.mood,
                 seatedItemId=client.seated_item_id,
                 seatedOffset=client.seated_offset,
                 handHeldById=client.hand_held_by_id,
@@ -6479,40 +6474,6 @@ class SignalingServer:
         command_line = message[1:]
         command_token, separator, remainder = command_line.partition(" ")
         command = command_token.casefold()
-        if command == "mood":
-            mood = remainder.strip().casefold()
-            allowed_moods = {
-                "settled", "cozy", "playful", "focused", "dreamy",
-                "resting", "sleepy", "tired", "happy", "quiet",
-            }
-            if mood not in allowed_moods:
-                await self._send(
-                    client.websocket,
-                    BroadcastChatMessagePacket(
-                        type="chat_message",
-                        message=(
-                            "Usage: /mood settled, cozy, playful, focused, dreamy, "
-                            "resting, sleepy, tired, happy, or quiet."
-                        ),
-                        system=True,
-                    ),
-                )
-                return True
-            client.mood = mood
-            packet = BroadcastMoodPacket(type="update_mood", id=client.id, mood=mood)
-            await self._send(client.websocket, packet)
-            await self._broadcast_location(
-                client.location_id, packet, exclude=client.websocket
-            )
-            await self._broadcast_location(
-                client.location_id,
-                BroadcastChatMessagePacket(
-                    type="chat_message",
-                    message=f"{client.nickname} seems {mood}.",
-                    system=True,
-                ),
-            )
-            return True
         if command == "me":
             if not separator or remainder == "":
                 await self._send(
@@ -7350,7 +7311,7 @@ class SignalingServer:
             or item.type
         ).strip().lower()
         posture = str(item.params.get("postureMode", "")).strip().lower()
-        return posture in {"sit", "lie", "sit_lie"} or kind in {"chair", "couch", "sofa", "bench", "booth", "stool", "loveseat", "bed"}
+        return posture in {"sit", "lie", "sit_lie"} or kind in {"chair", "couch", "sofa", "bench", "stool", "loveseat", "bed"}
 
     @staticmethod
     def _seating_capacity(item: WorldItem) -> int:
@@ -7369,7 +7330,7 @@ class SignalingServer:
         ).strip().lower()
         if kind == "bed":
             return 2
-        if kind in {"couch", "sofa", "booth"}:
+        if kind in {"couch", "sofa"}:
             return 4
         if kind in {"bench", "loveseat"}:
             return 3
@@ -7397,108 +7358,6 @@ class SignalingServer:
         if not exclude_self:
             await self._send(client.websocket, packet)
         await self._broadcast_location(client.location_id, packet, exclude=client.websocket)
-
-    async def _handle_posture_move(
-        self, client: ClientConnection, packet: PostureMovePacket
-    ) -> None:
-        """Move within furniture or recover from the floor without changing tiles."""
-
-        if client.posture == "floor":
-            if packet.action == "return_to_bed" and client.floor_bed_id:
-                bed = self.items.get(client.floor_bed_id)
-                if bed is not None and bed.locationId == client.location_id:
-                    await self._sit_client_on_furniture(client, bed, posture="lying")
-                    return
-            if packet.action == "stand":
-                client.posture = "standing"
-                client.floor_bed_id = None
-                client.seated_offset = 0.0
-                await self._sync_client_position(client)
-                await self._send(
-                    client.websocket,
-                    BroadcastChatMessagePacket(
-                        type="chat_message",
-                        message="You stand up from the floor.",
-                        system=True,
-                    ),
-                )
-                return
-            await self._send(client.websocket, self._position_packet_for(client))
-            return
-
-        if not client.seated_item_id:
-            await self._send(client.websocket, self._position_packet_for(client))
-            return
-        item = self.items.get(client.seated_item_id)
-        if item is None:
-            await self._send(client.websocket, self._position_packet_for(client))
-            return
-        if packet.action == "stand":
-            await self._stand_client_from_furniture(client, item)
-            return
-        if packet.action not in {"shift_left", "shift_right"}:
-            await self._send(client.websocket, self._position_packet_for(client))
-            return
-
-        direction = -1.0 if packet.action == "shift_left" else 1.0
-        next_offset = client.seated_offset + direction * 0.25
-        bed_like = self._posture_mode_for_item(item) == "sit_lie"
-        limit = 1.25 if bed_like else 0.75
-        if abs(next_offset) > limit:
-            if bed_like and random.random() < 0.35:
-                client.floor_bed_id = item.id
-                client.seated_item_id = None
-                client.seated_offset = limit * direction
-                client.posture = "floor"
-                await self._sync_client_position(client)
-                await self._send(
-                    client.websocket,
-                    BroadcastChatMessagePacket(
-                        type="chat_message",
-                        message=(
-                            "You roll over the edge and land on the floor. "
-                            "Press Up to stand, Down to return to the bed, or stay where you are."
-                        ),
-                        system=True,
-                    ),
-                )
-                await self._broadcast_location(
-                    client.location_id,
-                    BroadcastChatMessagePacket(
-                        type="chat_message",
-                        message=f"{client.nickname} rolls out of {item.title} onto the floor.",
-                        system=True,
-                    ),
-                    exclude=client.websocket,
-                )
-                return
-            await self._send(
-                client.websocket,
-                BroadcastChatMessagePacket(
-                    type="chat_message",
-                    message="You catch yourself at the edge.",
-                    system=True,
-                ),
-            )
-            return
-
-        occupied_offsets = [
-            other.seated_offset
-            for other in self._seated_clients_for_item(item.id)
-            if other.id != client.id
-        ]
-        if any(abs(next_offset - occupied) < 0.3 for occupied in occupied_offsets):
-            await self._send(
-                client.websocket,
-                BroadcastChatMessagePacket(
-                    type="chat_message",
-                    message="Someone beside you is already using that part of the bed.",
-                    system=True,
-                ),
-            )
-            return
-        client.seated_offset = next_offset
-        await self._sync_client_position(client)
 
     async def _clear_hand_connections(self, client: ClientConnection) -> None:
         """Release hand state involving one client and sync affected live users."""
@@ -7576,7 +7435,6 @@ class SignalingServer:
         client.y = item.y
         client.posture = "lying" if posture == "lying" else "sitting"
         client.seated_item_id = item.id
-        client.floor_bed_id = None
         client.seated_offset = self._seat_offset_for_index(len(occupants), capacity)
         now_ms = self.item_service.now_ms()
         client.last_position_update_ms = now_ms
@@ -8217,10 +8075,6 @@ class SignalingServer:
             await self._change_client_location(client, packet.locationId)
             return
 
-        if isinstance(packet, PostureMovePacket):
-            await self._handle_posture_move(client, packet)
-            return
-
         if isinstance(packet, UpdatePositionPacket):
             if not self._is_in_bounds(packet.x, packet.y):
                 PACKET_LOGGER.warning(
@@ -8361,26 +8215,6 @@ class SignalingServer:
                     x=client.x,
                     y=client.y,
                 ),
-                exclude=client.websocket,
-            )
-            return
-
-        if isinstance(packet, UpdateMoodPacket):
-            mood = packet.mood.strip().casefold()
-            allowed_moods = {
-                "settled", "cozy", "playful", "focused", "dreamy",
-                "resting", "sleepy", "tired", "happy", "quiet",
-            }
-            if mood not in allowed_moods:
-                mood = "settled"
-            client.mood = mood
-            await self._send(
-                client.websocket,
-                BroadcastMoodPacket(type="update_mood", id=client.id, mood=mood),
-            )
-            await self._broadcast_location(
-                client.location_id,
-                BroadcastMoodPacket(type="update_mood", id=client.id, mood=mood),
                 exclude=client.websocket,
             )
             return

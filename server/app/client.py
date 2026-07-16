@@ -27,10 +27,8 @@ class ClientConnection:
     x: int = 20
     y: int = 20
     posture: str = "standing"
-    mood: str = "settled"
     seated_item_id: str | None = None
     seated_offset: float = 0.0
-    floor_bed_id: str | None = None
     hand_held_by_id: str | None = None
     last_position_update_ms: int = 0
     movement_window_index: int = -1

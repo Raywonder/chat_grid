@@ -41,9 +41,6 @@ This is behavior-focused documentation for item types and their defaults.
 - Using a bed cycles through the natural posture states: sit on the bed, lie
   down on the bed, then get up. A bed represented as a `house_object` with
   `objectKind=bed` follows the same posture rule as a dedicated `furniture` bed.
-- Bed occupants can shift left and right within server-authoritative bounds.
-  Occupants cannot overlap. Moving past an edge can either be caught or result
-  in a floor posture; a fallen user may stay there, stand, or return to the bed.
 - Room/location dimensions do not need to be uniform across every map. Size each
   room to fit its real contents, required walking paths, and enough grid space to
   move around those contents. Avoid oversized empty rooms unless more items or
@@ -466,15 +463,13 @@ This is behavior-focused documentation for item types and their defaults.
 - `surfaceSlots` is the capacity limit for placed objects and portable radios. A surface with `0` slots has no item space; the default table has `4`, and shelf items can use multiple slots to model top-to-bottom shelf space.
 
 ### Validation
-- `furnitureKind`: `table | chair | couch | sofa | bench | booth | stool | loveseat | desk | shelf | counter | cabinet | bed | nightstand | dresser | plant_stand | rug`
+- `furnitureKind`: `table | chair | couch | desk | shelf | counter | cabinet | bed | nightstand | plant_stand | rug`
 - `material`: `wood | glass | metal | stone | fabric | plastic | mixed`
 - `condition`: `new | good | worn | damaged | broken`
 - `supportsObjects`: boolean/on-off style value.
 - `surfaceSlots`: integer `0..20`.
 - `postureMode`: `none | sit | lie | sit_lie | lean`.
 - `seatingCapacity`: integer `0..6`.
-- Multi-person couches, sofas, benches, booths, and loveseats remain available
-  until their server-authoritative seating capacity is full.
 - `style` and `surfaceNote` are bounded text fields.
 
 ## `house_object`

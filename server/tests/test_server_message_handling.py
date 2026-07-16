@@ -17,7 +17,6 @@ from app.auth_service import AuthError
 from app.models import (
     BasePacket,
     BroadcastChatMessagePacket,
-    BroadcastMoodPacket,
     BroadcastPositionPacket,
     BroadcastTeleportCompletePacket,
     AdminActionResultPacket,
@@ -1317,72 +1316,6 @@ async def test_house_object_bed_cycles_sit_lie_stand(
     assert client.seated_item_id is None
     assert client.posture == "standing"
     assert third_position.posture == "standing"
-
-
-@pytest.mark.asyncio
-async def test_bed_shift_fall_and_user_selected_recovery(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    ws = _fake_ws()
-    client = _activate_client(
-        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5),
-        permissions={"item.use"},
-    )
-    server.clients[ws] = client
-    bed = server.item_service.default_item(client, "house_object")
-    bed.id = "bed-shift"
-    bed.title = "Bedroom bed"
-    bed.x = 6
-    bed.y = 5
-    bed.params["objectKind"] = "bed"
-    bed.params["placement"] = "furniture"
-    server.item_service.add_item(bed)
-    sent: list[object] = []
-
-    async def fake_send(websocket: ServerConnection, packet: object) -> None:
-        sent.append(packet)
-
-    async def fake_broadcast_location(
-        location_id: str, packet: object, exclude: ServerConnection | None = None
-    ) -> None:
-        return None
-
-    monkeypatch.setattr(server, "_send", fake_send)
-    monkeypatch.setattr(server, "_broadcast_location", fake_broadcast_location)
-    await server._sit_client_on_furniture(client, bed, posture="lying")
-
-    starting_offset = client.seated_offset
-    await server._handle_message(
-        client, json.dumps({"type": "posture_move", "action": "shift_right"})
-    )
-    assert client.seated_offset == pytest.approx(starting_offset + 0.25)
-    assert client.posture == "lying"
-
-    client.seated_offset = 1.25
-    monkeypatch.setattr("app.server.random.random", lambda: 0.0)
-    await server._handle_message(
-        client, json.dumps({"type": "posture_move", "action": "shift_right"})
-    )
-    assert client.posture == "floor"
-    assert client.seated_item_id is None
-    assert client.floor_bed_id == bed.id
-
-    await server._handle_message(
-        client, json.dumps({"type": "posture_move", "action": "return_to_bed"})
-    )
-    assert client.posture == "lying"
-    assert client.seated_item_id == bed.id
-    assert client.floor_bed_id is None
-
-    client.seated_item_id = None
-    client.floor_bed_id = bed.id
-    client.posture = "floor"
-    await server._handle_message(
-        client, json.dumps({"type": "posture_move", "action": "stand"})
-    )
-    assert client.posture == "standing"
-    assert client.floor_bed_id is None
 
 
 @pytest.mark.asyncio
@@ -4712,46 +4645,6 @@ async def test_chat_me_command_broadcasts_action(
     assert packet.action is True
     assert packet.system is False
     assert packet.message == "Tester waves hello"
-
-
-@pytest.mark.asyncio
-async def test_chat_mood_command_updates_and_broadcasts_mood(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    server = SignalingServer("127.0.0.1", 8765, None, None)
-    ws = _fake_ws()
-    client = _activate_client(
-        ClientConnection(websocket=ws, id="u1", nickname="Tester"),
-        permissions={"chat.send"},
-    )
-    server.clients[ws] = client
-
-    broadcast_payloads: list[object] = []
-    send_payloads: list[object] = []
-
-    async def fake_broadcast_location(
-        location_id: str, packet: object, exclude: ServerConnection | None = None
-    ) -> None:
-        broadcast_payloads.append(packet)
-
-    async def fake_send(websocket: ServerConnection, packet: object) -> None:
-        send_payloads.append(packet)
-
-    monkeypatch.setattr(server, "_broadcast_location", fake_broadcast_location)
-    monkeypatch.setattr(server, "_send", fake_send)
-
-    await server._handle_message(
-        client, json.dumps({"type": "chat_message", "message": "/mood sleepy"})
-    )
-
-    assert client.mood == "sleepy"
-    assert _last_packet_of_type(send_payloads, BroadcastMoodPacket).mood == "sleepy"
-    assert _last_packet_of_type(broadcast_payloads, BroadcastMoodPacket).mood == "sleepy"
-    system_packet = _last_packet_of_type(
-        broadcast_payloads, BroadcastChatMessagePacket
-    )
-    assert system_packet.system is True
-    assert system_packet.message == "Tester seems sleepy."
 
 
 @pytest.mark.asyncio

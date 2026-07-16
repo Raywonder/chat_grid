@@ -2003,7 +2003,7 @@ BUILTIN_WORLD_ITEMS: tuple[SeedItem, ...] = (
             style="quiet bedroom",
             supports_objects=True,
             surface_slots=2,
-            seating_capacity=2,
+            seating_capacity=1,
             posture_mode="lie",
             surface_note="A quiet bed area for the private room.",
         ),

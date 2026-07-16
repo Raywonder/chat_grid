@@ -6,7 +6,7 @@ const actionMetadataSchema = z.object({
   tooltip: z.string().optional(),
 });
 
-const postureSchema = z.enum(['standing', 'sitting', 'lying', 'floor']);
+const postureSchema = z.enum(['standing', 'sitting', 'lying']);
 
 export const itemSchema = z.object({
   id: z.string(),
@@ -39,7 +39,6 @@ export const welcomeMessageSchema = z.object({
     x: z.number().int(),
     y: z.number().int(),
     posture: postureSchema.optional(),
-    mood: z.string().optional(),
     seatedItemId: z.string().nullable().optional(),
     seatedOffset: z.number().optional(),
     handHeldById: z.string().nullable().optional(),
@@ -53,7 +52,6 @@ export const welcomeMessageSchema = z.object({
       x: z.number().int(),
       y: z.number().int(),
       posture: postureSchema.optional(),
-      mood: z.string().optional(),
       seatedItemId: z.string().nullable().optional(),
       seatedOffset: z.number().optional(),
       handHeldById: z.string().nullable().optional(),
@@ -252,12 +250,6 @@ export const updateNicknameSchema = z.object({
   type: z.literal('update_nickname'),
   id: z.string(),
   nickname: z.string().min(1).max(32),
-});
-
-export const updateMoodSchema = z.object({
-  type: z.literal('update_mood'),
-  id: z.string(),
-  mood: z.string(),
 });
 
 export const userLeftSchema = z.object({
@@ -526,7 +518,6 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   locationChangedSchema,
   teleportCompleteSchema,
   updateNicknameSchema,
-  updateMoodSchema,
   userLeftSchema,
   chatMessageSchema,
   directMessageSchema,
@@ -578,11 +569,9 @@ export type OutgoingMessage =
   | { type: 'admin_user_delete'; username: string }
   | { type: 'signal'; targetId: string; sdp?: RTCSessionDescriptionInit; ice?: RTCIceCandidateInit }
   | { type: 'update_position'; x: number; y: number }
-  | { type: 'posture_move'; action: 'shift_left' | 'shift_right' | 'stand' | 'return_to_bed' }
   | { type: 'change_location'; locationId: string }
   | { type: 'teleport_complete'; x: number; y: number }
   | { type: 'update_nickname'; nickname: string }
-  | { type: 'update_mood'; mood: string }
   | { type: 'chat_message'; message: string }
   | { type: 'direct_message'; targetId: string; message: string }
   | {

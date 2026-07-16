@@ -6,8 +6,6 @@ This document is the authoritative keymap for the client.
 
 When you join the grid, the page also shows a compact dashboard with your current coordinates, connected user count, item count, and anything sharing your current square.
 
-In a web browser, activate `Enter Chat Grid world controls` to give the world every keyboard event the active browser tab can deliver. `Tab` and `Shift+Tab` remain in-world item controls. Press `Shift+Escape` to leave the world and return to ordinary page navigation. Switching browser tabs or moving focus away from Chrome naturally stops world input.
-
 ### Movement
 - `Arrow Keys`: Move. The status reader narrates movement in an interactive-fiction style, such as the direction walked, current room/location, coordinates, surface, nearby people, and items on the square.
 - `G`, `Ctrl+G`, or `Shift+G`: Open the location list; use arrows or first letters, then `Enter` to travel
@@ -26,7 +24,6 @@ In a web browser, activate `Enter Chat Grid world controls` to give the world ev
 - `/`: Start chat
 - In chat, commands are supported when `/` is the first character:
   - `/me <action>`: Send action text without `name:`
-  - `/mood <mood>`: Share your mood. Available moods are settled, cozy, playful, focused, dreamy, resting, sleepy, tired, happy, and quiet. Resting, dreamy, sleepy, and tired moods let automatic posture use nearby beds and lie down; cozy and playful moods may use an available bed as a seat.
   - `/hug [user]`, `/hi [user]`, `/self`, and `/user [name]`: Send social reactions, including self-reactions
   - `/tap <user>`, `/chat <user>`, `/highfive [user]`, `/fistbump [user]`, `/cheer [user]`, `/clap [user]`, `/laugh [user]`, `/smile [user]`, `/wink [user]`, `/nod [user]`, `/bow [user]`, `/dance [user]`, `/comfort [user]`, `/pat <user>`, `/poke <user>`, `/boop <user>`, `/salute [user]`, `/thumbsup [user]`, `/heart [user]`, `/sparkle [user]`, `/celebrate [user]`, `/tease <user>`, `/smack <user>`, `/whisper <user>`, and `/listen [user]`: Send more human social reactions. Physical-comedy actions such as smack are playful in-world reactions, not moderation or harm.
   - `/walkto <user>`: Move to a nearby square beside a user
@@ -46,13 +43,11 @@ In a web browser, activate `Enter Chat Grid world controls` to give the world ev
 - `Shift+O`: Inspect all item properties
 - `D`: Pick up/drop item; carried house objects and portable radios auto-place on an open focused surface when one is available
 - `Shift+D`: Pick up/drop the selected item with attached, surfaced, or linked parts, such as a room with its door and included objects
-- Furniture remains under manual control during normal use. After at least two hours without keyboard, pointer, or touch activity, the client may conservatively settle the user into nearby available furniture. It considers mood and local time, prefers beds only when resting or at night, never teleports the user, and leaves final capacity enforcement to the server. Any activity resets the idle decision.
 - `J`: Physical item interaction, including placing carried small items on furniture and shoving placed house objects off surfaces
 - `Tab` / `Shift+Tab`: Cycle focus through carried items first, then usable items on your square. The server currently allows up to 4 carried items at once.
 - `Z`: Item management menu (delete/transfer when permitted)
 - `Space` in item management menu: Read tooltip/help for the selected action
 - `Enter` or `Space`: Use the focused/current item, doorway, portal, chair, couch, or bed; beds support sitting, then lying down, then getting up when used again. When several items are available, selection starts on the item you last focused or used
-- While sitting or lying on furniture, `ArrowLeft` / `ArrowRight` shifts your position without leaving it. Shared beds enforce space for each occupant. Pushing beyond a bed edge may make you catch yourself or fall to the floor. From the floor, `ArrowUp` stands and `ArrowDown` returns to the bed; doing nothing leaves you resting on the floor.
 - `Shift+J`: Jump through or activate the focused/current portal-style item
 
 ### Audio

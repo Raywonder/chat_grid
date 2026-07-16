@@ -201,31 +201,6 @@ export class ItemEmitRuntime {
     this.emitStartFailureCount.clear();
   }
 
-  /** Restart nearby world/item emitters that a browser background stall paused. */
-  recoverActivePlayback(): void {
-    for (const [itemId, output] of this.outputs.entries()) {
-      const scheduledStartMs = this.nextEmitStartAtMs.get(itemId) ?? 0;
-      if (scheduledStartMs > Date.now()) {
-        continue;
-      }
-      if (output.element.error) {
-        this.cleanup(itemId, { preserveSchedule: true });
-        continue;
-      }
-      this.tryStartEmitPlayback(itemId, output.element);
-    }
-  }
-
-  /** Return whether an enabled nearby object/location emitter needs local repair. */
-  hasPlaybackIssue(): boolean {
-    const now = Date.now();
-    for (const [itemId, output] of this.outputs.entries()) {
-      if (output.element.error) return true;
-      if (output.element.paused && (this.nextEmitStartAtMs.get(itemId) ?? 0) <= now) return true;
-    }
-    return false;
-  }
-
   async setLayerEnabled(
     enabled: boolean,
     items: Iterable<WorldItem>,

@@ -1,12 +1,10 @@
 import type { GameMode } from '../state/gameState';
 import type { ModeInput } from './commandTypes';
-import { areWorldControlsActive, deactivateWorldControls } from './worldControlFocus';
 
 type KeyboardControllerDeps = {
   dom: {
     settingsModal: HTMLDivElement;
     canvas: HTMLCanvasElement;
-    focusGridButton: HTMLButtonElement;
   };
   state: {
     running: boolean;
@@ -27,8 +25,6 @@ type KeyboardControllerDeps = {
   pasteIntoActiveTextInput: (text: string) => boolean;
   updateStatus: (message: string) => void;
   setReplaceTextOnNextType: (value: boolean) => void;
-  onUserActivity: () => void;
-  isDesktopClient: boolean;
 };
 
 /**
@@ -46,7 +42,6 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
       return false;
     }
     if (deps.hasBlockedArrowTeleport(code)) return false;
-    deps.onUserActivity();
     deps.dom.canvas.focus({ preventScroll: true });
     deps.state.keysPressed[code] = true;
     deps.handleModeInput({ code, key: code, ctrlKey: false, shiftKey: false });
@@ -117,8 +112,35 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     return codeFromKey(event.key, event.location) ?? event.code ?? '';
   }
 
-  const handleKeyDown = (event: KeyboardEvent): void => {
-    deps.onUserActivity();
+  function isEditableElement(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    if (target.isContentEditable) return true;
+    const tagName = target.tagName.toLowerCase();
+    if (tagName === 'textarea' || tagName === 'select') return true;
+    if (tagName !== 'input') return false;
+    const input = target as HTMLInputElement;
+    return !['button', 'checkbox', 'radio', 'range', 'submit', 'reset'].includes(input.type);
+  }
+
+  function shouldMoveFocusToCanvas(event: KeyboardEvent, code: string): boolean {
+    if (code === 'Tab') return false;
+    if (event.altKey || event.ctrlKey || event.metaKey) return false;
+    if (isEditableElement(event.target)) return false;
+    if (deps.isTextEditingMode(deps.state.mode)) return false;
+    if (deps.dom.settingsModal.contains(event.target as Node | null)) return false;
+    return (
+      code.startsWith('Arrow') ||
+      code === 'Enter' ||
+      code === 'Space' ||
+      code === 'Slash' ||
+      code === 'Backslash' ||
+      code === 'Escape' ||
+      /^Key[A-Z]$/.test(code) ||
+      /^Digit[0-9]$/.test(code)
+    );
+  }
+
+  document.addEventListener('keydown', (event) => {
     const code = normalizeInputCode(event);
     if (!code) return;
     const hasShortcutModifier = event.ctrlKey || event.metaKey;
@@ -128,24 +150,6 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
       ctrlKey: hasShortcutModifier,
       shiftKey: event.shiftKey,
     };
-
-    // In the browser, the activated world behaves like an application and
-    // owns every key Chrome delivers. F6 and Shift+Escape are explicit exits
-    // back to normal page navigation. Losing browser/tab focus naturally
-    // stops delivery without changing the user's chosen interaction state.
-    if (
-      !deps.isDesktopClient &&
-      areWorldControlsActive() &&
-      ((code === 'F6' && !event.shiftKey) || (code === 'Escape' && event.shiftKey))
-    ) {
-      deactivateWorldControls();
-      deps.state.keysPressed = {};
-      deps.dom.focusGridButton.focus({ preventScroll: true });
-      deps.updateStatus('Left Chat Grid world controls. Page navigation active.');
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      return;
-    }
 
     if (!deps.dom.settingsModal.classList.contains('hidden') && code === 'Escape') {
       deps.closeSettings();
@@ -157,33 +161,20 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     }
 
     if (!deps.state.running) return;
-    // Match the older, reliable browser interaction contract: the world only
-    // consumes keys after the user explicitly focuses its application canvas.
-    // Globally stealing ordinary keys fought NVDA browse/focus mode and could
-    // move focus away from controls before the screen reader handed input to
-    // the world.
-    if (!areWorldControlsActive()) return;
-    // Tab and Shift+Tab are world commands: they cycle focused items in both
-    // directions. F6 and Shift+Escape are handled above as browser-only exits.
+    if (document.activeElement !== deps.dom.canvas) {
+      if (!shouldMoveFocusToCanvas(event, code)) return;
+      deps.dom.canvas.focus();
+    }
     if (event.altKey) return;
     const allowedModifiedNormalShortcut = deps.state.mode === 'normal' && (code === 'KeyG' || code === 'KeyM');
     if (hasShortcutModifier && !deps.isTextEditingMode(deps.state.mode) && !allowedModifiedNormalShortcut) return;
-    // The activated world is an application surface. Keep its keys from also
-    // reaching page navigation, link handlers, or other document listeners.
-    // F6 and Shift+Escape are deliberately handled above so they can leave the world.
-    event.stopImmediatePropagation();
     if (deps.hasBlockedArrowTeleport(code)) {
       event.preventDefault();
       return;
     }
 
     const isNativePasteShortcut = hasShortcutModifier && deps.isTextEditingMode(deps.state.mode) && code === 'KeyV';
-    // Once world controls own focus, movement keys must never fall through to
-    // browser scrolling or screen-reader virtual navigation.  NVDA and other
-    // readers reliably hand the arrows to a focused role=application target,
-    // but allowing the browser default here could immediately pull the user
-    // back out of that interaction model.
-    if (!isNativePasteShortcut) {
+    if ((deps.state.mode !== 'normal' || !code.startsWith('Arrow')) && !isNativePasteShortcut) {
       event.preventDefault();
     }
 
@@ -223,24 +214,10 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
 
     deps.handleModeInput(input);
     deps.state.keysPressed[code] = true;
-  };
+  });
 
-  // Capture world input before page links, browser widgets, or nested UI
-  // handlers can consume it. This remains gated by explicit world activation,
-  // so ordinary page navigation is untouched until the user enters the
-  // application canvas. Native shells keep using chatGridNativeKey.
-  window.addEventListener('keydown', handleKeyDown, true);
-
-  const handleKeyUp = (event: KeyboardEvent): void => {
+  document.addEventListener('keyup', (event) => {
     const code = normalizeInputCode(event);
-    // Chrome and assistive technology can perform focus/navigation work on
-    // keyup even when keydown was consumed. While the world is active, own
-    // the complete key cycle so a movement key cannot both move the player
-    // and advance a page link or virtual cursor.
-    if (areWorldControlsActive()) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }
     const keyUpMode = deps.getModeKeyUpTarget(deps.state.mode);
     if (code && keyUpMode) {
       deps.onModeKeyUp(keyUpMode, {
@@ -254,25 +231,10 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     if (event.code && event.code !== code) {
       deps.state.keysPressed[event.code] = false;
     }
-  };
-
-  window.addEventListener('keyup', handleKeyUp, true);
-
-  // Some browser/accessibility combinations still synthesize keypress after
-  // a cancelled keydown. Consume it while world controls are active so the
-  // page cannot perform a second, unrelated navigation action.
-  window.addEventListener(
-    'keypress',
-    (event) => {
-      if (!areWorldControlsActive()) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    },
-    true,
-  );
+  });
 
   document.addEventListener('paste', (event) => {
-    if (!areWorldControlsActive()) return;
+    if (document.activeElement !== deps.dom.canvas) return;
     if (!deps.state.running) return;
     const pasted = event.clipboardData?.getData('text') ?? internalClipboardText;
     if (!deps.pasteIntoActiveTextInput(pasted)) return;

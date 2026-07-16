@@ -35,7 +35,7 @@ def _validate_location_fit(item: WorldItem, params: dict) -> None:
         for token in ("outdoor", "patio", "porch", "garden", "picnic", "park")
     )
     outdoor_locations = {"city", "forest", "town", "houses"}
-    indoor_only = {"bed", "nightstand", "dresser", "desk", "couch", "sofa", "booth"}
+    indoor_only = {"bed", "nightstand", "dresser", "desk", "couch"}
     if location.id in outdoor_locations and furniture_kind in indoor_only and not outdoor_ok:
         raise ValueError(
             f"{furniture_kind} furniture belongs indoors here unless its style clearly says outdoor, patio, porch, garden, or picnic."

@@ -298,9 +298,7 @@ export function createAuthController(deps: AuthControllerDeps): {
     }
     applyAuthPermissions(message.role, message.permissions);
     deps.onServerAdminMenuActions(message.adminMenuActions);
-    // The persistent connection status is already an ARIA live region, so this
-    // is announced before the world view takes focus in browsers and shells.
-    deps.setConnectionStatus('Sign in successful. Joining Chat Grid...');
+    deps.setConnectionStatus('Authenticated. Joining world...');
   }
 
   function handleAuthPermissions(message: Extract<IncomingMessage, { type: 'auth_permissions' }>): void {

@@ -461,20 +461,11 @@ export class RadioStationRuntime {
         shared.element.paused ||
         shared.element.readyState <= STREAM_STALLED_READY_STATE
       ) {
-        this.fadeSharedOutputsForRecovery(shared.streamUrl);
         this.hardReloadSharedPlayback(shared);
       } else {
         this.tryStartSharedPlayback(shared);
       }
     }
-  }
-
-  /** Return whether an authoritative active radio/TV stream needs local repair. */
-  hasPlaybackIssue(): boolean {
-    for (const shared of this.sharedRadioSources.values()) {
-      if (shared.element.error || shared.element.paused) return true;
-    }
-    return false;
   }
 
   async setLayerEnabled(
@@ -917,19 +908,6 @@ export class RadioStationRuntime {
       // Ignore stale media reload failures; the next retry will create a new attempt.
     }
     this.applyResumeOffset(shared, resolveResumeOffsetSeconds(shared.streamUrl, shared.playStartedAt));
-  }
-
-  /** Silence every output using a recovering source so its restart fades in spatially. */
-  private fadeSharedOutputsForRecovery(streamUrl: string): void {
-    const audioCtx = this.audio.context;
-    if (!audioCtx) return;
-    const now = audioCtx.currentTime;
-    for (const output of this.itemRadioOutputs.values()) {
-      if (output.streamUrl !== streamUrl) continue;
-      output.gain.gain.cancelScheduledValues(now);
-      output.gain.gain.setValueAtTime(output.gain.gain.value, now);
-      output.gain.gain.linearRampToValueAtTime(0, now + 0.12);
-    }
   }
 
   private async ensureRuntime(item: WorldItem, effective: EffectiveRadioItem): Promise<void> {
