@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chat-grid-windows-native"
+version = "0.4.0"
+description = "Official accessible wxPython Windows client for Chat Grid"
+requires-python = ">=3.11"
+dependencies = [
+  "wxPython>=4.2.2,<4.3",
+  "requests>=2.32,<3",
+  "packaging>=24,<27",
+]
+
+[project.optional-dependencies]
+build = ["pyinstaller>=6.12,<7"]
+test = ["pytest>=8,<10"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

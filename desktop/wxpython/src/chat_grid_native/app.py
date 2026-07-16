@@ -1,0 +1,347 @@
+"""Accessible wxPython shell around the shared Chat Grid client."""
+
+from __future__ import annotations
+
+import logging
+import os
+from pathlib import Path
+import sys
+import threading
+
+import wx
+import wx.adv
+import wx.html2
+
+from . import __version__
+from .config import APP_ID, APP_NAME, Settings, SettingsStore, app_data_dir
+from .reconnect import ReconnectBackoff
+from .single_instance import SingleInstanceActivation
+from .startup import set_start_with_windows
+from .updater import UpdateService
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+class ChatGridTrayIcon(wx.adv.TaskBarIcon):
+    """System-tray access to the one running Chat Grid window."""
+
+    def __init__(self, frame: "MainFrame") -> None:
+        super().__init__()
+        self.frame = frame
+        bitmap = wx.ArtProvider.GetBitmap(wx.ART_INFORMATION, wx.ART_OTHER, (16, 16))
+        icon = wx.Icon()
+        icon.CopyFromBitmap(bitmap)
+        self.SetIcon(icon, "Chat Grid")
+        self.Bind(wx.adv.EVT_TASKBAR_LEFT_DOWN, lambda _event: frame.show_from_tray())
+        self.Bind(wx.adv.EVT_TASKBAR_LEFT_DCLICK, lambda _event: frame.show_from_tray())
+
+    def CreatePopupMenu(self) -> wx.Menu:
+        """Build the tray menu each time Windows requests it."""
+        menu = wx.Menu()
+        open_id = wx.NewIdRef()
+        reconnect_id = wx.NewIdRef()
+        quit_id = wx.NewIdRef()
+        menu.Append(open_id, "Open Chat Grid")
+        menu.Append(reconnect_id, "Reconnect Chat Grid")
+        menu.AppendSeparator()
+        menu.Append(quit_id, "Quit Chat Grid")
+        self.Bind(wx.EVT_MENU, lambda _event: self.frame.show_from_tray(), id=open_id)
+        self.Bind(wx.EVT_MENU, lambda _event: self.frame.reload_from_tray(), id=reconnect_id)
+        self.Bind(wx.EVT_MENU, lambda _event: self.frame.request_exit(), id=quit_id)
+        return menu
+
+
+class SettingsDialog(wx.Dialog):
+    """Accessible desktop behavior settings."""
+
+    def __init__(self, parent: wx.Window, settings: Settings) -> None:
+        super().__init__(parent, title="Chat Grid desktop settings")
+        self.settings = settings
+        panel = wx.Panel(self)
+        layout = wx.BoxSizer(wx.VERTICAL)
+
+        self.startup = wx.CheckBox(panel, label="Start Chat Grid when I sign in to Windows")
+        self.startup.SetValue(settings.start_with_windows)
+        layout.Add(self.startup, 0, wx.ALL, 8)
+        self.minimized = wx.CheckBox(panel, label="Start minimized when Windows starts")
+        self.minimized.SetValue(settings.start_minimized)
+        layout.Add(self.minimized, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+        self.connect = wx.CheckBox(panel, label="Connect automatically after sign-in")
+        self.connect.SetValue(settings.auto_connect)
+        layout.Add(self.connect, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+        self.updates = wx.CheckBox(panel, label="Check for and install verified updates automatically")
+        self.updates.SetValue(settings.auto_update)
+        layout.Add(self.updates, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+        buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
+        layout.Add(buttons, 0, wx.EXPAND | wx.ALL, 8)
+        panel.SetSizer(layout)
+        outer = wx.BoxSizer(wx.VERTICAL)
+        outer.Add(panel, 1, wx.EXPAND)
+        self.SetSizerAndFit(outer)
+        self.startup.SetFocus()
+
+    def apply(self) -> None:
+        """Copy control state into settings."""
+        self.settings.start_with_windows = self.startup.GetValue()
+        self.settings.start_minimized = self.minimized.GetValue()
+        self.settings.auto_connect = self.connect.GetValue()
+        self.settings.auto_update = self.updates.GetValue()
+
+
+class MainFrame(wx.Frame):
+    """Main native window and resilient WebView host."""
+
+    def __init__(self, settings_store: SettingsStore, autostart: bool = False) -> None:
+        super().__init__(None, title=APP_NAME, size=(1120, 820))
+        self.store = settings_store
+        self.settings = settings_store.load()
+        self.backoff = ReconnectBackoff(self.settings.reconnect_initial_seconds, self.settings.reconnect_max_seconds)
+        self.reconnect_timer = wx.Timer(self)
+        self.update_thread: threading.Thread | None = None
+        self.force_quit = False
+        self.panel: wx.Panel | None = None
+        self.layout: wx.BoxSizer | None = None
+
+        self.panel = wx.Panel(self)
+        self.layout = wx.BoxSizer(wx.VERTICAL)
+        self.status = wx.StaticText(self.panel, label="Starting Chat Grid.")
+        self.status.SetName("Chat Grid status")
+        self.layout.Add(self.status, 0, wx.EXPAND | wx.ALL, 6)
+        self.web = self._create_webview()
+        self.layout.Add(self.web, 1, wx.EXPAND)
+        self.panel.SetSizer(self.layout)
+
+        self._build_menu()
+        self.CreateStatusBar()
+        self.SetStatusText("Starting Chat Grid")
+        self.Bind(wx.EVT_TIMER, self._on_reconnect_timer, self.reconnect_timer)
+        self.Bind(wx.EVT_CLOSE, self._on_close)
+        self.Bind(wx.EVT_ICONIZE, self._on_iconize)
+        self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
+
+        self.web.LoadURL(self.settings.grid_url)
+        if autostart and self.settings.start_minimized:
+            self.Iconize(True)
+        else:
+            self.Show()
+        if self.settings.auto_update:
+            wx.CallLater(5000, self._check_updates_background)
+
+    def _build_menu(self) -> None:
+        """Create a conventional, fully keyboard-accessible native menu bar."""
+        menu_bar = wx.MenuBar()
+        file_menu = wx.Menu()
+        reconnect_id = wx.NewIdRef()
+        restart_world_id = wx.NewIdRef()
+        focus_world_id = wx.NewIdRef()
+        tray_id = wx.NewIdRef()
+        file_menu.Append(reconnect_id, "&Reconnect to world\tCtrl+R", "Reconnect without opening another client")
+        file_menu.Append(restart_world_id, "&Restart frozen world view\tCtrl+Shift+R", "Replace only the embedded world view")
+        file_menu.Append(focus_world_id, "&Focus world\tCtrl+L", "Move keyboard focus into the world")
+        file_menu.AppendSeparator()
+        file_menu.Append(wx.ID_PREFERENCES, "&Settings...\tCtrl+,")
+        file_menu.Append(tray_id, "&Minimize to system tray\tCtrl+M")
+        file_menu.AppendSeparator()
+        file_menu.Append(wx.ID_EXIT, "E&xit Chat Grid\tAlt+F4")
+        menu_bar.Append(file_menu, "&File")
+        help_menu = wx.Menu()
+        update_id = wx.NewIdRef()
+        help_menu.Append(update_id, "Check for &updates")
+        help_menu.Append(wx.ID_ABOUT, "&About Chat Grid")
+        menu_bar.Append(help_menu, "&Help")
+        self.SetMenuBar(menu_bar)
+        self.Bind(wx.EVT_MENU, lambda _event: self._reload(), id=reconnect_id)
+        self.Bind(wx.EVT_MENU, lambda _event: self._restart_webview(), id=restart_world_id)
+        self.Bind(wx.EVT_MENU, lambda _event: self.web.SetFocus(), id=focus_world_id)
+        self.Bind(wx.EVT_MENU, self._show_settings, id=wx.ID_PREFERENCES)
+        self.Bind(wx.EVT_MENU, lambda _event: self.Hide(), id=tray_id)
+        self.Bind(wx.EVT_MENU, lambda _event: self.request_exit(), id=wx.ID_EXIT)
+        self.Bind(wx.EVT_MENU, lambda _event: self._check_updates_background(interactive=True), id=update_id)
+        self.Bind(wx.EVT_MENU, self._show_about, id=wx.ID_ABOUT)
+
+    def _create_webview(self) -> wx.html2.WebView:
+        """Create and bind one replaceable Edge WebView world surface."""
+        assert self.panel is not None
+        web = wx.html2.WebView.New(self.panel, backend=wx.html2.WebViewBackendEdge)
+        web.SetName("Chat Grid world")
+        web.Bind(wx.html2.EVT_WEBVIEW_LOADED, self._on_loaded)
+        web.Bind(wx.html2.EVT_WEBVIEW_ERROR, self._on_error)
+        return web
+
+    def _restart_webview(self) -> None:
+        """Replace a stalled renderer while leaving the native app usable."""
+        assert self.layout is not None
+        old_web = self.web
+        self._announce("Restarting the world view. The native File menu remains available.")
+        self.layout.Detach(old_web)
+        old_web.Destroy()
+        self.web = self._create_webview()
+        self.layout.Add(self.web, 1, wx.EXPAND)
+        self.layout.Layout()
+        self.web.LoadURL(self.settings.grid_url)
+        self.web.SetFocus()
+
+    def _announce(self, text: str) -> None:
+        self.status.SetLabel(text)
+        self.SetStatusText(text)
+
+    def _on_loaded(self, _event: wx.html2.WebViewEvent) -> None:
+        self.reconnect_timer.Stop()
+        self.backoff.reset()
+        self._announce("Chat Grid loaded. Session and reconnect monitoring are active.")
+        if self.settings.auto_connect:
+            self.web.RunScript("setTimeout(() => document.getElementById('connectButton')?.click(), 500);")
+
+    def _on_error(self, event: wx.html2.WebViewEvent) -> None:
+        LOGGER.warning("WebView load error: %s", event.GetString())
+        self._schedule_reconnect()
+
+    def _schedule_reconnect(self) -> None:
+        delay = self.backoff.next_delay()
+        self._announce("Connection interrupted. Reconnecting quietly in the background.")
+        self.reconnect_timer.StartOnce(max(250, int(delay * 1000)))
+
+    def _on_reconnect_timer(self, _event: wx.TimerEvent) -> None:
+        self.web.LoadURL(self.settings.grid_url)
+
+    def _reload(self) -> None:
+        self.backoff.reset()
+        try:
+            self.web.Reload(wx.html2.WEBVIEW_RELOAD_NO_CACHE)
+        except Exception:
+            LOGGER.exception("WebView reload failed; replacing the renderer")
+            self._restart_webview()
+
+    def show_from_tray(self) -> None:
+        """Restore, raise, and focus the existing accessible window."""
+        if self.IsIconized():
+            self.Iconize(False)
+        self.Show(True)
+        self.Raise()
+        self.RequestUserAttention(wx.USER_ATTENTION_INFO)
+        self.web.SetFocus()
+
+    def reload_from_tray(self) -> None:
+        """Recover the existing WebView without launching another application."""
+        self.show_from_tray()
+        self._reload()
+
+    def request_exit(self) -> None:
+        """Explicitly quit instead of applying close-to-tray behavior."""
+        self.force_quit = True
+        self.Close()
+
+    def _on_iconize(self, event: wx.IconizeEvent) -> None:
+        if event.IsIconized():
+            wx.CallAfter(self.Hide)
+        event.Skip()
+
+    def _show_settings(self, _event: wx.CommandEvent) -> None:
+        with SettingsDialog(self, self.settings) as dialog:
+            if dialog.ShowModal() != wx.ID_OK:
+                return
+            dialog.apply()
+            self.store.save(self.settings)
+            set_start_with_windows(self.settings.start_with_windows)
+            self._announce("Desktop settings saved.")
+
+    def _check_updates_background(self, interactive: bool = False) -> None:
+        if self.update_thread and self.update_thread.is_alive():
+            return
+
+        def worker() -> None:
+            try:
+                service = UpdateService(self.settings.update_url, __version__, app_data_dir())
+                manifest = service.check()
+                if manifest is None:
+                    if interactive:
+                        wx.CallAfter(self._announce, "Chat Grid is up to date.")
+                    return
+                if not self.settings.auto_update and not interactive:
+                    wx.CallAfter(self._announce, f"Chat Grid {manifest.version} is available.")
+                    return
+                installer = service.download(manifest)
+                service.install_after_exit(installer, manifest)
+                wx.CallAfter(self._announce, f"Chat Grid {manifest.version} is verified and ready to install.")
+                wx.CallAfter(self.Close)
+            except Exception as error:
+                LOGGER.warning("Update check failed: %s", error)
+                if interactive:
+                    wx.CallAfter(self._announce, "Update check failed. The current app will keep running.")
+
+        self.update_thread = threading.Thread(target=worker, name="chat-grid-updater", daemon=True)
+        self.update_thread.start()
+
+    def _show_about(self, _event: wx.CommandEvent) -> None:
+        wx.MessageBox(
+            f"Chat Grid {__version__}\nOfficial accessible Windows client by Raywonder / TappedIn.",
+            "About Chat Grid", wx.OK | wx.ICON_INFORMATION, self,
+        )
+
+    def _on_char_hook(self, event: wx.KeyEvent) -> None:
+        if event.GetKeyCode() == wx.WXK_ESCAPE and self.IsIconized():
+            self.Iconize(False)
+            self.Raise()
+            return
+        event.Skip()
+
+    def _on_close(self, event: wx.CloseEvent) -> None:
+        if event.CanVeto() and not self.force_quit:
+            event.Veto()
+            self.Hide()
+            return
+        self.reconnect_timer.Stop()
+        event.Skip()
+
+
+class ChatGridApp(wx.App):
+    """Application entry point."""
+
+    def __init__(self, activation: SingleInstanceActivation) -> None:
+        self.activation = activation
+        super().__init__(False)
+
+    def OnInit(self) -> bool:
+        os.environ.setdefault("WEBVIEW2_USER_DATA_FOLDER", str(app_data_dir() / "WebView2"))
+        # GPU/driver failures can freeze an older Windows machine. Software
+        # rendering costs a little performance but keeps the desktop responsive.
+        os.environ.setdefault(
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+            "--disable-gpu --disable-gpu-compositing --disable-background-networking",
+        )
+        autostart = "--autostart" in sys.argv
+        self.frame = MainFrame(SettingsStore(), autostart=autostart)
+        self.tray = ChatGridTrayIcon(self.frame)
+        self.activation_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._on_activation_timer, self.activation_timer)
+        self.activation_timer.Start(250)
+        self.SetTopWindow(self.frame)
+        return True
+
+    def _on_activation_timer(self, _event: wx.TimerEvent) -> None:
+        if self.activation.activation_requested():
+            self.frame.show_from_tray()
+
+    def OnExit(self) -> int:
+        self.activation_timer.Stop()
+        self.tray.RemoveIcon()
+        self.tray.Destroy()
+        self.activation.close()
+        return super().OnExit()
+
+
+def main() -> int:
+    """Start the GUI."""
+    root = app_data_dir()
+    root.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        filename=root / "chat-grid.log", level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+    activation = SingleInstanceActivation()
+    if not activation.is_owner:
+        return 0
+    app = ChatGridApp(activation)
+    app.MainLoop()
+    return 0
