@@ -44,3 +44,4 @@ def secondary_use_item(
     if description:
         parts.append(description)
     return ItemUseResult(self_message=" ".join(parts), others_message="")
+

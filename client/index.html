@@ -21,11 +21,11 @@
         <p id="authSessionText" class="auth-hint"></p>
       </section>
       <div class="controls" id="button-container">
-        <button id="connectButton" type="button">Connect</button>
-        <button id="logoutButton" class="hidden" type="button">Log out</button>
-        <button id="settingsButton" type="button">Audio setup</button>
-        <button id="disconnectButton" class="hidden" type="button">Disconnect</button>
-        <button id="focusGridButton" class="hidden" type="button" aria-controls="gameCanvas">Chat Grid</button>
+        <button id="connectButton">Connect</button>
+        <button id="logoutButton" class="hidden">Log out</button>
+        <button id="settingsButton">Audio setup</button>
+        <button id="disconnectButton" class="hidden">Disconnect</button>
+        <button id="focusGridButton" class="hidden" aria-controls="gameCanvas">Chat Grid</button>
         <button id="midiButton" class="hidden" type="button" hidden>Enable MIDI</button>
       </div>
       <div id="deviceSummary">
@@ -35,7 +35,7 @@
       <section id="joinGuide" class="join-guide" aria-labelledby="joinGuideTitle">
         <div class="join-guide-header">
           <h2 id="joinGuideTitle">Join the grid</h2>
-          <button id="readGuideButton" type="button" aria-controls="status" aria-pressed="false">Read guide</button>
+          <button id="readGuideButton" type="button" aria-controls="status">Read guide</button>
         </div>
         <div class="join-guide-grid">
           <p><b>Move:</b> arrow keys walk square by square with positional footsteps.</p>
@@ -73,15 +73,13 @@
       <section
         id="interactiveItemPanel"
         class="interactive-item-panel hidden"
-        hidden
-        role="region"
         aria-labelledby="interactiveItemTitle"
       >
         <div class="interactive-item-toolbar">
           <h2 id="interactiveItemTitle">Interactive item</h2>
           <div class="interactive-item-actions">
             <a id="interactiveItemOpenLink" href="#" target="_blank" rel="noopener noreferrer">Open</a>
-            <button id="interactiveItemCloseButton" type="button">Close interactive item</button>
+            <button id="interactiveItemCloseButton" type="button">Close</button>
           </div>
         </div>
         <iframe
@@ -133,7 +131,7 @@
             <button id="rotateNtfyTopicButton" class="hidden" type="button">Replace private ntfy topic</button>
             <p class="auth-hint">Keep the subscription link private. The same Chat Grid identity settings can be used by web, Windows, macOS, and iOS clients.</p>
           </fieldset>
-          <button id="closeSettingsButton" type="button">Close settings</button>
+          <button id="closeSettingsButton">Close</button>
         </div>
       </div>
     </main>
