@@ -15,6 +15,8 @@ type UiDom = {
   canvas: HTMLCanvasElement;
 };
 
+import { activateWorldControls } from '../input/worldControlFocus';
+
 /**
  * Dependency contract for binding DOM event handlers.
  */
@@ -42,19 +44,13 @@ type UiBindingsDeps = {
  */
 export function setupUiHandlers(deps: UiBindingsDeps): void {
   const focusWorldControls = (): void => {
-    // Keyboard activation of a button may restore focus to that button after
-    // its click handler finishes. Reassert the application target on the next
-    // frame so Chrome, VoiceOver, and NVDA all end on the same element.
-    deps.dom.canvas.focus();
-    window.requestAnimationFrame(() => {
-      deps.dom.canvas.focus();
-      if (document.activeElement === deps.dom.canvas) {
-        deps.updateStatus(`${deps.getGridName()} world controls active. Arrow keys move. Press Tab to leave the world controls.`);
-        deps.sfxUiBlip();
-      } else {
-        deps.updateStatus(`Could not activate ${deps.getGridName()} world controls. Press Enter on the world controls button to try again.`);
-      }
-    });
+    // Do not depend on Chrome successfully moving DOM/accessibility focus to a
+    // canvas. The explicit activation state owns world keys until Tab exits,
+    // while focusing the canvas remains a best-effort screen-reader hint.
+    activateWorldControls();
+    deps.dom.canvas.focus({ preventScroll: true });
+    deps.updateStatus(`${deps.getGridName()} world controls active. Arrow keys move. Press Tab to leave the world controls.`);
+    deps.sfxUiBlip();
   };
 
   deps.dom.connectButton.addEventListener('click', () => {

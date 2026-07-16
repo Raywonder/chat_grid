@@ -1,5 +1,6 @@
 import type { GameMode } from '../state/gameState';
 import type { ModeInput } from './commandTypes';
+import { areWorldControlsActive, deactivateWorldControls } from './worldControlFocus';
 
 type KeyboardControllerDeps = {
   dom: {
@@ -141,7 +142,12 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     // Globally stealing ordinary keys fought NVDA browse/focus mode and could
     // move focus away from controls before the screen reader handed input to
     // the world.
-    if (document.activeElement !== deps.dom.canvas) return;
+    if (!areWorldControlsActive()) return;
+    if (code === 'Tab') {
+      deactivateWorldControls();
+      deps.state.keysPressed = {};
+      return;
+    }
     if (event.altKey) return;
     const allowedModifiedNormalShortcut = deps.state.mode === 'normal' && (code === 'KeyG' || code === 'KeyM');
     if (hasShortcutModifier && !deps.isTextEditingMode(deps.state.mode) && !allowedModifiedNormalShortcut) return;
@@ -216,7 +222,7 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
   });
 
   document.addEventListener('paste', (event) => {
-    if (document.activeElement !== deps.dom.canvas) return;
+    if (!areWorldControlsActive()) return;
     if (!deps.state.running) return;
     const pasted = event.clipboardData?.getData('text') ?? internalClipboardText;
     if (!deps.pasteIntoActiveTextInput(pasted)) return;
