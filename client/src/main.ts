@@ -1742,6 +1742,7 @@ function openInteractiveItem(item: WorldItem): boolean {
   dom.interactiveItemOpenLink.href = url;
   dom.interactiveItemFrame.src = interactiveItemFrameUrl(item, url);
   dom.interactiveItemPanel.classList.remove('hidden');
+  dom.interactiveItemPanel.hidden = false;
   dom.interactiveItemPanel.scrollIntoView({ block: 'start', behavior: 'smooth' });
   dom.interactiveItemFrame.addEventListener(
     'load',
@@ -1823,6 +1824,7 @@ function closeInteractiveItem(): boolean {
   if (dom.interactiveItemPanel.classList.contains('hidden')) return false;
   dom.interactiveItemFrame.removeAttribute('src');
   dom.interactiveItemPanel.classList.add('hidden');
+  dom.interactiveItemPanel.hidden = true;
   updateStatus('Interactive item closed.');
   audio.sfxUiCancel();
   dom.canvas.focus();
@@ -4613,6 +4615,7 @@ async function populateAudioDevices(): Promise<void> {
 function openSettings(): void {
   lastFocusedElement = document.activeElement;
   dom.settingsModal.classList.remove('hidden');
+  dom.settingsModal.hidden = false;
   syncAnnouncementSettingsControls();
   void populateAudioDevices();
   if (state.running) signaling.send({ type: 'ntfy_preferences_get' });
