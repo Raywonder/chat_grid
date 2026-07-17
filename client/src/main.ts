@@ -880,7 +880,10 @@ function profileForLocationAmbience(location: WorldLocationOption | undefined): 
       key: `item:${locationAmbienceItem.id}:${emitSound}:${volume}`,
       name: ambienceName,
       loopUrl: resolveIncomingSoundUrl(emitSound),
-      loopGain: 0.12 * (volume / 100),
+      // Location ambience should remain a real room bed, not disappear when a
+      // nearby radio is turned down.  The listener's master volume still
+      // controls the final level; this is only the per-layer mix.
+      loopGain: 0.42 * (volume / 100),
       loopStartSeconds: Number(locationAmbienceItem.params.ambienceLoopStartSeconds ?? 0),
       loopEndSeconds: Number(locationAmbienceItem.params.ambienceLoopEndSeconds ?? 0) || undefined,
     };
