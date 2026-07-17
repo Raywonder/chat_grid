@@ -28,6 +28,7 @@ type AudioDevicePreferences = {
 const DEFAULT_AUDIO_ANNOUNCEMENT_SETTINGS: AudioAnnouncementSettings = {
   mode: 'full',
   itemBeacons: true,
+  movementDirections: false,
 };
 
 function normalizeAnnouncementMode(raw: unknown): AnnouncementMode {
@@ -82,6 +83,7 @@ export class SettingsStore {
       return {
         mode: normalizeAnnouncementMode(parsed.mode),
         itemBeacons: parsed.itemBeacons !== false,
+        movementDirections: parsed.movementDirections === true,
       };
     } catch {
       return { ...DEFAULT_AUDIO_ANNOUNCEMENT_SETTINGS };
@@ -94,6 +96,7 @@ export class SettingsStore {
       JSON.stringify({
         mode: normalizeAnnouncementMode(settings.mode),
         itemBeacons: settings.itemBeacons !== false,
+        movementDirections: settings.movementDirections === true,
       }),
     );
   }

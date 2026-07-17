@@ -11,6 +11,7 @@ type UiDom = {
   audioOutputSelect: HTMLSelectElement;
   announcementModeSelect: HTMLSelectElement;
   itemBeaconsToggle: HTMLInputElement;
+  movementDirectionsToggle: HTMLInputElement;
   settingsModal: HTMLDivElement;
   canvas: HTMLCanvasElement;
 };
@@ -35,6 +36,7 @@ type UiBindingsDeps = {
   setOutputDevice: (id: string) => Promise<void>;
   setAnnouncementMode: (mode: string) => void;
   setItemBeacons: (enabled: boolean) => void;
+  setMovementDirections: (enabled: boolean) => void;
 };
 
 /**
@@ -86,6 +88,11 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
   deps.dom.itemBeaconsToggle.addEventListener('change', (event) => {
     const target = event.target as HTMLInputElement;
     deps.setItemBeacons(target.checked);
+  });
+
+  deps.dom.movementDirectionsToggle.addEventListener('change', (event) => {
+    const target = event.target as HTMLInputElement;
+    deps.setMovementDirections(target.checked);
   });
 
   deps.dom.settingsModal.addEventListener('keydown', (event) => {

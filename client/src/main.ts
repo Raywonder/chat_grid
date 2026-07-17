@@ -140,6 +140,7 @@ type Dom = {
   audioOutputSelect: HTMLSelectElement;
   announcementModeSelect: HTMLSelectElement;
   itemBeaconsToggle: HTMLInputElement;
+  movementDirectionsToggle: HTMLInputElement;
   ntfyNotificationsToggle: HTMLInputElement;
   ntfyNotificationsStatus: HTMLParagraphElement;
   ntfySubscriptionLink: HTMLAnchorElement;
@@ -187,6 +188,7 @@ const dom: Dom = {
   audioOutputSelect: requiredById('audioOutputSelect'),
   announcementModeSelect: requiredById('announcementModeSelect'),
   itemBeaconsToggle: requiredById('itemBeaconsToggle'),
+  movementDirectionsToggle: requiredById('movementDirectionsToggle'),
   ntfyNotificationsToggle: requiredById('ntfyNotificationsToggle'),
   ntfyNotificationsStatus: requiredById('ntfyNotificationsStatus'),
   ntfySubscriptionLink: requiredById('ntfySubscriptionLink'),
@@ -1270,6 +1272,7 @@ function persistAudioAnnouncementSettings(): void {
 function syncAnnouncementSettingsControls(): void {
   dom.announcementModeSelect.value = audioAnnouncementSettings.mode;
   dom.itemBeaconsToggle.checked = audioAnnouncementSettings.itemBeacons;
+  dom.movementDirectionsToggle.checked = audioAnnouncementSettings.movementDirections;
 }
 
 /** Returns whether a bool-like item param is explicitly enabled. */
@@ -1329,6 +1332,18 @@ function setItemBeacons(enabled: boolean): void {
   persistAudioAnnouncementSettings();
   syncAnnouncementSettingsControls();
   updateStatus(enabled ? 'Optional item beacons on.' : 'Optional item beacons off. Required item alerts remain on.');
+  audio.sfxUiConfirm();
+}
+
+/** Enables or disables verbose spoken movement directions for this device. */
+function setMovementDirections(enabled: boolean): void {
+  audioAnnouncementSettings = {
+    ...audioAnnouncementSettings,
+    movementDirections: enabled,
+  };
+  persistAudioAnnouncementSettings();
+  syncAnnouncementSettingsControls();
+  updateStatus(`Movement direction announcements ${enabled ? 'on' : 'off'}.`);
   audio.sfxUiConfirm();
 }
 
@@ -2474,6 +2489,13 @@ function narrateLocalMovement(x: number, y: number, dx: number, dy: number, forc
   const now = performance.now();
   const direction = movementDirectionPhrase(dx, dy);
   const hasTileContext = getPeerNamesAtPosition(x, y).length > 0 || getItemsAtPosition(x, y).length > 0;
+  if (!audioAnnouncementSettings.movementDirections) {
+    if (hasTileContext) {
+      const context = describeTileArrival(x, y).split('. ').slice(1).join('. ').trim();
+      if (context) updateStatus(context);
+    }
+    return;
+  }
   if (!force && !hasTileContext && direction === lastMovementNarrationDirection && now - lastMovementNarrationAt < MOVEMENT_NARRATION_INTERVAL_MS) {
     return;
   }
@@ -2492,6 +2514,7 @@ function narrateLocationArrival(locationName: string, x: number, y: number): voi
 
 /** Narrates another user's nearby movement in room-style language. */
 function narrateRemoteMovement(nickname: string, fromX: number, fromY: number, toX: number, toY: number): void {
+  if (!audioAnnouncementSettings.movementDirections) return;
   const movementDelta = Math.hypot(toX - fromX, toY - fromY);
   if (movementDelta <= 0 || movementDelta > 1.5) return;
   const distanceToPlayer = Math.hypot(toX - state.player.x, toY - state.player.y);
@@ -4771,6 +4794,7 @@ setupDomUiHandlers({
   setOutputDevice: (id) => peerManager.setOutputDevice(id),
   setAnnouncementMode,
   setItemBeacons,
+  setMovementDirections,
 });
 authController.setupUiHandlers({
   connect,
