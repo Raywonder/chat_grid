@@ -82,12 +82,24 @@ def _notification_text(item: WorldItem) -> str:
     return "Notification hooks staged for " + " and ".join(targets) + "."
 
 
-def evaluate_access(item: WorldItem, nickname: str, credential: str = "") -> str:
+def evaluate_access(
+    item: WorldItem, nickname: str, credential: str = "", username: str = ""
+) -> str:
     """Return the safe access result for one resident identity or keypad entry."""
 
     code_kind = _matched_code_kind(item, credential)
     if code_kind:
         return code_kind
+    usernames = str(item.params.get("authorizedUsernames") or "").split(",")
+    allowed_usernames = {
+        value.strip().casefold() for value in usernames if value.strip()
+    }
+    if allowed_usernames:
+        return (
+            "authorized"
+            if username.strip().casefold() in allowed_usernames
+            else "denied"
+        )
     if _is_authorized(item, nickname):
         return "authorized"
     return "denied"
@@ -98,6 +110,7 @@ def use_with_credential(
     nickname: str,
     credential: str,
     _clock_formatter: Callable[[dict], str],
+    username: str = "",
 ) -> ItemUseResult:
     """Trigger or acknowledge the house alarm with a private keypad credential."""
 
@@ -108,7 +121,7 @@ def use_with_credential(
     alert_prompt = str(item.params.get("alertPrompt") or "").strip()
     allow_prompt = str(item.params.get("allowPrompt") or "").strip()
     notification = _notification_text(item)
-    code_kind = evaluate_access(item, nickname, credential)
+    code_kind = evaluate_access(item, nickname, credential, username)
 
     if armed_state == "disarmed":
         return ItemUseResult(

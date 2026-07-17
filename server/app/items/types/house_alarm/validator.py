@@ -153,6 +153,11 @@ def validate_update(_item: WorldItem, next_params: dict) -> dict:
         max_length=240,
         field_name="authorizedNames",
     )
+    next_params["authorizedUsernames"] = _clean_text(
+        next_params.get("authorizedUsernames", ""),
+        max_length=240,
+        field_name="authorizedUsernames",
+    )
     for key in ("entryPrompt", "alertPrompt", "allowPrompt", "denyPrompt", "description"):
         next_params[key] = _clean_text(
             next_params.get(key, ""),

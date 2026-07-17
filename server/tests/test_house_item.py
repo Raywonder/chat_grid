@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.items.types.house.actions import secondary_use_item, use_item
 from app.items.types.house.validator import validate_update
 from app.items.types.house_alarm.actions import (
+    evaluate_access as evaluate_house_alarm_access,
     use_with_credential as use_house_alarm_with_credential,
     secondary_use_item as secondary_use_house_alarm,
     use_item as use_house_alarm,
@@ -20,6 +21,19 @@ def test_house_alarm_keypad_keeps_invalid_code_out_of_visitor_identity() -> None
     assert "2468" not in allowed.self_message + allowed.others_message
     assert "1111" not in denied.self_message + denied.others_message
     assert "Visitor: Visitor" in denied.others_message
+
+
+def test_house_alarm_prefers_signed_in_account_identity_over_display_name() -> None:
+    item = _house_alarm_item()
+    item.params.update(
+        {
+            "authorizedNames": "Matthew",
+            "authorizedUsernames": "matthew-whitaker",
+        }
+    )
+
+    assert evaluate_house_alarm_access(item, "Someone Else", username="matthew-whitaker") == "authorized"
+    assert evaluate_house_alarm_access(item, "Matthew", username="imposter") == "denied"
 from app.items.types.house_alarm.validator import validate_update as validate_house_alarm
 from app.items.types.house_keeper.actions import (
     secondary_use_item as secondary_use_house_keeper,
@@ -92,6 +106,7 @@ def _house_alarm_item() -> WorldItem:
             "duressCode": "",
             "codeHint": "",
             "authorizedNames": "Dom, Clawdia",
+            "authorizedUsernames": "",
             "entryPrompt": "Please wait at the door.",
             "alertPrompt": "House alarm. Someone is at the door.",
             "allowPrompt": "Access allowed.",
@@ -280,6 +295,7 @@ def test_house_alarm_validation_normalizes_hooks_and_aliases() -> None:
         "duressCode": "*911#",
         "codeHint": "Ask for the porch code.",
         "authorizedNames": "Dom, Clawdia",
+        "authorizedUsernames": "",
         "entryPrompt": "Wait here.",
         "alertPrompt": "Alert.",
         "allowPrompt": "Come in.",

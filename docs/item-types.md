@@ -267,6 +267,7 @@ This is behavior-focused documentation for item types and their defaults.
   - `duressCode=""`
   - `codeHint=""`
   - `authorizedNames=""`
+  - `authorizedUsernames=""`
   - `entryPrompt="Please wait while the house checks whether someone can let you in."`
   - `alertPrompt="House alarm. Someone is at the door."`
   - `allowPrompt="Access allowed. Opening the door."`
@@ -284,7 +285,7 @@ This is behavior-focused documentation for item types and their defaults.
 
 ### Use
 - `use` on a disarmed alarm reports that the house alarm is disarmed.
-- `use` by an authorized display name speaks the allow prompt and does not trigger.
+- `use` by an authorized signed-in account username speaks the allow prompt and does not trigger. Legacy display-name authorization is used only when no account usernames are configured.
 - `use` with a matching in-world guest code speaks the allow prompt and does not trigger.
 - `use` with a matching in-world disarm code marks the panel `disarmed`.
 - `use` with a matching in-world duress code appears accepted to the visitor while still broadcasting an alert and marking the panel `triggered`.
@@ -301,7 +302,8 @@ This is behavior-focused documentation for item types and their defaults.
 - `codeMode`: `off | guest | disarm | guest_disarm`; aliases include `none`, `guest_only`, `disarm_only`, `both`, and `all`
 - `guestCode`, `disarmCode`, `duressCode`: optional in-world keypad codes, 3-16 characters, digits plus `*` and `#` only after removing spaces/hyphens. Non-empty codes must be distinct. Do not use real home-security secrets.
 - `codeHint`: optional safe hint, max 120 chars
-- `authorizedNames`: comma-separated display names, max 240 chars
+- `authorizedNames`: legacy comma-separated display names, max 240 chars
+- `authorizedUsernames`: comma-separated signed-in account usernames, max 240 chars; when present these replace display-name identity checks
 - `entryPrompt`, `alertPrompt`, `allowPrompt`, `denyPrompt`, `description`: max 240 chars
 - `notificationMode`: `in_grid | ntfy | whatsapp | ntfy_whatsapp`; aliases include `wa`, `ntfy wa`, and `local`
 - `ntfyTopic`, `waNotifyTarget`: optional non-secret hook labels, max 120 chars

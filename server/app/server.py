@@ -2002,7 +2002,9 @@ class SignalingServer:
         alarm = self._linked_house_alarm(door)
         if alarm is None:
             return True
-        if evaluate_house_alarm_access(alarm, client.nickname) == "authorized":
+        if evaluate_house_alarm_access(
+            alarm, client.nickname, username=client.username or ""
+        ) == "authorized":
             return True
         key = (client.id, door.id)
         expires_at = self._house_entry_invites.get(key)
@@ -9060,13 +9062,17 @@ class SignalingServer:
                 if use_item.type == "house_alarm":
                     credential = str(packet.credential or "")
                     access_result = evaluate_house_alarm_access(
-                        use_item, client.nickname, credential
+                        use_item,
+                        client.nickname,
+                        credential,
+                        client.username or "",
                     )
                     use_result = use_house_alarm_with_credential(
                         use_item,
                         client.nickname,
                         credential,
                         self._format_clock_display_time,
+                        client.username or "",
                     )
                     if access_result in {"authorized", "guest", "disarm"}:
                         for candidate in self.items.values():
