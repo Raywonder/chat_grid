@@ -608,6 +608,18 @@ class SignalingServer:
         except OSError:
             return "", ""
 
+    def _current_expected_client_revision(self) -> str:
+        """Read the published source revision without requiring a server restart.
+
+        Client-only deployments update ``client/public/version.js`` while the
+        signaling service remains online. Reading the revision at handshake
+        time prevents the server from repeatedly redirecting a newer browser
+        back toward the revision cached when this process started.
+        """
+
+        _release_version, revision = self._resolve_client_version_metadata()
+        return revision or self.expected_client_revision
+
     @staticmethod
     def _client_version_metadata_from_web_version_text(text: str) -> tuple[str, str]:
         """Parse release/client revision metadata from one client version.js file."""
@@ -5940,7 +5952,7 @@ class SignalingServer:
                         gridName=self.grid_name,
                         welcomeMessage=self.welcome_message,
                         releaseVersion=self.release_version or None,
-                        expectedClientRevision=self.expected_client_revision or None,
+                        expectedClientRevision=self._current_expected_client_revision() or None,
                         serverVersion=self.server_version,
                     ),
                 )
@@ -6063,7 +6075,7 @@ class SignalingServer:
                 "instanceId": self.instance_id,
                 "releaseVersion": self.release_version,
                 "serverVersion": self.server_version,
-                "expectedClientRevision": self.expected_client_revision,
+                "expectedClientRevision": self._current_expected_client_revision(),
                 "gridName": self.grid_name,
                 "welcomeMessage": self.welcome_message,
             },
@@ -7760,7 +7772,7 @@ class SignalingServer:
                     type="admin_platform_overview",
                     scope=packet.scope,
                     serverVersion=self.server_version,
-                    expectedClientRevision=self.expected_client_revision or None,
+                    expectedClientRevision=self._current_expected_client_revision() or None,
                     connectedUsers=len(self.clients),
                     itemCount=len(self.item_service.items),
                     serviceLinkCount=len(service_items),
