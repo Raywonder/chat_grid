@@ -26,6 +26,7 @@ from app.models import (
     DirectMessageBroadcastPacket,
     ItemActionResultPacket,
     ItemGameLaunchPacket,
+    ItemUseSoundPacket,
     ItemTransferTargetsResultPacket,
     LocationChangedPacket,
     PongPacket,
@@ -719,6 +720,72 @@ async def test_raywonder_studio_door_knock_and_allow_entry(
     arrival = _last_packet_of_type(sent_payloads[guest_ws], LocationChangedPacket)
     assert arrival.locationId == "raywonder_house_studio"
     assert guest.location_id == "raywonder_house_studio"
+
+
+@pytest.mark.asyncio
+async def test_guarded_house_denial_knocks_outside_and_inside(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    guest_ws = _fake_ws()
+    resident_ws = cast(ServerConnection, object())
+    door = server.items["seed-houses-raywonder-front-door"]
+    guest = _activate_client(
+        ClientConnection(
+            websocket=guest_ws,
+            id="guest-1",
+            nickname="Visitor",
+            x=door.x,
+            y=door.y,
+            location_id=door.locationId,
+        ),
+        username="visitor",
+        permissions={"item.use"},
+    )
+    resident = _activate_client(
+        ClientConnection(
+            websocket=resident_ws,
+            id="resident-1",
+            nickname="Dom",
+            x=20,
+            y=20,
+            location_id="raywonder_house_entry",
+        ),
+        username="dominique",
+        permissions={"item.use"},
+    )
+    server.clients[guest_ws] = guest
+    server.clients[resident_ws] = resident
+    sent_payloads: dict[ServerConnection, list[object]] = {
+        guest_ws: [],
+        resident_ws: [],
+    }
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        sent_payloads[websocket].append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+
+    await server._handle_message(
+        guest,
+        json.dumps({"type": "item_use", "itemId": door.id}),
+    )
+
+    denial = _last_packet_of_type(sent_payloads[guest_ws], ItemActionResultPacket)
+    outside_knock = _last_packet_of_type(sent_payloads[guest_ws], ItemUseSoundPacket)
+    inside_knock = _last_packet_of_type(sent_payloads[resident_ws], ItemUseSoundPacket)
+    resident_notice = _last_packet_of_type(
+        sent_payloads[resident_ws], BroadcastChatMessagePacket
+    )
+    assert denial.ok is False
+    assert "door is secured" in denial.message
+    assert outside_knock.sound.startswith("sounds/doors/door-knock.mp3")
+    assert outside_knock.x == door.x
+    assert outside_knock.y == door.y
+    assert inside_knock.sound == outside_knock.sound
+    assert inside_knock.itemId == "seed-raywonder-entry-door-houses"
+    assert "Visitor knocks at the front door" in resident_notice.message
+    assert guest.location_id == "houses"
 
 
 @pytest.mark.asyncio

@@ -293,6 +293,7 @@ This is behavior-focused documentation for item types and their defaults.
 - `secondary use` speaks alarm mode, armed state, code status, notification hook status, owner, safe code hint, and description without triggering the alarm. It does not speak actual code values.
 - Real-world ntfy/WhatsApp sends are not performed by the item itself yet. `notificationMode`, `ntfyTopic`, and `waNotifyTarget` are configuration hooks for the future approved notification plugins.
 - Exterior house doors may link to a panel through `accessAlarmItemId`. The server keeps unauthorized users outside, while a recognized resident or successful keypad entry receives a short-lived, single-use entry grant.
+- Using a guarded exterior door without access produces a real spatial knock on both sides of the doorway. The knock is strongest near the door and attenuates naturally for listeners farther inside or outside; residents also receive a system notice naming the visitor.
 - The accessible keypad masks code characters from speech and submits the credential separately from the visitor's display name, so invalid codes are never broadcast as names.
 
 ### Validation

@@ -85,6 +85,7 @@ Local footsteps use the current location's `ambienceKey` to choose a matching su
 - `emitSound`: continuous looping spatial source attached to an item runtime, controlled by the item audio layer.
 - Social reactions use the same world-layer one-shot path through `social_action.sound`. Each reaction action should point at its matching packaged local asset under `sounds/reactions/` instead of sharing a generic tap/chat cue, so browser and desktop clients can play the correct sound locally and use the same path remotely.
 - Radio and household-device controls play local device-button cues for power, tuning, preset, keypad, plastic, and hardware-toggle presses. Station-switch name stingers still play from the radio's spatial tile when the station actually changes.
+- Guarded exterior doors broadcast the same generated door-knock asset at the outside door and its matching interior return door. Normal spatial attenuation makes it close and clear beside the doorway and faint at a distance; denied visitors remain outside.
 - Linked audio systems should model physically sensible relationships. A radio
   can own or sync hidden/internal components such as subwoofers, mids, tweeters,
   satellite speakers, and connectors when that matches a real speaker setup.

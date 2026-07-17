@@ -2019,16 +2019,71 @@ class SignalingServer:
     async def _deny_guarded_house_entry(
         self, client: ClientConnection, door: WorldItem
     ) -> None:
-        """Keep an unauthorized visitor outside and identify the nearby keypad."""
+        """Keep a visitor outside, sound a spatial knock, and identify the keypad."""
 
         alarm = self._linked_house_alarm(door)
         alarm_name = alarm.title if alarm is not None else "alarm keypad"
+        await self._broadcast_guarded_door_knock(client, door)
         await self._send_item_result(
             client,
             False,
             "use",
             f"The door is secured. Use {alarm_name} on this square to request or enter access.",
             door.id,
+        )
+
+    def _inside_door_for_guarded_entry(self, door: WorldItem) -> WorldItem | None:
+        """Find the interior return door corresponding to one guarded exterior door."""
+
+        target_location = str(door.params.get("targetLocation") or "").strip()
+        if not target_location:
+            return None
+        for candidate in self.items.values():
+            if candidate.type != "service_link" or candidate.locationId != target_location:
+                continue
+            candidate_target = str(candidate.params.get("targetLocation") or "").strip()
+            if candidate_target == door.locationId:
+                return candidate
+        return None
+
+    async def _broadcast_guarded_door_knock(
+        self, client: ClientConnection, door: WorldItem
+    ) -> None:
+        """Play one real spatial knock outside and just inside a guarded home."""
+
+        sound = "sounds/doors/door-knock.mp3?v=20260716"
+        await self._broadcast_location(
+            door.locationId,
+            ItemUseSoundPacket(
+                type="item_use_sound",
+                itemId=door.id,
+                sound=sound,
+                x=door.x,
+                y=door.y,
+                range=14,
+            ),
+        )
+        inside_door = self._inside_door_for_guarded_entry(door)
+        if inside_door is None:
+            return
+        await self._broadcast_location(
+            inside_door.locationId,
+            ItemUseSoundPacket(
+                type="item_use_sound",
+                itemId=inside_door.id,
+                sound=sound,
+                x=inside_door.x,
+                y=inside_door.y,
+                range=18,
+            ),
+        )
+        await self._broadcast_location(
+            inside_door.locationId,
+            BroadcastChatMessagePacket(
+                type="chat_message",
+                message=f"{client.nickname} knocks at the front door.",
+                system=True,
+            ),
         )
 
     @staticmethod
