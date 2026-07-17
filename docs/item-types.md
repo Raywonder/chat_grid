@@ -476,8 +476,11 @@ This is behavior-focused documentation for item types and their defaults.
 
 - `objectKind` includes everyday objects plus `remote`, `speaker`, `radio`, and `tv`.
 - TV objects follow the same shared-media power rule as radios: disconnecting, switching users, or reconnecting must not turn a TV off. Only an explicit user action should change the TV object's `enabled` state.
+- Video-capable TV sources expose a visible native-controls screen while program audio stays spatial and synchronized. Audio-described MP3 programs remain audio-first and do not create a blank video panel.
 - TV objects can be mounted with `placement="wall"` and are reserved for the in-world TV provider flow: a second admin AAAStreamer encoder can expose random playable audio from the approved folder as a validated stream source for rooms/houses that contain a TV.
 - Radio remotes expose `remoteControlLinkedRadios`. When true, the remote tunes/adjusts the connected house radio set. When false, it controls only the nearest/current room radio.
+- TV remotes expose `remoteControlLinkedTvs`. When true, remote channel and volume controls apply to the connected house TV system; when false, they target the nearest/current-room TV.
+- `tvLibrarySources` describes approved movie, show, and miscellaneous libraries; `tvProviderSources` describes approved online sources such as Jellyfin and Pluto TV. These entries are server-managed metadata and must not contain credentials.
 
 ### Defaults
 - Title: `mug`

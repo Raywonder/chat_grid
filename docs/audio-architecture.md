@@ -131,7 +131,12 @@ TappedIn relaxation/birds tracks and a Steve G. Jones meditation preset staged
 under `sounds/radio/relaxation/`.
 
 Mounted wall TVs are modeled as `house_object` items with `objectKind="tv"` and
-`placement="wall"`. The intended in-world TV provider path is a second
+`placement="wall"`. The nearest enabled video-capable TV also opens a native,
+keyboard-accessible video surface. Its picture is muted because the same program
+audio continues through Chat Grid's synchronized spatial media graph. Finite
+programs use the server `playStartedAt` marker to join at the shared playhead;
+native controls remain available when autoplay requires a gesture. The intended
+in-world TV provider path is a second
 AAAStreamer encoder on the admin account that can randomly stream playable
 audio from the approved media folder for any house/location that has a TV. Wire
 that external encoder/folder as a validated stream source before seeding live TV

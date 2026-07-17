@@ -8,6 +8,7 @@ import { getProxyUrlForMedia, shouldProxyExternalMediaUrl } from './audio/mediaU
 import { ItemEmitRuntime } from './audio/itemEmitRuntime';
 import { BillboardRuntime } from './audio/billboardRuntime';
 import { ClockAnnouncer } from './audio/clockAnnouncer';
+import { TvScreenRuntime } from './media/tvScreenRuntime';
 import { normalizeDegrees } from './audio/spatial';
 import {
   applyPastedText,
@@ -484,6 +485,7 @@ let worldLocationOptions: WorldLocationOption[] = [];
 const messageBuffer: string[] = [];
 let messageCursor = -1;
 const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig);
+const tvScreenRuntime = new TvScreenRuntime();
 const itemEmitRuntime = new ItemEmitRuntime(audio, resolveIncomingSoundUrl, getItemSpatialConfig);
 const billboardRuntime = new BillboardRuntime(audio, getItemSpatialConfig, (message) => {
   pushChatMessage(message);
@@ -1450,6 +1452,7 @@ async function refreshAudioSubscriptionsForListeners(
       radioRuntime.recoverActivePlayback();
     }
     await radioRuntime.sync(state.items.values(), listenerPositions);
+    tvScreenRuntime.sync(state.items.values(), anchorListener);
     await itemEmitRuntime.sync(state.items.values(), listenerPositions);
   } finally {
     subscriptionRefreshInFlight = false;
@@ -2634,6 +2637,7 @@ function gameLoop(): void {
   audio.updateSpatialAudio(peerManager.getPeers(), listenerPosition);
   audio.updateSpatialSamples(listenerPosition);
   radioRuntime.updateSpatialAudio(state.items, listenerPosition);
+  tvScreenRuntime.sync(state.items.values(), listenerPosition);
   itemEmitRuntime.updateSpatialAudio(state.items, listenerPosition);
   billboardRuntime.update(state.items, listenerPosition);
   updateItemBeacon();

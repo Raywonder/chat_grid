@@ -1563,12 +1563,76 @@ BUILTIN_WORLD_ITEMS: tuple[SeedItem, ...] = (
             stationName=RADIO_STATION_PRESETS[0]["title"],
             stationIndex=0,
             stationPresets=list(RADIO_STATION_PRESETS[:2]),
+            linkedMediaGroup="raywonder-house-tv",
+            tvChannelMode="live_and_on_demand",
+            tvLibrarySources=[
+                {
+                    "key": "audio-described-movies",
+                    "title": "Audio-described movies",
+                    "kind": "movies",
+                    "path": "/home/dom/apps/media/AudioDescribedContent/Movies",
+                    "mode": "on_demand",
+                },
+                {
+                    "key": "audio-described-tv",
+                    "title": "Audio-described TV shows",
+                    "kind": "shows",
+                    "path": "/home/dom/apps/media/AudioDescribedContent/TV",
+                    "mode": "live_and_on_demand",
+                },
+                {
+                    "key": "misc-video",
+                    "title": "Miscellaneous videos",
+                    "kind": "misc",
+                    "path": "/home/dom/apps/media/VIDEO",
+                    "mode": "on_demand",
+                },
+            ],
+            tvProviderSources=[
+                {
+                    "key": "raywonder-jellyfin",
+                    "title": "Raywonder Jellyfin",
+                    "kind": "jellyfin",
+                    "url": "https://media.raywonderis.me/",
+                    "provider": "jellyfin",
+                    "mode": "live_and_on_demand",
+                },
+                {
+                    "key": "pluto-tv",
+                    "title": "Pluto TV",
+                    "kind": "online",
+                    "url": "https://pluto.tv/",
+                    "provider": "pluto",
+                    "mode": "live_and_on_demand",
+                },
+            ],
             mediaVolume=42,
             mediaChannel="stereo",
             emitRange=12,
             facing=180,
             enabled=True,
         ),
+    ),
+    SeedItem(
+        id="seed-raywonder-living-room-tv-remote",
+        type="house_object",
+        title="Universal TV remote",
+        location_id="raywonder_house_living_room",
+        x=19,
+        y=21,
+        params={
+            "objectKind": "remote",
+            "placement": "table",
+            "material": "plastic",
+            "fragility": "normal",
+            "condition": "intact",
+            "remoteControlLinkedTvs": True,
+            "repairCost": 12,
+            "purchaseCost": 35,
+            "replacementHint": "A programmable universal TV remote belongs on the living-room table.",
+            "giftable": True,
+            "description": "A universal TV remote. Use changes the nearest TV channel; remote arrow controls tune channels and adjust volume.",
+        },
     ),
     SeedItem(
         id="seed-raywonder-living-room-floor-lamp",
@@ -2313,10 +2377,13 @@ def ensure_builtin_items(items: dict[str, WorldItem], *, now_ms: int) -> list[Wo
                 existing.title = seed.title
                 updated = True
             for key, value in seed.params.items():
+                server_managed_tv_metadata = key in {"tvLibrarySources", "tvProviderSources"}
                 if key not in existing.params:
                     existing.params[key] = deepcopy(value)
                     updated = True
-                elif not preserve_existing_params and existing.params.get(key) != value:
+                elif (
+                    not preserve_existing_params or server_managed_tv_metadata
+                ) and existing.params.get(key) != value:
                     existing.params[key] = deepcopy(value)
                     updated = True
             if updated:
