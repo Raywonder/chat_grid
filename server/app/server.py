@@ -593,6 +593,7 @@ class SignalingServer:
         self._pending_reboot_task: asyncio.Task[None] | None = None
         self._studio_entry_invites: dict[str, float] = {}
         self._house_entry_invites: dict[tuple[str, str], float] = {}
+        self._telepad_drift_task: asyncio.Task[None] | None = None
 
     @staticmethod
     def _resolve_server_version(release_version: str) -> str:
@@ -2037,6 +2038,154 @@ class SignalingServer:
             f"The door is secured. Use {alarm_name} on this square to request or enter access.",
             door.id,
         )
+
+    def _doors_for_house_alarm(self, alarm: WorldItem) -> list[WorldItem]:
+        """Return exterior doors authoritatively linked to one alarm panel."""
+
+        return [
+            candidate
+            for candidate in self.items.values()
+            if candidate.type == "service_link"
+            and str(candidate.params.get("accessAlarmItemId") or "").strip() == alarm.id
+        ]
+
+    @staticmethod
+    def _is_house_alarm_controller(alarm: WorldItem, client: ClientConnection) -> bool:
+        """Return whether the signed-in account may approve or deny alarm requests."""
+
+        username = (client.username or "").strip().casefold()
+        if not username:
+            return False
+        allowed = {
+            value.strip().casefold()
+            for value in str(alarm.params.get("authorizedUsernames") or "").split(",")
+            if value.strip()
+        }
+        enrolled = str(alarm.params.get("enrolledUsername") or "").strip().casefold()
+        return username == enrolled or username in allowed
+
+    async def _notify_house_entry_event(
+        self, alarm: WorldItem, client: ClientConnection, message: str
+    ) -> None:
+        """Alert occupants and configured owner identities about one entry event."""
+
+        notified_locations: set[str] = set()
+        for door in self._doors_for_house_alarm(alarm):
+            target_location = str(door.params.get("targetLocation") or "").strip()
+            if target_location and target_location not in notified_locations:
+                notified_locations.add(target_location)
+                await self._broadcast_location(
+                    target_location,
+                    BroadcastChatMessagePacket(type="chat_message", message=message, system=True),
+                )
+        usernames = {
+            value.strip()
+            for value in str(alarm.params.get("authorizedUsernames") or "").split(",")
+            if value.strip()
+        }
+        enrolled = str(alarm.params.get("enrolledUsername") or "").strip()
+        if enrolled:
+            usernames.add(enrolled)
+        for username in usernames:
+            target_user_id = self.auth_service.get_user_id_by_username(username)
+            if target_user_id:
+                await self._add_notification(
+                    kind="house.entry",
+                    title=str(alarm.params.get("houseName") or "House entry"),
+                    message=message,
+                    target_user_id=target_user_id,
+                    actor_user_id=client.user_id,
+                )
+
+    async def _complete_house_alarm_entry(
+        self,
+        *,
+        client: ClientConnection,
+        alarm: WorldItem,
+        access_result: str,
+    ) -> None:
+        """Open the linked door and move an authenticated entrant after policy delay."""
+
+        delay = 10.0 if access_result == "guest" else 0.0
+        if delay:
+            await self._send_item_result(
+                client, True, "use", "Guest access verified. The door will open in ten seconds.", alarm.id
+            )
+            await self._notify_house_entry_event(
+                alarm, client, f"{client.nickname} verified guest access and will enter in ten seconds."
+            )
+            await asyncio.sleep(delay)
+        if client.websocket not in self.clients:
+            return
+        doors = self._doors_for_house_alarm(alarm)
+        door = next(
+            (
+                candidate
+                for candidate in doors
+                if candidate.locationId == client.location_id
+                and candidate.x == client.x
+                and candidate.y == client.y
+            ),
+            doors[0] if doors else None,
+        )
+        if door is None:
+            return
+        target_location = str(door.params.get("targetLocation") or "").strip()
+        if not target_location:
+            return
+        await self._notify_house_entry_event(
+            alarm, client, f"{client.nickname} is entering {alarm.params.get('houseName') or 'the house'}."
+        )
+        await self._broadcast_location(
+            door.locationId,
+            ItemUseSoundPacket(
+                type="item_use_sound",
+                itemId=door.id,
+                sound="sounds/doors/door-open.mp3?v=20260714-real-door",
+                x=door.x,
+                y=door.y,
+                range=14,
+            ),
+        )
+        await self._change_client_location(client, target_location)
+
+    @staticmethod
+    def _is_drifting_telepad(item: WorldItem) -> bool:
+        """Return whether an item is a world telepad eligible for gentle drift."""
+
+        if item.type != "service_link":
+            return False
+        kind = str(item.params.get("serviceKind") or "").strip().lower()
+        sound = str(item.params.get("emitSound") or "").strip().lower()
+        return kind in {"portal", "teleport", "telepad"} and "teleport_pad" in sound
+
+    async def _run_telepad_drift_loop(self) -> None:
+        """Move telepads one safe square occasionally to keep their positions playful."""
+
+        while True:
+            await asyncio.sleep(SYSTEM_RANDOM.uniform(45.0, 110.0))
+            pads = [item for item in self.items.values() if self._is_drifting_telepad(item)]
+            if not pads:
+                continue
+            pad = SYSTEM_RANDOM.choice(pads)
+            candidates = [
+                (pad.x + dx, pad.y + dy)
+                for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1))
+                if 0 <= pad.x + dx < self.grid_size and 0 <= pad.y + dy < self.grid_size
+            ]
+            occupied = {
+                (item.x, item.y)
+                for item in self.items.values()
+                if item.locationId == pad.locationId and item.id != pad.id
+                and item.params.get("blocksMovement") is True
+            }
+            candidates = [position for position in candidates if position not in occupied]
+            if not candidates:
+                continue
+            pad.x, pad.y = SYSTEM_RANDOM.choice(candidates)
+            pad.updatedAt = self.item_service.now_ms()
+            self._request_state_save()
+            await self._broadcast_item(pad)
 
     def _inside_door_for_guarded_entry(self, door: WorldItem) -> WorldItem | None:
         """Find the interior return door corresponding to one guarded exterior door."""
@@ -5995,6 +6144,7 @@ class SignalingServer:
         self._clock_announce_task = asyncio.create_task(
             self._run_clock_top_of_hour_loop()
         )
+        self._telepad_drift_task = asyncio.create_task(self._run_telepad_drift_loop())
         try:
             async with serve(
                 self._handle_client,
@@ -6007,6 +6157,11 @@ class SignalingServer:
             ):
                 await asyncio.Future()
         finally:
+            if self._telepad_drift_task is not None:
+                self._telepad_drift_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._telepad_drift_task
+                self._telepad_drift_task = None
             if self._pending_reboot_task is not None:
                 self._pending_reboot_task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -6670,6 +6825,47 @@ class SignalingServer:
             )
             return True
         if command in {"allow", "letin", "let-in"}:
+            requested_name = remainder.strip() if separator else ""
+            guarded_matches: list[tuple[WorldItem, WorldItem, ClientConnection]] = []
+            if requested_name:
+                for alarm in self.items.values():
+                    if alarm.type != "house_alarm":
+                        continue
+                    if not self._is_house_alarm_controller(alarm, client):
+                        continue
+                    for door in self._doors_for_house_alarm(alarm):
+                        if str(door.params.get("targetLocation") or "").strip() != client.location_id:
+                            continue
+                        waiting = self._find_user_by_name_in_location(
+                            requested_name, door.locationId
+                        )
+                        if waiting is not None:
+                            guarded_matches.append((alarm, door, waiting))
+            if guarded_matches:
+                alarm, door, waiting = guarded_matches[0]
+                self._house_entry_invites[(waiting.id, door.id)] = time.monotonic() + 30.0
+                await self._send(
+                    client.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message=f"You approve {waiting.nickname} for this entry.",
+                        system=True,
+                    ),
+                )
+                await self._send(
+                    waiting.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message=f"{client.nickname} approved your entry. The door will open in ten seconds.",
+                        system=True,
+                    ),
+                )
+                asyncio.create_task(
+                    self._complete_house_alarm_entry(
+                        client=waiting, alarm=alarm, access_result="guest"
+                    )
+                )
+                return True
             if client.location_id != RAYWONDER_STUDIO_LOCATION_ID:
                 await self._send(
                     client.websocket,
@@ -6720,6 +6916,50 @@ class SignalingServer:
                     type="chat_message",
                     message=f"{client.nickname} allows you into the studio. Use the studio door to enter.",
                     system=True,
+                ),
+            )
+            return True
+        if command in {"deny", "keepout", "keep-out"}:
+            requested_name = remainder.strip() if separator else ""
+            if not requested_name:
+                await self._send(
+                    client.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message", message="Usage: /deny <user>", system=True
+                    ),
+                )
+                return True
+            for alarm in self.items.values():
+                if alarm.type != "house_alarm" or not self._is_house_alarm_controller(
+                    alarm, client
+                ):
+                    continue
+                for door in self._doors_for_house_alarm(alarm):
+                    if str(door.params.get("targetLocation") or "").strip() != client.location_id:
+                        continue
+                    waiting = self._find_user_by_name_in_location(requested_name, door.locationId)
+                    if waiting is None:
+                        continue
+                    self._house_entry_invites.pop((waiting.id, door.id), None)
+                    await self._send(
+                        waiting.websocket,
+                        BroadcastChatMessagePacket(
+                            type="chat_message", message="Entry was denied.", system=True
+                        ),
+                    )
+                    await self._send(
+                        client.websocket,
+                        BroadcastChatMessagePacket(
+                            type="chat_message",
+                            message=f"You deny entry to {waiting.nickname}.",
+                            system=True,
+                        ),
+                    )
+                    return True
+            await self._send(
+                client.websocket,
+                BroadcastChatMessagePacket(
+                    type="chat_message", message="That user is not waiting at a guarded door you control.", system=True
                 ),
             )
             return True
@@ -9309,6 +9549,20 @@ class SignalingServer:
                         for candidate in self.items.values():
                             if str(candidate.params.get("accessAlarmItemId") or "").strip() == use_item.id:
                                 self._house_entry_invites[(client.id, candidate.id)] = time.monotonic() + 120.0
+                    if access_result in {"authorized", "resident", "guest"}:
+                        asyncio.create_task(
+                            self._complete_house_alarm_entry(
+                                client=client,
+                                alarm=use_item,
+                                access_result=access_result,
+                            )
+                        )
+                    elif access_result in {"denied", "duress"}:
+                        await self._notify_house_entry_event(
+                            use_item,
+                            client,
+                            f"{client.nickname} failed or triggered access at {use_item.params.get('houseName') or 'the house'}.",
+                        )
                 else:
                     use_result = handler.use(
                         use_item, client.nickname, self._format_clock_display_time

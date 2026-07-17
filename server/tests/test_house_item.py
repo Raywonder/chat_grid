@@ -249,12 +249,12 @@ def test_house_alarm_triggers_for_unknown_visitor() -> None:
     assert "waiting for an owner" in (result.delayed_self_message or "")
 
 
-def test_house_alarm_allows_authorized_name() -> None:
+def test_house_alarm_rejects_legacy_authorized_display_name() -> None:
     result = use_house_alarm(_house_alarm_item(), "Clawdia", lambda _params: "")
 
-    assert result.self_message == "Access allowed."
-    assert result.others_message == "Raywonder alarm recognizes Clawdia at Raywonder House."
-    assert result.updated_params is None
+    assert "Please wait at the door." in result.self_message
+    assert "Visitor: Clawdia" in result.others_message
+    assert result.updated_params == {"armedState": "triggered"}
 
 
 def test_house_alarm_validation_normalizes_hooks_and_aliases() -> None:
@@ -339,7 +339,28 @@ def test_house_alarm_first_use_enrolls_account_and_resident_code() -> None:
     }
     assert "2468" not in result.self_message
     item.params.update(result.updated_params)
-    assert evaluate_house_alarm_access(item, "Visitor", credential="2468") == "resident"
+    assert (
+        evaluate_house_alarm_access(
+            item, "Dominique", credential="2468", username="dominique"
+        )
+        == "resident"
+    )
+    assert evaluate_house_alarm_access(item, "Visitor", credential="2468") == "denied"
+
+
+def test_house_alarm_never_authorizes_a_spoofed_display_name() -> None:
+    item = _house_alarm_item()
+    item.params.update(
+        {
+            "accessSetupComplete": True,
+            "accessMethod": "account",
+            "enrolledUsername": "dominique",
+            "authorizedNames": "Dominique",
+        }
+    )
+
+    assert evaluate_house_alarm_access(item, "Dominique", username="visitor") == "denied"
+    assert evaluate_house_alarm_access(item, "Anything", username="dominique") == "authorized"
 
 
 def test_house_alarm_setup_rejects_unapproved_visitor() -> None:

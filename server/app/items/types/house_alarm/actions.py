@@ -93,24 +93,25 @@ def evaluate_access(
     if item.params.get("accessSetupComplete") is not True:
         return "setup_required"
 
-    code_kind = _matched_code_kind(item, credential)
-    if code_kind:
-        return code_kind
     usernames = str(item.params.get("authorizedUsernames") or "").split(",")
     allowed_usernames = {
         value.strip().casefold() for value in usernames if value.strip()
     }
     enrolled_username = str(item.params.get("enrolledUsername") or "").strip().casefold()
-    if enrolled_username and username.strip().casefold() == enrolled_username:
+    submitted_username = username.strip().casefold()
+    identity_authorized = bool(submitted_username) and (
+        submitted_username == enrolled_username or submitted_username in allowed_usernames
+    )
+    code_kind = _matched_code_kind(item, credential)
+    if code_kind == "resident":
+        return "resident" if identity_authorized else "denied"
+    if code_kind in {"guest", "disarm", "duress"}:
+        return code_kind
+    access_method = str(item.params.get("accessMethod") or "account").strip().lower()
+    if identity_authorized and access_method == "account":
         return "authorized"
-    if allowed_usernames:
-        return (
-            "authorized"
-            if username.strip().casefold() in allowed_usernames
-            else "denied"
-        )
-    if _is_authorized(item, nickname):
-        return "authorized"
+    # Display names are deliberately never authorization credentials. They are mutable
+    # and can be copied by another visitor.
     return "denied"
 
 
@@ -137,7 +138,7 @@ def use_with_credential(
             return ItemUseResult(
                 self_message="Alarm setup is restricted to the signed-in owner or an already authorized resident.",
                 others_message="",
-                sound="sounds/alarm/access-denied.mp3?v=20260716-alarm-voice",
+                sound="sounds/alarm/access-denied.mp3?v=20260716-alarm-intercom",
             )
         setup_parts = normalized_credential.split(":", 2)
         resident_code = setup_parts[2] if len(setup_parts) == 3 else ""
@@ -162,7 +163,7 @@ def use_with_credential(
                 "authorizedUsernames": ", ".join(authorized),
                 "residentCode": resident_code,
             },
-            sound="sounds/alarm/setup-complete.mp3?v=20260716-alarm-voice",
+            sound="sounds/alarm/setup-complete.mp3?v=20260716-alarm-intercom",
         )
 
     code_kind = evaluate_access(item, nickname, credential, username)
@@ -170,14 +171,14 @@ def use_with_credential(
         return ItemUseResult(
             self_message=f"{label} needs first-use access setup by its owner.",
             others_message="",
-            sound="sounds/alarm/setup-required.mp3?v=20260716-alarm-voice",
+            sound="sounds/alarm/setup-required.mp3?v=20260716-alarm-intercom",
         )
 
     if armed_state == "disarmed":
         return ItemUseResult(
             self_message=f"{label} is disarmed for {house_name}. {notification}",
             others_message=f"{nickname} checks the disarmed alarm panel for {house_name}.",
-            sound="sounds/alarm/access-granted.mp3?v=20260716-alarm-voice",
+            sound="sounds/alarm/access-granted.mp3?v=20260716-alarm-intercom",
         )
 
     if code_kind == "disarm":
@@ -185,21 +186,21 @@ def use_with_credential(
             self_message=f"{label} accepts the disarm code. {house_name} is now disarmed.",
             others_message=f"{label} was disarmed by code at {house_name}.",
             updated_params={"armedState": "disarmed"},
-            sound="sounds/alarm/access-granted.mp3?v=20260716-alarm-voice",
+            sound="sounds/alarm/access-granted.mp3?v=20260716-alarm-intercom",
         )
 
     if code_kind == "guest":
         return ItemUseResult(
             self_message=allow_prompt or f"{label} accepts the guest code. Access allowed.",
             others_message=f"{label} accepts a guest code at {house_name}.",
-            sound="sounds/alarm/access-granted.mp3?v=20260716-alarm-voice",
+            sound="sounds/alarm/access-granted.mp3?v=20260716-alarm-intercom",
         )
 
     if code_kind == "resident":
         return ItemUseResult(
             self_message=allow_prompt or f"{label} accepts the resident code. Access allowed.",
             others_message=f"{label} accepts a resident code at {house_name}.",
-            sound="sounds/alarm/access-granted.mp3?v=20260716-alarm-voice",
+            sound="sounds/alarm/access-granted.mp3?v=20260716-alarm-intercom",
         )
 
     if code_kind == "duress":
@@ -208,14 +209,14 @@ def use_with_credential(
             self_message=allow_prompt or f"{label} accepts the code. Access allowed.",
             others_message=f"{alert} Duress code used at {house_name}.",
             updated_params={"armedState": "triggered"},
-            sound="sounds/alarm/alarm-triggered.mp3?v=20260716-alarm-voice",
+            sound="sounds/alarm/alarm-triggered.mp3?v=20260716-alarm-intercom",
         )
 
     if code_kind == "authorized":
         return ItemUseResult(
             self_message=allow_prompt or f"{label} recognizes you. Access allowed.",
             others_message=f"{label} recognizes {nickname} at {house_name}.",
-            sound="sounds/alarm/access-granted.mp3?v=20260716-alarm-voice",
+            sound="sounds/alarm/access-granted.mp3?v=20260716-alarm-intercom",
         )
 
     prompt = entry_prompt or "Please wait while the house checks whether someone can let you in."
@@ -225,7 +226,7 @@ def use_with_credential(
         others_message=f"{alert} Visitor: {nickname}. Location: {house_name}.",
         updated_params={"armedState": "triggered"},
         delayed_self_message="The alarm is waiting for an owner or authorized resident to allow or deny entry.",
-        sound="sounds/alarm/alarm-triggered.mp3?v=20260716-alarm-voice",
+        sound="sounds/alarm/alarm-triggered.mp3?v=20260716-alarm-intercom",
     )
 
 

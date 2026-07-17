@@ -59,6 +59,8 @@ Core incoming message effects:
 - `admin_users_list`: user metadata list for role/ban admin flows.
 - `admin_action_result`: success/error for role/user admin mutations.
 - `update_position`: update peer position; may play movement/teleport world sound.
+- Guarded house entry validates immutable signed-in identity plus the configured keypad policy on the server. Blank Enter and a copied display name never bypass that policy. Occupants and owner notification routes are alerted; verified residents enter immediately and verified guests enter after ten seconds.
+- A server background loop occasionally drifts one eligible teleport pad by one safe, unblocked cardinal square and broadcasts the authoritative item position.
 - `location_changed`: reset local room state for the new location, switch the local ambience bed, or add a peer arrival.
   House interiors and their rooms use the same server-owned location flow as city, town, arcade, and offices.
 - `teleport_complete`: play peer teleport landing sound at final tile.

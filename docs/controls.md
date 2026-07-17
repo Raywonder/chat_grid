@@ -56,6 +56,7 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `Enter` or `Space`: Use the focused/current item, doorway, portal, chair, couch, or bed; beds support sitting, then lying down, then getting up when used again. When several items are available, selection starts on the item you last focused or used
 - First use of an unconfigured house alarm opens access enrollment. Press `1` for signed-in account access or `2` for signed-in account plus a private resident keypad code. Code entry is masked; `Enter` saves and `Escape` cancels. Only the owner or an already authorized resident can complete setup.
 - After setup, using a house alarm opens its private keypad. Enter digits, `*`, or `#`; `Backspace` removes the last character; `Enter` submits without speaking the code; blank `Enter` checks the signed-in resident identity; `Escape` cancels.
+- Guarded-house residents can act on an entry alert with `/allow <user>` or `/deny <user>` while inside the protected entry room. Approval keeps the visitor outside for ten seconds, then opens the door and moves them inside; denial leaves them outside.
 - `Shift+J`: Jump through or activate the focused/current portal-style item
 
 ### Audio
