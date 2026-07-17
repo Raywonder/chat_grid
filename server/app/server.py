@@ -221,7 +221,18 @@ AUTH_EXTERNAL_FAILURE_MESSAGE = "We couldn't complete the blind.software sign-in
 def _reaction_sound(action_id: str) -> str:
     """Return the packaged spatial cue for a social action id."""
 
-    return f"/sounds/reactions/{action_id}.mp3"
+    sound_aliases = {
+        "cuddle": "hug",
+        "kiss": "hug",
+        "handshake": "tap",
+        "hold_hands": "user",
+        "blush": "self",
+        "cry": "comfort",
+        "yawn": "sigh",
+        "apologize": "self",
+        "forgive": "heart",
+    }
+    return f"/sounds/reactions/{sound_aliases.get(action_id, action_id)}.mp3"
 
 
 SOCIAL_ACTIONS: dict[str, dict[str, Any]] = {
@@ -230,6 +241,20 @@ SOCIAL_ACTIONS: dict[str, dict[str, Any]] = {
         "sound": "/sounds/reactions/hug.mp3",
         "template": "{actor} hugs {target}.",
         "self_template": "{actor} gives herself a hug.",
+        "requires_target": False,
+    },
+    "cuddle": {
+        "aliases": {"cuddle", "cuddles", "snuggle", "snuggles"},
+        "sound": "/sounds/reactions/hug.mp3",
+        "template": "{actor} cuddles close with {target}.",
+        "self_template": "{actor} curls up for a cuddle.",
+        "requires_target": False,
+    },
+    "kiss": {
+        "aliases": {"kiss", "kisses", "smooch"},
+        "sound": "/sounds/reactions/hug.mp3",
+        "template": "{actor} gives {target} an affectionate kiss.",
+        "self_template": "{actor} blows a kiss.",
         "requires_target": False,
     },
     "tap": {
@@ -276,6 +301,20 @@ SOCIAL_ACTIONS: dict[str, dict[str, Any]] = {
         "sound": "/sounds/reactions/tap.mp3",
         "template": "{actor} fist-bumps {target}.",
         "self_template": "{actor} offers a fist bump.",
+        "requires_target": False,
+    },
+    "handshake": {
+        "aliases": {"handshake", "shake-hands", "shakehands"},
+        "sound": "/sounds/reactions/tap.mp3",
+        "template": "{actor} offers {target} a friendly handshake.",
+        "self_template": "{actor} offers a friendly handshake.",
+        "requires_target": False,
+    },
+    "hold_hands": {
+        "aliases": {"holdhands", "hold-hands", "handhold"},
+        "sound": "/sounds/reactions/user.mp3",
+        "template": "{actor} offers to hold {target}'s hand.",
+        "self_template": "{actor} holds her hands together.",
         "requires_target": False,
     },
     "cheer": {
@@ -339,6 +378,41 @@ SOCIAL_ACTIONS: dict[str, dict[str, Any]] = {
         "sound": "/sounds/reactions/wave_hi.mp3",
         "template": "{actor} dances near {target}.",
         "self_template": "{actor} dances.",
+        "requires_target": False,
+    },
+    "blush": {
+        "aliases": {"blush", "shy"},
+        "sound": "/sounds/reactions/self.mp3",
+        "template": "{actor} blushes at {target}.",
+        "self_template": "{actor} blushes.",
+        "requires_target": False,
+    },
+    "cry": {
+        "aliases": {"cry", "cries", "weep"},
+        "sound": "/sounds/reactions/comfort.mp3",
+        "template": "{actor} cries softly near {target}.",
+        "self_template": "{actor} cries softly.",
+        "requires_target": False,
+    },
+    "yawn": {
+        "aliases": {"yawn", "sleepy"},
+        "sound": "/sounds/reactions/sigh.mp3",
+        "template": "{actor} yawns near {target}.",
+        "self_template": "{actor} yawns.",
+        "requires_target": False,
+    },
+    "apologize": {
+        "aliases": {"apologize", "apology", "sorry"},
+        "sound": "/sounds/reactions/self.mp3",
+        "template": "{actor} apologizes to {target}.",
+        "self_template": "{actor} apologizes.",
+        "requires_target": False,
+    },
+    "forgive": {
+        "aliases": {"forgive", "forgives"},
+        "sound": "/sounds/reactions/heart.mp3",
+        "template": "{actor} forgives {target}.",
+        "self_template": "{actor} chooses forgiveness.",
         "requires_target": False,
     },
     "comfort": {
@@ -7431,6 +7505,14 @@ class SignalingServer:
                 f"{client.nickname} hugs {target.nickname}.",
                 "/sounds/reactions/hug.mp3",
             ),
+            "cuddle": (
+                f"{client.nickname} cuddles close with {target.nickname}.",
+                "/sounds/reactions/hug.mp3",
+            ),
+            "kiss": (
+                f"{client.nickname} gives {target.nickname} an affectionate kiss.",
+                "/sounds/reactions/hug.mp3",
+            ),
             "tap_shoulder": (
                 f"{client.nickname} taps {target.nickname} on the shoulder.",
                 "/sounds/reactions/tap.mp3",
@@ -7450,6 +7532,14 @@ class SignalingServer:
             "fist_bump": (
                 f"{client.nickname} fist-bumps {target.nickname}.",
                 "/sounds/reactions/tap.mp3",
+            ),
+            "handshake": (
+                f"{client.nickname} offers {target.nickname} a friendly handshake.",
+                "/sounds/reactions/tap.mp3",
+            ),
+            "hold_hands": (
+                f"{client.nickname} offers to hold {target.nickname}'s hand.",
+                "/sounds/reactions/user.mp3",
             ),
             "cheer": (
                 f"{client.nickname} cheers for {target.nickname}.",
@@ -7486,6 +7576,26 @@ class SignalingServer:
             "dance": (
                 f"{client.nickname} dances near {target.nickname}.",
                 "/sounds/reactions/wave_hi.mp3",
+            ),
+            "blush": (
+                f"{client.nickname} blushes at {target.nickname}.",
+                "/sounds/reactions/self.mp3",
+            ),
+            "cry": (
+                f"{client.nickname} cries softly near {target.nickname}.",
+                "/sounds/reactions/comfort.mp3",
+            ),
+            "yawn": (
+                f"{client.nickname} yawns near {target.nickname}.",
+                "/sounds/reactions/sigh.mp3",
+            ),
+            "apologize": (
+                f"{client.nickname} apologizes to {target.nickname}.",
+                "/sounds/reactions/self.mp3",
+            ),
+            "forgive": (
+                f"{client.nickname} forgives {target.nickname}.",
+                "/sounds/reactions/heart.mp3",
             ),
             "spin": (
                 f"{client.nickname} spins around near {target.nickname}.",

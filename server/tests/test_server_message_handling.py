@@ -547,13 +547,23 @@ async def test_social_reaction_slash_commands_include_new_actions(
     monkeypatch.setattr(server, "_broadcast_location", fake_broadcast_location)
 
     assert await server._handle_chat_command(sender, "/highfive Dom") is True
+    assert await server._handle_chat_command(sender, "/cuddle Dom") is True
+    assert await server._handle_chat_command(sender, "/blush Dom") is True
     assert await server._handle_chat_command(sender, "/smack Dom") is True
 
-    high_five = _last_packet_of_type(broadcast_payloads[:-1], SocialActionPacket)
-    playful_smack = _last_packet_of_type(broadcast_payloads, SocialActionPacket)
+    social_packets = _packets_of_type(broadcast_payloads, SocialActionPacket)
+    by_action = {packet.actionId: packet for packet in social_packets}
+    high_five = by_action["high_five"]
+    cuddle = by_action["cuddle"]
+    blush = by_action["blush"]
+    playful_smack = by_action["playful_smack"]
     assert high_five.actionId == "high_five"
     assert high_five.message == "Clawdia high-fives Dom."
     assert high_five.sound == "/sounds/reactions/high_five.mp3"
+    assert cuddle.message == "Clawdia cuddles close with Dom."
+    assert cuddle.sound == "/sounds/reactions/hug.mp3"
+    assert blush.message == "Clawdia blushes at Dom."
+    assert blush.sound == "/sounds/reactions/self.mp3"
     assert playful_smack.actionId == "playful_smack"
     assert playful_smack.message == "Clawdia gives Dom a playful smack."
     assert playful_smack.sound == "/sounds/reactions/playful_smack.mp3"

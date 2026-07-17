@@ -83,9 +83,10 @@ export function resolveMainModeCommand(code: string, shiftKey: boolean, ctrlKey 
   if (code === 'KeyC') return shiftKey ? null : 'speakCoordinates';
   if (code === 'KeyV') return shiftKey ? 'calibrateMicrophone' : 'openMicGainEdit';
   if (code === 'Tab') return 'cycleFocusedItem';
-  if (code === 'Enter') return shiftKey ? 'openUserActionMenu' : 'useItem';
+  if (code === 'Enter') return shiftKey ? 'interactItem' : 'useItem';
   if (code === 'Space') return shiftKey ? 'radioRemoteStationPrevious' : 'useItem';
   if (code === 'KeyJ') return shiftKey ? 'describeSurface' : 'interactItem';
+  if (code === 'KeyR') return shiftKey ? 'openUserActionMenu' : null;
   if (code === 'KeyU') return shiftKey ? null : 'speakUsers';
   if (code === 'KeyA') return shiftKey ? null : 'addItem';
   if (code === 'KeyI') return shiftKey ? 'listItems' : 'locateNearestItem';

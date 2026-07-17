@@ -8,6 +8,10 @@
           "description": "A S D F G H J K L semicolon quote. Play white keys (C major scale from C4)."
         },
         {
+          "keys": "MIDI keyboard",
+          "description": "When piano mode opens, Chat Grid automatically requests MIDI access when the browser allows it. Physical notes play the active piano across the 88-key A0-C8 range."
+        },
+        {
           "keys": "Qwerty row",
           "description": "W E T Y U O P right bracket. Play black keys (sharps)."
         },

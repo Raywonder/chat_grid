@@ -290,7 +290,10 @@ export function createAuthController(deps: AuthControllerDeps): {
 
     externalAuthAssertion = '';
     if (message.sessionToken) {
-      void persistHttpOnlySessionCookie(message.sessionToken);
+      // Complete the cookie write before the connection flow can be torn down
+      // or a recovery reload can happen.  A fire-and-forget write could lose
+      // the only resumable session during a quick reconnect.
+      await persistHttpOnlySessionCookie(message.sessionToken);
     }
     if (message.username) {
       authUsername = message.username;

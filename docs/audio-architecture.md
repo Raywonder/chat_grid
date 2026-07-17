@@ -164,6 +164,7 @@ background ambience.
   nearby room sounds audible instead of cutting them off abruptly.
 - User voice and world one-shots, including nearby user footsteps, prefer Web Audio HRTF binaural panning so movement can wrap around the listener with front/back cues.
 - Continuous media and item loops add a quiet parallel reflection path as distance increases. Nearby radios/emitters stay mostly dry and clear; farther sources layer soft early/late reflections behind the direct audio, with darker tone and gentler pan so carried sound feels physical without getting too loud.
+- Enabled TVs may carry through a connected doorway into the adjacent room at a reduced, centered room-to-room level. This is listener-local playback: reconnecting one listener may recover only that listener's TV layer and must not restart or interrupt another listener whose TV audio is already healthy.
 - Stereo panning follows horizontal offset as the fallback when HRTF panning is unavailable.
 - Mono output mode collapses pan to center.
 

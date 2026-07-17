@@ -137,6 +137,7 @@ class CompanionClient:
         nickname: str,
         command_file: Path,
         state_file: Path,
+        session_file: Path,
     ) -> None:
         """Initialize connection and runtime state."""
 
@@ -147,6 +148,7 @@ class CompanionClient:
         self.nickname = nickname
         self.command_file = command_file
         self.state_file = state_file
+        self.session_file = session_file
         self.grid_size = 41
         self.client_id = ""
         self.x = 20
@@ -162,10 +164,54 @@ class CompanionClient:
         self._last_world_activity = time.monotonic()
         self._last_auto_sit_attempt = 0.0
         self._offset = 0
+        self.last_message_receipt: dict[str, Any] = {}
+        self.session_token = self._load_session_token()
+
+    def _load_session_token(self) -> str:
+        """Load the private resumable session token, if one exists."""
+
+        try:
+            return self.session_file.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            return ""
+        except OSError as exc:
+            print(f"companion session read failed: {exc}", flush=True)
+            return ""
+
+    def _save_session_token(self, token: str) -> None:
+        """Persist the session token in a private file for reconnects."""
+
+        self.session_file.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.session_file.with_suffix(self.session_file.suffix + ".tmp")
+        temporary.write_text(token + "\n", encoding="utf-8")
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, self.session_file)
+        os.chmod(self.session_file, 0o600)
+
+    def _clear_session_token(self) -> None:
+        """Remove a revoked/expired token so the next attempt can log in."""
+
+        self.session_token = ""
+        try:
+            self.session_file.unlink()
+        except FileNotFoundError:
+            pass
 
     def _write_state(self, *, connected: bool, detail: str = "") -> None:
         """Atomically publish the companion's current connection and world state."""
 
+        visible_users = [
+            {
+                "id": str(user.get("id") or ""),
+                "nickname": str(user.get("nickname") or ""),
+                "locationId": str(user.get("locationId") or self.location_id),
+                "x": user.get("x"),
+                "y": user.get("y"),
+            }
+            for user in self.users.values()
+            if str(user.get("id") or "") != self.client_id
+        ]
+        visible_users.sort(key=lambda user: (user["nickname"].casefold(), user["id"]))
         state = {
             "connected": connected,
             "detail": detail,
@@ -179,6 +225,8 @@ class CompanionClient:
             "posture": self.posture,
             "seatedItemId": self.seated_item_id,
             "mood": self.mood,
+            "visibleUsers": visible_users,
+            "lastMessageReceipt": self.last_message_receipt,
         }
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.state_file.with_suffix(self.state_file.suffix + ".tmp")
@@ -208,11 +256,16 @@ class CompanionClient:
 
     async def _run_once(self) -> None:
         async with connect(self.url, origin=self.origin, max_size=2_000_000) as ws:
-            await ws.send(
-                _json_packet(
-                    "auth_login", username=self.username, password=self.password
+            if self.session_token:
+                self._auth_attempt = "resume"
+                await ws.send(_json_packet("auth_resume", sessionToken=self.session_token))
+            else:
+                self._auth_attempt = "login"
+                await ws.send(
+                    _json_packet(
+                        "auth_login", username=self.username, password=self.password
+                    )
                 )
-            )
             reader = asyncio.create_task(self._read_messages(ws))
             commander = asyncio.create_task(self._poll_commands(ws))
             done, pending = await asyncio.wait(
@@ -229,7 +282,15 @@ class CompanionClient:
             msg_type = message.get("type")
             if msg_type == "auth_result" and not message.get("ok"):
                 text = str(message.get("message", "")).lower()
-                if "check your details" in text or "invalid" in text:
+                if self._auth_attempt == "resume":
+                    self._clear_session_token()
+                    self._auth_attempt = "login"
+                    await ws.send(
+                        _json_packet(
+                            "auth_login", username=self.username, password=self.password
+                        )
+                    )
+                elif "check your details" in text or "invalid" in text:
                     await ws.send(
                         _json_packet(
                             "auth_register",
@@ -237,6 +298,12 @@ class CompanionClient:
                             password=self.password,
                         )
                     )
+                continue
+            if msg_type == "auth_result" and message.get("ok"):
+                token = str(message.get("sessionToken") or "").strip()
+                if token:
+                    self.session_token = token
+                    self._save_session_token(token)
                 continue
             if msg_type == "welcome":
                 self.client_id = str(message.get("id") or self.client_id)
@@ -274,6 +341,8 @@ class CompanionClient:
                 self.location_id = str(message.get("locationId") or self.location_id)
                 self.x = _clamp_position(message.get("x"), self.x, self.grid_size)
                 self.y = _clamp_position(message.get("y"), self.y, self.grid_size)
+                self.posture = "standing"
+                self.seated_item_id = ""
                 self.items.clear()
                 self.users.clear()
                 self._last_world_activity = time.monotonic()
@@ -334,6 +403,23 @@ class CompanionClient:
                 continue
             if msg_type == "user_left":
                 self.users.pop(str(message.get("id") or ""), None)
+                continue
+            if msg_type in {"chat_message", "direct_message"}:
+                sender_id = str(message.get("senderId") or "")
+                if sender_id == self.client_id:
+                    self.last_message_receipt = {
+                        "status": "delivered",
+                        "type": msg_type,
+                        "message": str(message.get("message") or "")[:500],
+                        "targetNickname": str(message.get("targetNickname") or ""),
+                        "receivedAt": datetime.now(timezone.utc).isoformat(),
+                    }
+                    self._write_state(connected=True, detail="message_delivered")
+                    print(
+                        "message_delivered "
+                        f"type={msg_type} target={self.last_message_receipt['targetNickname']}",
+                        flush=True,
+                    )
                 continue
             if msg_type == "item_action_result":
                 print(
@@ -407,6 +493,34 @@ class CompanionClient:
             if message:
                 await ws.send(_json_packet("chat_message", message=message[:500]))
             return
+        if action in {"dm", "direct_message"}:
+            message = str(command.get("message", "")).strip()
+            target_name = str(
+                command.get("target") or command.get("nickname") or ""
+            ).strip().casefold()
+            target_id = str(command.get("targetId") or "").strip()
+            if not target_id and target_name:
+                for candidate_id, user in self.users.items():
+                    nickname = str(user.get("nickname") or "").strip().casefold()
+                    if nickname == target_name:
+                        target_id = candidate_id
+                        break
+            if message and target_id:
+                await ws.send(
+                    _json_packet(
+                        "direct_message", targetId=target_id, message=message[:500]
+                    )
+                )
+            elif message:
+                self.last_message_receipt = {
+                    "status": "target_unavailable",
+                    "type": "direct_message",
+                    "message": message[:500],
+                    "targetNickname": target_name,
+                    "receivedAt": datetime.now(timezone.utc).isoformat(),
+                }
+                self._write_state(connected=True, detail="message_not_sent")
+            return
         if action == "move":
             dx = int(command.get("dx") or 0)
             dy = int(command.get("dy") or 0)
@@ -437,6 +551,29 @@ class CompanionClient:
             if item_id:
                 self._last_world_activity = time.monotonic()
                 await ws.send(_json_packet("item_use", itemId=item_id))
+            return
+        if action in {"pickup", "take"}:
+            item_id = str(command.get("itemId") or "").strip()
+            if item_id:
+                self._last_world_activity = time.monotonic()
+                await ws.send(_json_packet("item_pickup", itemId=item_id))
+            return
+        if action in {"remote_control", "radio_remote"}:
+            item_id = str(command.get("itemId") or "").strip()
+            control = str(command.get("control") or command.get("remoteAction") or "").strip().lower()
+            if item_id and control in {"station_next", "station_previous", "volume_up", "volume_down"}:
+                self._last_world_activity = time.monotonic()
+                await ws.send(_json_packet("item_remote_control", itemId=item_id, action=control))
+            return
+        if action in {"update", "decorate"}:
+            item_id = str(command.get("itemId") or "").strip()
+            params = command.get("params")
+            if item_id and isinstance(params, dict):
+                self._last_world_activity = time.monotonic()
+                packet = {"type": "item_update", "itemId": item_id, "params": params}
+                if command.get("title") is not None:
+                    packet["title"] = str(command.get("title"))[:80]
+                await ws.send(json.dumps(packet, separators=(",", ":")))
             return
         if action in {"go", "location", "change_location"}:
             location_id = str(
@@ -479,6 +616,16 @@ def parse_args() -> argparse.Namespace:
             os.getenv("CHGRID_COMPANION_STATE_FILE", str(DEFAULT_STATE_FILE))
         ),
     )
+    parser.add_argument(
+        "--session-file",
+        type=Path,
+        default=Path(
+            os.getenv(
+                "CHGRID_COMPANION_SESSION_FILE",
+                "runtime/companion.session",
+            )
+        ),
+    )
     return parser.parse_args()
 
 
@@ -497,6 +644,7 @@ def main() -> None:
         nickname=str(args.nickname),
         command_file=args.command_file,
         state_file=args.state_file,
+        session_file=args.session_file,
     )
     print(f"companion starting at {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
     asyncio.run(client.run_forever())

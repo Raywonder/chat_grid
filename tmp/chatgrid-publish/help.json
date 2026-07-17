@@ -5,7 +5,11 @@
       "items": [
         {
           "keys": "Arrow Keys",
-          "description": "Move on the grid"
+          "description": "Move on the grid; the status reader narrates direction, location, surface, people, and items like interactive fiction"
+        },
+        {
+          "keys": "G / Ctrl+G / Shift+G",
+          "description": "Open the location list; use arrows or first letters, then Enter to travel"
         },
         {
           "keys": "Shift+K / Applications / Shift+F10",
@@ -14,6 +18,10 @@
         {
           "keys": "?",
           "description": "Open the main help viewer"
+        },
+        {
+          "keys": "Read guide button",
+          "description": "Read the startup guide from the app status reader with ArrowUp, ArrowDown, Home, End, Enter, Space, and Escape"
         },
         {
           "keys": "C",
@@ -38,19 +46,27 @@
         },
         {
           "keys": "Shift+L",
-          "description": "List users; Enter teleports to that user, left/right arrow adjusts volume"
+          "description": "List users with room/location details; Enter teleports to same-room users, left/right arrow adjusts volume"
+        },
+        {
+          "keys": "Shift+Enter",
+          "description": "Open actions toward the selected, focused, or nearest user, including hug, focus, tap, wave, high-five, fist bump, cheer, clap, laugh, smile, wink, nod, dance, comfort, poke, boop, playful smack, listen, hand, walk, teleport, and direct message options"
         },
         {
           "keys": "U",
           "description": "Speak connected users"
         },
         {
-          "keys": "Slash",
-          "description": "Start chat"
+          "keys": "Slash / H",
+          "description": "Start room chat"
+        },
+        {
+          "keys": "Ctrl+M",
+          "description": "Direct message the selected user in the user list, or the nearest user when no list user is focused; messages queue during reconnect and send when possible"
         },
         {
           "keys": "Slash commands",
-          "description": "In chat, use /me <action>, /up for uptime, and /version for server version"
+          "description": "In chat, use /me <action>, /mood <mood> to share how you feel, /up for uptime, /version for server version, /go <location> to travel, and social commands like /hug, /hi, /tap, /highfive, /fistbump, /cheer, /clap, /laugh, /smile, /wink, /nod, /bow, /dance, /comfort, /pat, /poke, /boop, /salute, /thumbsup, /heart, /sparkle, /celebrate, /tease, /smack, /whisper, and /listen. Furniture is manually controlled during normal use; after two hours away, the Grid may choose sensible nearby available seating or a bed based on mood and local time."
         },
         {
           "keys": "Shift+Z",
@@ -58,11 +74,36 @@
         },
         {
           "keys": "Comma / Period",
-          "description": "Previous/next message"
+          "description": "Previous/next message, or previous/next station while holding a radio remote"
         },
         {
           "keys": "Less Than / Greater Than",
           "description": "First/last message"
+        }
+      ]
+    },
+    {
+      "title": "Travel and Places",
+      "items": [
+        {
+          "keys": "/go <location>",
+          "description": "Travel to another server-defined place, such as /go city, /go town, /go arcade, /go offices, or /go houses"
+        },
+        {
+          "keys": "G / Ctrl+G / Shift+G",
+          "description": "Open the location list without typing a slash command"
+        },
+        {
+          "keys": "Location names",
+          "description": "Seeded places hold different kinds of items: stations in the city, apps in town, games in the arcade, work tools in offices, and full room-based houses"
+        },
+        {
+          "keys": "Enter on users/items",
+          "description": "User and item list selections can teleport you directly to that target in the current place"
+        },
+        {
+          "keys": "Movement narration",
+          "description": "Walking, portals, location travel, nearby user movement, and cross-room user locations are spoken as short room-style updates"
         }
       ]
     },
@@ -80,6 +121,10 @@
         {
           "keys": "A",
           "description": "Add item"
+        },
+        {
+          "keys": "House keepers",
+          "description": "Opt-in helper agents can be placed in houses; Enter checks the current room and Shift+Enter can sweep the house for supported in-world repair targets such as radios"
         },
         {
           "keys": "O",
@@ -103,11 +148,69 @@
         },
         {
           "keys": "Enter",
-          "description": "Use item"
+          "description": "Use the focused or current item, doorway, or portal; multi-item selection starts on the item you last focused or used"
+        },
+        {
+          "keys": "Space",
+          "description": "Use the focused or current item, doorway, or portal; multi-item selection starts on the item you last focused or used"
         },
         {
           "keys": "Shift+Enter",
-          "description": "Use the selected item's secondary action when it has one"
+          "description": "Open contextual user actions such as hug, focus, tap, wave, high-five, fist bump, cheer, clap, laugh, smile, wink, nod, dance, comfort, poke, boop, playful smack, listen, hand, walk, teleport, or direct message"
+        },
+        {
+          "keys": "Shift+J",
+          "description": "Jump through or activate the focused/current portal-style item"
+        }
+      ]
+    },
+    {
+      "title": "Item Types",
+      "items": [
+        {
+          "keys": "Radio stations",
+          "description": "Use toggles radio power; Shift+Enter or a carried remote turns the station knob on preset radios, with short static IDs, crossfade, and radio-style EQ"
+        },
+        {
+          "keys": "Interactive links",
+          "description": "Use speaks or opens app, game, site, station, service, portal, house, room, door, and tool details such as AAAStreamer, blind.software, tCast, VoiceLink, or Moonstep Runner"
+        },
+        {
+          "keys": "Houses and doors",
+          "description": "Add house items for user-built homes; door-style links can enter rooms and report locked or unlocked status"
+        },
+        {
+          "keys": "Dice / wheel / clock",
+          "description": "Use rolls dice, spins a wheel, or announces the clock from that item's spatial position. Clock items can also auto-announce from every minute up to hourly."
+        },
+        {
+          "keys": "Widget / piano",
+          "description": "Widgets can emit configured sounds; pianos open a playable instrument mode"
+        },
+        {
+          "keys": "Quiet items",
+          "description": "Some configured items may keep working on their square while staying out of normal nearby, list, and locate discovery"
+        }
+      ]
+    },
+    {
+      "title": "Our Version",
+      "items": [
+        {
+          "keys": "Raywonder house",
+          "description": "The houses location includes a Raywonder front door, entry hall, living room, private studio with a boombox, kitchen, and locked private doors. Knock at the studio door, and someone inside can use /allow name to let you in"
+        },
+        {
+          "keys": "TappedIn tools",
+          "description": "Interactive links can point to TappedIn projects such as tCast, VoiceLink, blind.software, Moonstep Runner, and other approved tools or games"
+        },
+        {
+          "keys": "AAAStreamer and radio",
+          "description": "Chat Grid Radio holds SoulFoodRadio, DivineCreations, Chris Mix Radio, StreamMadness, VoiceLink-popular streams, and ACB Media presets in one tunable radio item"
+        },
+        {
+          "keys": "Moonstep Runner and games",
+          "description": "The arcade can hold playable game links and portal-style items alongside the original grid controls"
         }
       ]
     },
@@ -120,11 +223,11 @@
         },
         {
           "keys": "M",
-          "description": "Mute/unmute yourself"
+          "description": "Mute/unmute yourself; 8 and Shift+8 also toggle mute"
         },
         {
           "keys": "Shift+M",
-          "description": "Toggle stereo/mono output"
+          "description": "Toggle stereo/mono output; 7 and Shift+7 also toggle stereo/mono"
         },
         {
           "keys": "! (Shift+1)",
@@ -132,19 +235,27 @@
         },
         {
           "keys": "1",
-          "description": "Toggle voice layer"
+          "description": "Toggle voice layer; 9 and Shift+9 also toggle voice"
         },
         {
           "keys": "2",
-          "description": "Toggle item sounds layer"
+          "description": "Toggle item sounds layer; Shift+2 also toggles item sounds"
         },
         {
           "keys": "3",
-          "description": "Toggle media layer"
+          "description": "Toggle media layer; Shift+3 also toggles media"
         },
         {
           "keys": "4",
-          "description": "Toggle world layer"
+          "description": "Toggle world layer; Shift+4 also toggles world sounds"
+        },
+        {
+          "keys": "5 or Shift+5",
+          "description": "Cycle TTS announcements between full, alert sounds only, and required announcements only"
+        },
+        {
+          "keys": "6 or Shift+6",
+          "description": "Toggle optional nearby item beacons"
         },
         {
           "keys": "E",
@@ -165,6 +276,39 @@
         {
           "keys": "Shift+V",
           "description": "Microphone calibration"
+        }
+      ]
+    },
+    {
+      "title": "Radio and Media",
+      "items": [
+        {
+          "keys": "3",
+          "description": "Toggle the media layer for radio and other item-based media playback"
+        },
+        {
+          "keys": "Enter on radio",
+          "description": "Turn the selected radio station on or off"
+        },
+        {
+          "keys": "Shift+Enter on radio",
+          "description": "Tune preset radios to the next station with a station-name static stinger, or hear now-playing information on single-station radios"
+        },
+        {
+          "keys": "Comma / Period with radio remote",
+          "description": "Tune connected house radios outside the relaxation room to the previous or next station while the radio remote is in your hand; Ctrl+Comma, Ctrl+Period, Ctrl+Shift+Comma, and Ctrl+Shift+Period also work"
+        },
+        {
+          "keys": "Ctrl+Shift+Up / Down with radio remote",
+          "description": "Raise or lower connected house radio volume while the radio remote is in your hand; Ctrl+Shift+U and Ctrl+Shift+D also work"
+        },
+        {
+          "keys": "Linked station speakers",
+          "description": "Grouped radio items can share a primary source so sub, mid, high, or high-low-bass speakers stay synchronized; radio tone shifts low, mid, or high by distance and facing"
+        },
+        {
+          "keys": "AAAStreamer stations",
+          "description": "Supported public AAAStreamer station pages can be resolved by the server and played through the same spatial media layer"
         }
       ]
     },
@@ -240,6 +384,14 @@
         {
           "keys": "? / Escape",
           "description": "Open piano help or exit piano mode"
+        },
+        {
+          "keys": "MIDI notes",
+          "description": "Physical MIDI note-on and note-off play the active piano item and broadcast the notes"
+        },
+        {
+          "keys": "MIDI auto-enable",
+          "description": "Opening a piano item automatically requests MIDI access when the browser allows it; the Enable MIDI button appears there as the manual fallback"
         }
       ]
     },

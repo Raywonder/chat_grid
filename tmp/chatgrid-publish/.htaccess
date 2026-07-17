@@ -7,4 +7,9 @@
     Header set Pragma "no-cache"
     Header set Expires "0"
   </FilesMatch>
+  <FilesMatch "\.(json|ogg|mp3|wav|m4a|flac)$">
+    Header set Cache-Control "no-store, no-cache, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
 </IfModule>

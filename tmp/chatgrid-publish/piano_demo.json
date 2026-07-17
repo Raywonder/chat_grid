@@ -5,10 +5,10 @@
       "meta": {
         "instrument": "piano",
         "voiceMode": "poly",
-        "attack": 15,
-        "decay": 45,
-        "release": 35,
-        "brightness": 55,
+        "attack": 3,
+        "decay": 55,
+        "release": 45,
+        "brightness": 68,
         "emitRange": 15,
         "recordingLengthMs": 17394
       },

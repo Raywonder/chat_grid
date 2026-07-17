@@ -58,7 +58,7 @@
         },
         {
           "keys": "Shift+Enter",
-          "description": "Open actions toward the selected, focused, or nearest user, including hug, focus, tap, wave, high-five, fist bump, cheer, clap, laugh, smile, wink, nod, dance, comfort, poke, boop, playful smack, listen, hand, walk, teleport, and direct message options"
+          "description": "Open actions toward the selected, focused, or nearest user, including hug, cuddle, kiss, focus, tap, wave, high-five, fist bump, handshake, hold hands, cheer, clap, laugh, smile, wink, nod, blush, cry, yawn, apologize, forgive, dance, comfort, poke, boop, playful smack, listen, hand, walk, teleport, and direct message options"
         },
         {
           "keys": "U",
@@ -74,7 +74,7 @@
         },
         {
           "keys": "Slash commands",
-          "description": "In chat, use /me <action>, /mood <mood> to share how you feel, /up for uptime, /version for server version, /go <location> to travel, and social commands like /hug, /hi, /tap, /highfive, /fistbump, /cheer, /clap, /laugh, /smile, /wink, /nod, /bow, /dance, /comfort, /pat, /poke, /boop, /salute, /thumbsup, /heart, /sparkle, /celebrate, /tease, /smack, /whisper, and /listen. Furniture is manually controlled during normal use; after two hours away, the Grid may choose sensible nearby available seating or a bed based on mood and local time."
+          "description": "In chat, use /me <action>, /mood <mood> to share how you feel, /up for uptime, /version for server version, /go <location> to travel, and social commands like /hug, /hi, /tap, /cuddle, /kiss, /handshake, /holdhands, /highfive, /fistbump, /cheer, /clap, /laugh, /smile, /wink, /nod, /blush, /cry, /yawn, /apologize, /forgive, /bow, /dance, /comfort, /pat, /poke, /boop, /salute, /thumbsup, /heart, /sparkle, /celebrate, /tease, /smack, /whisper, and /listen. Furniture is manually controlled during normal use; after two hours away, the Grid may choose sensible nearby available seating or a bed based on mood and local time."
         },
         {
           "keys": "Shift+Z",
@@ -164,7 +164,7 @@
         },
         {
           "keys": "Shift+Enter",
-          "description": "Open contextual user actions such as hug, focus, tap, wave, high-five, fist bump, cheer, clap, laugh, smile, wink, nod, dance, comfort, poke, boop, playful smack, listen, hand, walk, teleport, or direct message"
+          "description": "Open contextual user actions such as hug, cuddle, kiss, focus, tap, wave, high-five, fist bump, handshake, hold hands, cheer, clap, laugh, smile, wink, nod, blush, cry, yawn, apologize, forgive, dance, comfort, poke, boop, playful smack, listen, hand, walk, teleport, or direct message"
         },
         {
           "keys": "Shift+J",

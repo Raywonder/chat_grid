@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chat Grid</title>
-    <script type="module" crossorigin src="/chatgrid/assets/index-s1hvG3Y1.js"></script>
-    <link rel="stylesheet" crossorigin href="/chatgrid/assets/index-CL73dsE3.css">
+    <script type="module" crossorigin src="/chatgrid/assets/index-Co-7RMqO.js"></script>
+    <link rel="stylesheet" crossorigin href="/chatgrid/assets/index-BczFvhnY.css">
   </head>
   <body>
     <main class="app">
@@ -28,13 +28,17 @@
         <button id="settingsButton">Audio setup</button>
         <button id="disconnectButton" class="hidden">Disconnect</button>
         <button id="focusGridButton" class="hidden" aria-controls="gameCanvas">Chat Grid</button>
+        <button id="midiButton" class="hidden" type="button" hidden>Enable MIDI</button>
       </div>
       <div id="deviceSummary">
         <p id="audioInputCurrent" class="hidden"></p>
         <p id="audioOutputCurrent" class="hidden"></p>
       </div>
       <section id="joinGuide" class="join-guide" aria-labelledby="joinGuideTitle">
-        <h2 id="joinGuideTitle">Join the grid</h2>
+        <div class="join-guide-header">
+          <h2 id="joinGuideTitle">Join the grid</h2>
+          <button id="readGuideButton" type="button" aria-controls="status">Read guide</button>
+        </div>
         <div class="join-guide-grid">
           <p><b>Move:</b> arrow keys walk square by square with positional footsteps.</p>
           <p><b>Chat:</b> press / to type, then Enter to send to everyone on the grid.</p>
@@ -48,27 +52,50 @@
         <p><b>People</b> <span id="gridPeople">--</span></p>
         <p><b>Items</b> <span id="gridItems">--</span></p>
         <p><b>Here</b> <span id="gridHere">--</span></p>
+        <nav class="user-navigation" aria-label="User navigation">
+          <section id="updatesSection" class="updates-section">
+            <h2>World updates</h2>
+            <button id="updatesToggle" type="button" aria-expanded="false" aria-controls="updatesPanel">
+              Read world updates
+            </button>
+            <div id="updatesPanel" class="hidden" hidden></div>
+          </section>
+        </nav>
       </section>
       <canvas
         id="gameCanvas"
         width="600"
         height="600"
         tabindex="0"
+        role="application"
+        aria-roledescription="interactive audio world"
         class="hidden"
         aria-label="Chat Grid, press question mark for help."
       ></canvas>
+      <section
+        id="interactiveItemPanel"
+        class="interactive-item-panel hidden"
+        aria-labelledby="interactiveItemTitle"
+      >
+        <div class="interactive-item-toolbar">
+          <h2 id="interactiveItemTitle">Interactive item</h2>
+          <div class="interactive-item-actions">
+            <a id="interactiveItemOpenLink" href="#" target="_blank" rel="noopener noreferrer">Open</a>
+            <button id="interactiveItemCloseButton" type="button">Close</button>
+          </div>
+        </div>
+        <iframe
+          id="interactiveItemFrame"
+          title="Interactive item"
+          allow="autoplay; fullscreen; gamepad; microphone; midi"
+          sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-pointer-lock allow-downloads"
+        ></iframe>
+      </section>
       <footer id="appFooter">
         <section id="helpSection" class="updates-section hidden">
           <h2>Help</h2>
           <button id="helpToggle" type="button" aria-expanded="false" aria-controls="instructions">Show help</button>
           <div id="instructions" class="hidden" hidden></div>
-        </section>
-        <section id="updatesSection" class="updates-section">
-          <h2>Latest Updates</h2>
-          <button id="updatesToggle" type="button" aria-expanded="false" aria-controls="updatesPanel">
-            Show updates
-          </button>
-          <div id="updatesPanel" class="hidden" hidden></div>
         </section>
         <small id="appVersion">Raywonder/TappedIn version. Original Chat Grid by Jage. Version</small>
         <small id="appGithubLinkWrap">
@@ -80,11 +107,32 @@
 
       <div id="settingsModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
         <div class="modal-content">
-          <h2 id="modalTitle">Audio Settings</h2>
+          <h2 id="modalTitle">App settings</h2>
           <label for="audioInputSelect">Microphone (Input)</label>
           <select id="audioInputSelect"></select>
           <label for="audioOutputSelect">Speakers (Output)</label>
           <select id="audioOutputSelect"></select>
+          <label for="announcementModeSelect">TTS announcements</label>
+          <select id="announcementModeSelect">
+            <option value="full">Speak announcements and play alert sounds</option>
+            <option value="sounds_only">Alert sounds only</option>
+            <option value="required_only">Required announcements only</option>
+          </select>
+          <label class="checkbox-row" for="itemBeaconsToggle">
+            <input id="itemBeaconsToggle" type="checkbox" />
+            Item beacons near me
+          </label>
+          <fieldset>
+            <legend>ntfy notifications</legend>
+            <label class="checkbox-row" for="ntfyNotificationsToggle">
+              <input id="ntfyNotificationsToggle" type="checkbox" disabled />
+              Send my Chat Grid identity notifications through ntfy
+            </label>
+            <p id="ntfyNotificationsStatus" class="auth-hint" aria-live="polite">Sign in and connect to manage ntfy notifications.</p>
+            <p><a id="ntfySubscriptionLink" class="hidden" target="_blank" rel="noopener">Open my private ntfy subscription</a></p>
+            <button id="rotateNtfyTopicButton" class="hidden" type="button">Replace private ntfy topic</button>
+            <p class="auth-hint">Keep the subscription link private. The same Chat Grid identity settings can be used by web, Windows, macOS, and iOS clients.</p>
+          </fieldset>
           <button id="closeSettingsButton">Close</button>
         </div>
       </div>

@@ -201,6 +201,21 @@ export class ItemEmitRuntime {
     this.emitStartFailureCount.clear();
   }
 
+  /** Restart only this listener's active item layers that paused, ended, or errored. */
+  recoverActivePlayback(): void {
+    for (const [itemId, output] of this.outputs) {
+      const element = output.element;
+      if (element.error) {
+        try {
+          element.load();
+        } catch {
+          // The existing bounded retry path will try again after its cooldown.
+        }
+      }
+      this.tryStartEmitPlayback(itemId, element);
+    }
+  }
+
   async setLayerEnabled(
     enabled: boolean,
     items: Iterable<WorldItem>,

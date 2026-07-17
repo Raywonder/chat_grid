@@ -525,11 +525,15 @@ let commandPaletteIndex = 0;
 let commandPaletteReturnMode: GameMode = 'normal';
 type UserActionId =
   | 'hug'
+  | 'cuddle'
+  | 'kiss'
   | 'announce_focus'
   | 'tap_shoulder'
   | 'wave'
   | 'high_five'
   | 'fist_bump'
+  | 'handshake'
+  | 'hold_hands'
   | 'cheer'
   | 'clap'
   | 'laugh'
@@ -545,6 +549,11 @@ type UserActionId =
   | 'facepalm'
   | 'gasp'
   | 'sigh'
+  | 'blush'
+  | 'cry'
+  | 'yawn'
+  | 'apologize'
+  | 'forgive'
   | 'comfort'
   | 'pat_back'
   | 'poke'
@@ -578,6 +587,8 @@ const USER_ACTION_OPTIONS: UserActionOption[] = [
     label: 'Hug',
     tooltip: 'Give this user a spatial hug reaction.',
   },
+  { id: 'cuddle', label: 'Cuddle', tooltip: 'Cuddle close with this user.' },
+  { id: 'kiss', label: 'Kiss', tooltip: 'Give this user an affectionate kiss.' },
   {
     id: 'announce_focus',
     label: 'Announce focus',
@@ -591,6 +602,8 @@ const USER_ACTION_OPTIONS: UserActionOption[] = [
   { id: 'wave', label: 'Wave', tooltip: 'Wave hello to this user.' },
   { id: 'high_five', label: 'High-five', tooltip: 'Give this user a quick high-five.' },
   { id: 'fist_bump', label: 'Fist bump', tooltip: 'Give this user a small fist bump.' },
+  { id: 'handshake', label: 'Handshake', tooltip: 'Offer this user a friendly handshake.' },
+  { id: 'hold_hands', label: 'Hold hands', tooltip: 'Offer to hold this user’s hand.' },
   { id: 'cheer', label: 'Cheer', tooltip: 'Cheer this user on.' },
   { id: 'clap', label: 'Clap', tooltip: 'Applaud this user.' },
   { id: 'laugh', label: 'Laugh', tooltip: 'Laugh with this user.' },
@@ -606,6 +619,11 @@ const USER_ACTION_OPTIONS: UserActionOption[] = [
   { id: 'facepalm', label: 'Facepalm', tooltip: 'React with a facepalm.' },
   { id: 'gasp', label: 'Gasp', tooltip: 'React with surprise.' },
   { id: 'sigh', label: 'Sigh', tooltip: 'Let out a small sigh.' },
+  { id: 'blush', label: 'Blush', tooltip: 'React with a shy blush.' },
+  { id: 'cry', label: 'Cry', tooltip: 'React with tears or let someone comfort you.' },
+  { id: 'yawn', label: 'Yawn', tooltip: 'React with a sleepy yawn.' },
+  { id: 'apologize', label: 'Apologize', tooltip: 'Offer this user a sincere apology.' },
+  { id: 'forgive', label: 'Forgive', tooltip: 'Offer this user forgiveness.' },
   { id: 'comfort', label: 'Comfort', tooltip: 'Offer quiet comfort.' },
   { id: 'pat_back', label: 'Pat back', tooltip: 'Pat this user on the back.' },
   { id: 'poke', label: 'Poke', tooltip: 'Poke this user playfully.' },
@@ -654,11 +672,15 @@ const USER_ACTION_OPTIONS: UserActionOption[] = [
   },
 ];
 const DYNAMIC_USER_ACTION_IDS: UserActionId[] = [
+  'cuddle',
+  'kiss',
   'announce_focus',
   'tap_shoulder',
   'wave',
   'high_five',
   'fist_bump',
+  'handshake',
+  'hold_hands',
   'cheer',
   'clap',
   'laugh',
@@ -669,6 +691,11 @@ const DYNAMIC_USER_ACTION_IDS: UserActionId[] = [
   'dance',
   'shrug',
   'gasp',
+  'blush',
+  'cry',
+  'yawn',
+  'apologize',
+  'forgive',
   'comfort',
   'pat_back',
   'poke',
@@ -1483,6 +1510,7 @@ async function refreshAudioSubscriptionsForListeners(
   try {
     if (force) {
       radioRuntime.recoverActivePlayback();
+      itemEmitRuntime.recoverActivePlayback();
     }
     await radioRuntime.sync(state.items.values(), listenerPositions);
     tvScreenRuntime.sync(state.items.values(), anchorListener);
@@ -2123,11 +2151,11 @@ function getNearestSeatableItem(): WorldItem | null {
 }
 
 /** Returns the current local listener position, including seated head-offset controls. */
-function getListenerPosition(): { x: number; y: number } {
+function getListenerPosition(): { x: number; y: number; locationId: string } {
   if (state.player.posture === 'standing') {
-    return { x: state.player.x, y: state.player.y };
+    return { x: state.player.x, y: state.player.y, locationId: currentLocationId };
   }
-  return { x: state.player.x + state.player.seatedOffset, y: state.player.y };
+  return { x: state.player.x + state.player.seatedOffset, y: state.player.y, locationId: currentLocationId };
 }
 
 /** Returns all items currently carried by the local player. */

@@ -22,4 +22,9 @@ describe('conversation shortcuts', () => {
     expect(resolveMainModeCommand('KeyJ', false, false)).toBe('interactItem');
     expect(resolveMainModeCommand('KeyJ', true, false)).toBe('describeSurface');
   });
+
+  it('assigns shifted Enter to object interaction and shifted R to user actions', () => {
+    expect(resolveMainModeCommand('Enter', true, false)).toBe('interactItem');
+    expect(resolveMainModeCommand('KeyR', true, false)).toBe('openUserActionMenu');
+  });
 });

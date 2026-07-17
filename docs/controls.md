@@ -18,14 +18,14 @@ When you join the grid, the page also shows a compact dashboard with your curren
 ### Users, Nickname, Chat
 - `L`: Locate nearest user
 - `Shift+L`: List users alphabetically; `Enter` teleports to selected user; `ArrowLeft`/`ArrowRight` adjust selected user volume
-- `Shift+Enter`: Open actions toward the selected, focused, or nearest user, including hug, focus, tap, hand, walk, teleport, and direct message options. `Enter` runs the highlighted action; `Space` lets the system pick a safe dynamic action such as announcing focus or tapping a shoulder
+- `Shift+R`: Open reactions and actions toward the selected, focused, or nearest user, including hug, focus, tap, hand, walk, teleport, and direct message options. `Enter` runs the highlighted action; `Space` lets the system pick a safe dynamic action such as announcing focus or tapping a shoulder
 - `U`: Speak connected users
 - `N`: Edit nickname
 - `/`: Start chat
 - In chat, commands are supported when `/` is the first character:
   - `/me <action>`: Send action text without `name:`
   - `/hug [user]`, `/hi [user]`, `/self`, and `/user [name]`: Send social reactions, including self-reactions
-  - `/tap <user>`, `/chat <user>`, `/highfive [user]`, `/fistbump [user]`, `/cheer [user]`, `/clap [user]`, `/laugh [user]`, `/smile [user]`, `/wink [user]`, `/nod [user]`, `/bow [user]`, `/dance [user]`, `/comfort [user]`, `/pat <user>`, `/poke <user>`, `/boop <user>`, `/salute [user]`, `/thumbsup [user]`, `/heart [user]`, `/sparkle [user]`, `/celebrate [user]`, `/tease <user>`, `/smack <user>`, `/whisper <user>`, and `/listen [user]`: Send more human social reactions. Physical-comedy actions such as smack are playful in-world reactions, not moderation or harm.
+  - `/tap <user>`, `/chat <user>`, `/cuddle [user]`, `/kiss [user]`, `/handshake [user]`, `/holdhands [user]`, `/highfive [user]`, `/fistbump [user]`, `/cheer [user]`, `/clap [user]`, `/laugh [user]`, `/smile [user]`, `/wink [user]`, `/nod [user]`, `/blush [user]`, `/cry [user]`, `/yawn [user]`, `/apologize [user]`, `/forgive [user]`, `/bow [user]`, `/dance [user]`, `/comfort [user]`, `/pat <user>`, `/poke [user]`, `/boop [user]`, `/salute [user]`, `/thumbsup [user]`, `/heart [user]`, `/sparkle [user]`, `/celebrate [user]`, `/tease <user>`, `/smack <user>`, `/whisper <user>`, and `/listen [user]`: Send more human social reactions. Physical-comedy actions such as smack are playful in-world reactions, not moderation or harm.
   - `/walkto <user>`: Move to a nearby square beside a user
   - `/teleportto <user>` or `/join <user>`: Teleport to a user's square
   - `/up`: Show server uptime (self only)
@@ -54,6 +54,7 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `Z`: Item management menu (delete/transfer when permitted)
 - `Space` in item management menu: Read tooltip/help for the selected action
 - `Enter` or `Space`: Use the focused/current item, doorway, portal, chair, couch, or bed; beds support sitting, then lying down, then getting up when used again. When several items are available, selection starts on the item you last focused or used
+- `Shift+Enter`: Perform the focused/current physical object interaction, such as taking an item from a surface, repairing a damaged object, or moving a placed object off its surface.
 - First use of an unconfigured house alarm opens access enrollment. Press `1` for signed-in account access or `2` for signed-in account plus a private resident keypad code. Code entry is masked; `Enter` saves and `Escape` cancels. Only the owner or an already authorized resident can complete setup.
 - After setup, using a house alarm opens its private keypad. Enter digits, `*`, or `#`; `Backspace` removes the last character; `Enter` submits without speaking the code; blank `Enter` checks the signed-in resident identity; `Escape` cancels.
 - Guarded-house residents can act on an entry alert with `/allow <user>` or `/deny <user>` while inside the protected entry room. Approval keeps the visitor outside for ten seconds, then opens the door and moves them inside; denial leaves them outside.

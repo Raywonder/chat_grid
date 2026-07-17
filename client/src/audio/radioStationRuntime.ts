@@ -277,6 +277,12 @@ type RadioSpatialConfig = {
   facingDeg: number;
 };
 
+type ListenerPosition = {
+  x: number;
+  y: number;
+  locationId?: string;
+};
+
 const SUBSCRIBE_PRELOAD_SQUARES = 5;
 const UNSUBSCRIBE_HYSTERESIS_SQUARES = 8;
 const STREAM_PLAY_RETRY_MS = 5000;
@@ -421,7 +427,7 @@ export class RadioStationRuntime {
   private readonly nextSharedStartAtMs = new Map<string, number>();
   private readonly sharedStartFailureCount = new Map<string, number>();
   private layerEnabled = true;
-  private listenerPositions: Array<{ x: number; y: number }> = [];
+  private listenerPositions: ListenerPosition[] = [];
 
   constructor(
     private readonly audio: AudioEngine,
@@ -471,7 +477,7 @@ export class RadioStationRuntime {
   async setLayerEnabled(
     enabled: boolean,
     items: Iterable<WorldItem>,
-    listenerPosition: { x: number; y: number } | null = null,
+    listenerPosition: ListenerPosition | null = null,
   ): Promise<void> {
     this.layerEnabled = enabled;
     this.listenerPositions = listenerPosition ? [{ ...listenerPosition }] : [];
@@ -484,7 +490,7 @@ export class RadioStationRuntime {
 
   async sync(
     items: Iterable<WorldItem>,
-    listenerPositions: Array<{ x: number; y: number }> | { x: number; y: number } | null = null,
+    listenerPositions: ListenerPosition[] | ListenerPosition | null = null,
   ): Promise<void> {
     if (!this.layerEnabled) {
       this.cleanupAll();
@@ -504,7 +510,7 @@ export class RadioStationRuntime {
       const effective = this.resolveEffectiveRadioItem(item, itemList);
       this.persistRadioResumeState(item, effective);
       this.playStateChangeCue(item, effective);
-      if (!this.shouldKeepRuntime(item, effective, listeners, this.itemRadioOutputs.has(item.id))) {
+      if (!this.shouldKeepRuntime(item, effective, listeners, this.itemRadioOutputs.has(item.id), itemList)) {
         this.cleanup(item.id, effective.enabled ? 1200 : 300);
         continue;
       }
@@ -517,7 +523,7 @@ export class RadioStationRuntime {
     }
   }
 
-  updateSpatialAudio(items: Map<string, WorldItem>, playerPosition: { x: number; y: number }): void {
+  updateSpatialAudio(items: Map<string, WorldItem>, playerPosition: ListenerPosition): void {
     if (!this.layerEnabled) return;
     const audioCtx = this.audio.context;
     if (!audioCtx) return;
@@ -544,15 +550,19 @@ export class RadioStationRuntime {
         this.tryStartSharedPlayback(shared);
       }
       const spatialConfig = this.getSpatialConfig(item);
+      const inAdjacentRoom = this.isAdjacentRoomTv(item, playerPosition, items.values());
       const dx = item.x - playerPosition.x;
       const dy = item.y - playerPosition.y;
       const range = Math.max(1, spatialConfig.range || HEARING_RADIUS);
       this.applyRadioBodyTone(output, audioCtx, this.resolveRadioToneProfile(dx, dy, range, spatialConfig));
       const mix = resolveSpatialMix({
-        dx,
-        dy,
+        // Room-to-room TV audio has no trustworthy shared coordinates. Keep it
+        // centered and quieter rather than inventing a direction from unrelated
+        // room-local grids.
+        dx: inAdjacentRoom ? 0 : dx,
+        dy: inAdjacentRoom ? Math.min(range, 4) : dy,
         range,
-        baseGain: normalizedVolume,
+        baseGain: normalizedVolume * (inAdjacentRoom ? 0.42 : 1),
         nearFieldDistance: 1,
         nearFieldGain: 1,
         nearFieldCenterPan: true,
@@ -1118,8 +1128,9 @@ export class RadioStationRuntime {
   private shouldKeepRuntime(
     item: WorldItem,
     effective: EffectiveRadioItem,
-    listenerPositions: Array<{ x: number; y: number }>,
+    listenerPositions: ListenerPosition[],
     currentlyActive: boolean,
+    items: Iterable<WorldItem>,
   ): boolean {
     if (!effective.streamUrl || !effective.enabled || listenerPositions.length === 0) {
       return false;
@@ -1128,8 +1139,35 @@ export class RadioStationRuntime {
     const baseRange = Math.max(1, spatialConfig.range || HEARING_RADIUS);
     const audibleRange = baseRange * 2.2;
     const threshold = audibleRange + (currentlyActive ? UNSUBSCRIBE_HYSTERESIS_SQUARES : SUBSCRIBE_PRELOAD_SQUARES);
-    return listenerPositions.some((listenerPosition) =>
-      Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold,
-    );
+    return listenerPositions.some((listenerPosition) => {
+      if (this.isAdjacentRoomTv(item, listenerPosition, items)) return true;
+      if (item.locationId && listenerPosition.locationId && item.locationId !== listenerPosition.locationId) {
+        return false;
+      }
+      return Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold;
+    });
+  }
+
+  /** TVs can carry through a connected doorway; ordinary item layers cannot. */
+  private isAdjacentRoomTv(
+    item: WorldItem,
+    listener: ListenerPosition,
+    items: Iterable<WorldItem>,
+  ): boolean {
+    if (!isTvMediaItem(item) || !item.locationId || !listener.locationId || item.locationId === listener.locationId) {
+      return false;
+    }
+    const adjacent = new Set<string>();
+    for (const candidate of items) {
+      if (candidate.type !== 'service_link') continue;
+      const kind = String(candidate.params.serviceKind ?? '').trim().toLowerCase();
+      if (kind !== 'door') continue;
+      const source = String(candidate.locationId ?? '').trim();
+      const target = String(candidate.params.targetLocation ?? '').trim();
+      if (!source || !target) continue;
+      if (source === listener.locationId) adjacent.add(target);
+      if (target === listener.locationId) adjacent.add(source);
+    }
+    return adjacent.has(item.locationId);
   }
 }
