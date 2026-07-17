@@ -58,6 +58,7 @@ export async function runConnectFlow(deps: ConnectFlowDeps): Promise<void> {
   } catch (error) {
     console.error(error);
     deps.mediaStopLocalMedia();
+    deps.signalingDisconnect();
     deps.updateStatus('Connect failed. Signaling server may be offline or unreachable.');
     deps.mediaSetConnecting(false);
     deps.updateConnectAvailability();

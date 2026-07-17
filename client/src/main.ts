@@ -98,7 +98,9 @@ function consumeExternalAuthAssertion(): string {
 }
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const RECONNECT_DELAY_MS = 5_000;
-const RECONNECT_MAX_ATTEMPTS = 3;
+const RECONNECT_MAX_ATTEMPTS = 6;
+const RECONNECT_PAGE_REFRESH_KEY = 'chatGridReconnectPageRefresh';
+const RECONNECT_PAGE_REFRESH_MAX_AGE_MS = 5 * 60_000;
 const CLIENT_UPDATE_POLL_MS = 30_000;
 const AUDIO_SUBSCRIPTION_REFRESH_MS = 500;
 const TELEPORT_SQUARES_PER_SECOND = 20;
@@ -673,6 +675,7 @@ let heartbeatTimerId: number | null = null;
 let heartbeatNextPingId = -1;
 let heartbeatAwaitingPong = false;
 let reconnectInFlight = false;
+let autoReconnectEnabled = false;
 let activeServerInstanceId: string | null = null;
 let reloadScheduledForVersionMismatch = false;
 let peerNegotiationReady = false;
@@ -1498,6 +1501,9 @@ function handleSignalingStatus(message: string): void {
     updateConnectAvailability();
     setConnectionStatus('Connect failed. Server disconnected before joining the grid.');
     pushChatMessage('Connect failed. Server disconnected before joining the grid.');
+    if (autoReconnectEnabled && !reconnectInFlight) {
+      void reconnectAfterSocketClose();
+    }
     return;
   }
   if (message === 'Disconnected.' && state.running && !reconnectInFlight) {
@@ -1535,6 +1541,37 @@ function clearVersionReloadMarker(): void {
   nextUrl.searchParams.delete('v');
   nextUrl.searchParams.delete('t');
   window.history.replaceState(window.history.state, '', nextUrl.toString());
+}
+
+/** Returns true when a cache-busted page load is recovering a dropped session. */
+function isConnectionRecoveryReload(): boolean {
+  return new URLSearchParams(window.location.search).has('reconnect');
+}
+
+/** Clears the one-shot recovery query marker after the world has admitted us. */
+function clearConnectionRecoveryMarker(): void {
+  const nextUrl = new URL(window.location.href);
+  if (nextUrl.searchParams.has('reconnect')) {
+    nextUrl.searchParams.delete('reconnect');
+    window.history.replaceState(window.history.state, '', nextUrl.toString());
+  }
+  sessionStorage.removeItem(RECONNECT_PAGE_REFRESH_KEY);
+}
+
+/** Reloads the full client once when transport retries cannot recover a session. */
+function refreshClientForConnectionRecovery(): boolean {
+  const now = Date.now();
+  const previous = Number(sessionStorage.getItem(RECONNECT_PAGE_REFRESH_KEY) || 0);
+  if (Number.isFinite(previous) && previous > 0 && now - previous < RECONNECT_PAGE_REFRESH_MAX_AGE_MS) {
+    return false;
+  }
+  sessionStorage.setItem(RECONNECT_PAGE_REFRESH_KEY, String(now));
+  const nextUrl = new URL(window.location.href);
+  nextUrl.searchParams.delete('v');
+  nextUrl.searchParams.delete('t');
+  nextUrl.searchParams.set('reconnect', String(now));
+  window.location.replace(nextUrl.toString());
+  return true;
 }
 
 /** Appends a chat/system line to the bounded status history buffer. */
@@ -2816,13 +2853,13 @@ async function reconnectAfterSocketClose(): Promise<void> {
 
 /** Reconnects after disconnect with delay and bounded retry attempts. */
 async function reconnectWithRetry(reason: 'heartbeat' | 'socketClose'): Promise<void> {
-  if (reconnectInFlight || !state.running) return;
+  if (reconnectInFlight || !autoReconnectEnabled) return;
   reconnectInFlight = true;
   stopHeartbeat();
   if (reason === 'heartbeat') {
     pushChatMessage('Connection stale. Reconnecting...');
   }
-  disconnect();
+  disconnect(false);
   for (let attempt = 1; attempt <= RECONNECT_MAX_ATTEMPTS; attempt += 1) {
     await new Promise((resolve) => window.setTimeout(resolve, RECONNECT_DELAY_MS));
     await connect();
@@ -2838,9 +2875,16 @@ async function reconnectWithRetry(reason: 'heartbeat' | 'socketClose'): Promise<
       pushChatMessage(`Reconnect attempt ${attempt} failed. Retrying in 5 seconds...`);
     }
   }
-  pushChatMessage('Reconnect failed after 3 attempts. Press Connect to retry.');
+  if (refreshClientForConnectionRecovery()) {
+    pushChatMessage('Connection recovery is refreshing the client and restoring your saved session...');
+    return;
+  }
+  pushChatMessage('Connection is still unavailable. Retrying automatically in 15 seconds...');
   audio.sfxUiCancel();
   reconnectInFlight = false;
+  window.setTimeout(() => {
+    void reconnectWithRetry('socketClose');
+  }, 15_000);
 }
 
 /** Sends current auth request over signaling websocket after socket open. */
@@ -2976,12 +3020,16 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
 
 /** Performs end-to-end connect flow: validation, media setup, then signaling connection. */
 async function connect(): Promise<void> {
+  autoReconnectEnabled = true;
   setConnectionStatus('Connecting...');
   await runConnectFlow(getConnectionFlowDeps());
 }
 
 /** Tears down active session state, media, peers, and UI back to pre-connect mode. */
-function disconnect(): void {
+function disconnect(intentional = true): void {
+  if (intentional) {
+    autoReconnectEnabled = false;
+  }
   stopHeartbeat();
   runDisconnectFlow(getConnectionFlowDeps());
   setConnectionStatus('Disconnected.');
@@ -3187,6 +3235,8 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   let connectedAnnouncement: string | null = null;
   let playSelfLoginSound = false;
   if (message.type === 'welcome') {
+    autoReconnectEnabled = true;
+    clearConnectionRecoveryMarker();
     applyGridBranding(message.serverInfo?.gridName, message.serverInfo?.welcomeMessage);
     const uiAdminActions =
       (message.uiDefinitions as { adminMenu?: { actions?: Array<{ id: string; label: string }> } } | undefined)?.adminMenu?.actions ??
@@ -4736,7 +4786,12 @@ setConnectionStatus(
 if (STARTED_FROM_VERSION_RELOAD) {
   clearVersionReloadMarker();
 }
-if (STARTED_FROM_VERSION_RELOAD || initialExternalAuthAssertion || initialAuthUsername.trim().length > 0) {
+if (
+  STARTED_FROM_VERSION_RELOAD
+  || isConnectionRecoveryReload()
+  || initialExternalAuthAssertion
+  || initialAuthUsername.trim().length > 0
+) {
   window.setTimeout(() => {
     void connect();
   }, 0);
