@@ -3248,14 +3248,14 @@ async function setupMediaAfterAuth(): Promise<void> {
   if (!state.running) return;
   const canProceed = await checkMicPermission();
   if (!canProceed) {
-    setConnectionStatus('Microphone access is required.');
+    setConnectionStatus('Connected to the world. Microphone unavailable; navigation and listening still work.');
     await activatePeerNegotiation();
     return;
   }
   try {
     await populateAudioDevices();
     if (dom.audioInputSelect.options.length === 0) {
-      setConnectionStatus('No audio input device found. Open Audio setup or connect a microphone.');
+      setConnectionStatus('Connected to the world. No microphone found; navigation and listening still work.');
       await activatePeerNegotiation();
       return;
     }

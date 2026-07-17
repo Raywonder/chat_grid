@@ -174,7 +174,12 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     }
 
     const isNativePasteShortcut = hasShortcutModifier && deps.isTextEditingMode(deps.state.mode) && code === 'KeyV';
-    if ((deps.state.mode !== 'normal' || !code.startsWith('Arrow')) && !isNativePasteShortcut) {
+    // Arrow keys are world controls while the grid is running. Letting their
+    // browser default through makes the page (and some screen-reader browse
+    // modes) scroll instead of reliably delivering movement to the canvas.
+    // The focused canvas has role=application, so consume the arrows just as
+    // we do every other active Grid command.
+    if (!isNativePasteShortcut) {
       event.preventDefault();
     }
 
