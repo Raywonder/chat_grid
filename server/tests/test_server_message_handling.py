@@ -3231,6 +3231,121 @@ async def test_item_drop_targets_exact_open_table_or_shelf_atomically(
 
 
 @pytest.mark.asyncio
+async def test_furniture_pickup_and_drop_always_preserves_surface_contents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="builder", x=5, y=6),
+        permissions={"item.pickup_drop.any"},
+    )
+    server.clients[ws] = client
+    table = server.item_service.default_item(client, "furniture")
+    table.id = "table-with-contents"
+    table.title = "Loaded coffee table"
+    table.x = client.x
+    table.y = client.y
+    table.params["furnitureKind"] = "table"
+    table.params["surfaceSlots"] = 6
+    server.item_service.add_item(table)
+    contents = []
+    for index in range(5):
+        item = server.item_service.default_item(client, "house_object")
+        item.id = f"table-item-{index}"
+        item.title = f"Table item {index}"
+        item.x = table.x
+        item.y = table.y
+        item.params["placement"] = "table"
+        item.params["surfaceId"] = table.id
+        item.params["surfaceTitle"] = table.title
+        item.params["surfaceOrder"] = index
+        server.item_service.add_item(item)
+        contents.append(item)
+
+    sent_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        sent_payloads.append(packet)
+
+    async def fake_broadcast_item(_item: object) -> None:
+        return None
+
+    async def fake_broadcast_location(
+        location_id: str, packet: object, exclude: ServerConnection | None = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+    monkeypatch.setattr(server, "_broadcast_location", fake_broadcast_location)
+
+    await server._handle_message(
+        client,
+        json.dumps({"type": "item_pickup", "itemId": table.id, "moveAttached": False}),
+    )
+
+    assert _last_packet_of_type(sent_payloads, ItemActionResultPacket).ok is True
+    assert table.carrierId == client.id
+    assert all(item.carrierId == client.id for item in contents)
+    assert all(item.params["surfaceId"] == table.id for item in contents)
+
+    await server._handle_message(
+        client,
+        json.dumps(
+            {
+                "type": "item_drop",
+                "itemId": table.id,
+                "x": 8,
+                "y": 9,
+                "moveAttached": False,
+            }
+        ),
+    )
+
+    assert table.carrierId is None
+    assert (table.x, table.y) == (8, 9)
+    assert all(item.carrierId is None for item in contents)
+    assert all((item.x, item.y) == (8, 9) for item in contents)
+    assert [item.params["surfaceOrder"] for item in contents] == list(range(5))
+    assert all(item.params["surfaceId"] == table.id for item in contents)
+
+
+@pytest.mark.asyncio
+async def test_wall_mounted_house_object_cannot_be_picked_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="builder", x=5, y=6),
+        permissions={"item.pickup_drop.any"},
+    )
+    server.clients[ws] = client
+    wall_tv = server.item_service.default_item(client, "house_object")
+    wall_tv.id = "wall-tv"
+    wall_tv.title = "Wall TV"
+    wall_tv.x = client.x
+    wall_tv.y = client.y
+    wall_tv.params["placement"] = "wall"
+    server.item_service.add_item(wall_tv)
+    sent_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        sent_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    await server._handle_message(
+        client, json.dumps({"type": "item_pickup", "itemId": wall_tv.id})
+    )
+
+    result = _last_packet_of_type(sent_payloads, ItemActionResultPacket)
+    assert result.ok is False
+    assert result.message == "Wall TV is fixed in place and cannot be picked up."
+    assert wall_tv.carrierId is None
+
+
+@pytest.mark.asyncio
 async def test_drop_shelf_onto_loose_radio_places_radio_on_shelf(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

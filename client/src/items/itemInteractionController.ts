@@ -268,7 +268,11 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
       deps.state.mode = 'normal';
       deps.state.selectionContext = null;
       if (context === 'pickup') {
-        deps.signalingSend({ type: 'item_pickup', itemId: selected.id, moveAttached: code === 'Enter' && shiftKey });
+        deps.signalingSend({
+          type: 'item_pickup',
+          itemId: selected.id,
+          moveAttached: selected.type === 'furniture' || (code === 'Enter' && shiftKey),
+        });
         return;
       }
       if (context === 'delete') {

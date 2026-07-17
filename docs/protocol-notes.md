@@ -34,6 +34,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `ping`: latency measurement.
 - `item_add`, `item_pickup`, `item_drop`, `item_delete`, `item_use`, `item_update`: item actions.
 - `item_drop.targetSurfaceId` atomically places a carried surface-safe item on the exact table, shelf, counter, or other open furniture surface selected by the client. The server verifies location, capacity, and item suitability before changing custody.
+- Furniture is always treated as a surface assembly for `item_pickup` and `item_drop`, even when an older client omits `moveAttached`. Items whose `surfaceId` points at that furniture remain balanced, ordered, and attached throughout movement. Floors, walls, and fixed placements are never movable surfaces.
 - `item_transfer_targets`: request transfer target accounts for one item (includes online + offline active users, excluding current owner).
 - `item_transfer`: transfer item ownership to another account (`targetUserId` required).
 - `item_secondary_use`: trigger type-specific secondary action when implemented.

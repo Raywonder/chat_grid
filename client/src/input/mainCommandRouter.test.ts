@@ -17,4 +17,9 @@ describe('conversation shortcuts', () => {
     expect(resolveMainModeCommand('ArrowLeft', false, true)).toBe('radioRemoteStationPrevious');
     expect(resolveMainModeCommand('ArrowRight', false, true)).toBe('radioRemoteStationNext');
   });
+
+  it('separates taking an item from describing its surface', () => {
+    expect(resolveMainModeCommand('KeyJ', false, false)).toBe('interactItem');
+    expect(resolveMainModeCommand('KeyJ', true, false)).toBe('describeSurface');
+  });
 });

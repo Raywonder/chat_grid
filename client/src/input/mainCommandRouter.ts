@@ -29,6 +29,7 @@ export type MainModeCommand =
   | 'radioRemoteVolumeDown'
   | 'openUserActionMenu'
   | 'interactItem'
+  | 'describeSurface'
   | 'speakUsers'
   | 'addItem'
   | 'locateNearestItem'
@@ -84,7 +85,7 @@ export function resolveMainModeCommand(code: string, shiftKey: boolean, ctrlKey 
   if (code === 'Tab') return 'cycleFocusedItem';
   if (code === 'Enter') return shiftKey ? 'openUserActionMenu' : 'useItem';
   if (code === 'Space') return shiftKey ? 'radioRemoteStationPrevious' : 'useItem';
-  if (code === 'KeyJ') return shiftKey ? 'useItem' : 'interactItem';
+  if (code === 'KeyJ') return shiftKey ? 'describeSurface' : 'interactItem';
   if (code === 'KeyU') return shiftKey ? null : 'speakUsers';
   if (code === 'KeyA') return shiftKey ? null : 'addItem';
   if (code === 'KeyI') return shiftKey ? 'listItems' : 'locateNearestItem';

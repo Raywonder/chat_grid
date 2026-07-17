@@ -46,9 +46,10 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `A`: Add item
 - `O`: Edit item properties
 - `Shift+O`: Inspect all item properties
-- `D`: Pick up/drop item; carried house objects and portable radios auto-place on an open focused surface when one is available
-- `Shift+D`: Pick up/drop the selected item with attached, surfaced, or linked parts, such as a room with its door and included objects
-- `J`: Physical item interaction, including placing carried small items on furniture and shoving placed house objects off surfaces
+- `D`: Pick up or set down an item. Picking up movable furniture automatically carries everything resting on it as one balanced load; setting it down preserves every supported item's surface placement. Small carried objects and portable radios auto-place on an open focused surface when one is available.
+- `Shift+D`: Pick up/drop the selected item with attached or linked parts. Furniture already includes its supported contents with normal `D`.
+- `J`: Take the last focused grabbable item from a table, shelf, counter, or other surface. Fixed, wall-mounted, ceiling-mounted, window-mounted, and fixture items cannot be grabbed.
+- `Shift+J`: Announce what is on the focused table, shelf, counter, or other surface. With no surface focused, announce loose items on the floor at the current square.
 - `Tab` / `Shift+Tab`: Cycle focus through carried items first, then usable items on your square. The server currently allows up to 4 carried items at once.
 - `Z`: Item management menu (delete/transfer when permitted)
 - `Space` in item management menu: Read tooltip/help for the selected action

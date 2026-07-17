@@ -5057,7 +5057,22 @@ class SignalingServer:
         mobility = self._item_mobility(item)
         if mobility in {"fixed", "fixture", "anchored", "immovable"}:
             return False
+        if item.type == "house_object":
+            placement = str(item.params.get("placement") or "").strip().lower()
+            if placement in {"wall", "ceiling", "window", "fixture"}:
+                return False
         return "carryable" in item.capabilities
+
+    @staticmethod
+    def _carried_load_count(items: list[WorldItem]) -> int:
+        """Count carried roots while treating surfaced contents as part of their furniture load."""
+
+        carried_ids = {item.id for item in items}
+        return sum(
+            1
+            for item in items
+            if str(item.params.get("surfaceId", "") or "").strip() not in carried_ids
+        )
 
     def _client_can_pickup_drop_item(
         self, client: ClientConnection, item: WorldItem
@@ -8584,16 +8599,16 @@ class SignalingServer:
             if not pickup_item:
                 await self._send_item_result(client, False, "pickup", "Item not found.")
                 return
+            move_as_surface = pickup_item.type == "furniture"
             linked_items = self._linked_relocation_items(
-                pickup_item, include_attached=packet.moveAttached
+                pickup_item, include_attached=packet.moveAttached or move_as_surface
             )
             linked_ids = {item.id for item in linked_items}
             carried_items = self.item_service.carried_items_for_client(client.id)
-            carried_ids = {item.id for item in carried_items}
-            new_carried_count = len(
-                [item for item in linked_items if item.id not in carried_ids]
-            )
-            if len(carried_items) + new_carried_count > MAX_CARRIED_ITEMS_PER_CLIENT:
+            combined_carried = {
+                item.id: item for item in [*carried_items, *linked_items]
+            }
+            if self._carried_load_count(list(combined_carried.values())) > MAX_CARRIED_ITEMS_PER_CLIENT:
                 await self._send_item_result(
                     client,
                     False,
@@ -8754,10 +8769,11 @@ class SignalingServer:
                     drop_item.id,
                 )
                 return
+            move_as_surface = drop_item.type == "furniture"
             linked_items = [
                 item
                 for item in self._linked_relocation_items(
-                    drop_item, include_attached=packet.moveAttached
+                    drop_item, include_attached=packet.moveAttached or move_as_surface
                 )
                 if item.carrierId == client.id
             ] or [drop_item]

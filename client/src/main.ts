@@ -2412,25 +2412,55 @@ function secondaryUseItem(item: WorldItem): void {
   signaling.send({ type: 'item_secondary_use', itemId: item.id });
 }
 
-/** Sends a physical item interaction request for furniture and house objects. */
+/** Returns whether the client should offer direct pickup for one world item. */
+function isClientGrabbableItem(item: WorldItem): boolean {
+  if (!item.capabilities.includes('carryable') || item.carrierId) return false;
+  if (item.type !== 'house_object') return true;
+  const placement = String(item.params.placement ?? '').trim().toLowerCase();
+  return !['wall', 'ceiling', 'window', 'fixture'].includes(placement);
+}
+
+/** Returns one surface's supported contents in stable left-to-right order. */
+function getSurfaceContents(surface: WorldItem): WorldItem[] {
+  return Array.from(state.items.values())
+    .filter(
+      (item) =>
+        !item.carrierId &&
+        item.locationId === surface.locationId &&
+        item.params.surfaceId === surface.id,
+    )
+    .sort((a, b) => Number(a.params.surfaceOrder ?? 0) - Number(b.params.surfaceOrder ?? 0));
+}
+
+/** Resolves the focused furniture surface, including focus on one of its contents. */
+function getFocusedSurface(): WorldItem | null {
+  const focused = getFocusedActionItem();
+  if (!focused) return null;
+  if (isObjectSurfaceItem(focused)) return focused;
+  const surfaceId = String(focused.params.surfaceId ?? '').trim();
+  return surfaceId ? state.items.get(surfaceId) ?? null : null;
+}
+
+/** Picks up the most recently focused grabbable item from a furniture surface. */
 function interactItemCommand(): void {
-  const carried = getCarriedItem();
   const squareItems = getCurrentSquareItems();
-  if (carried) {
-    const surface = getAutomaticPlacementSurface(squareItems);
-    if (!surface) {
-      updateStatus('No open furniture surface here.');
-      audio.sfxUiCancel();
-      return;
-    }
-    updateStatus(`You place ${itemLabel(carried)} on ${itemLabel(surface)}.`);
-    focusItemForAction(surface);
-    signaling.send({
-      type: 'item_interact',
-      itemId: carried.id,
-      targetItemId: surface.id,
-      action: 'place_on',
-    });
+  const focused = getFocusedActionItem();
+  const focusedSurface = getFocusedSurface();
+  const directCandidate = focused && String(focused.params.surfaceId ?? '').trim() && isClientGrabbableItem(focused)
+    ? focused
+    : null;
+  const surfaceCandidate = focusedSurface
+    ? [...getSurfaceContents(focusedSurface)].reverse().find(isClientGrabbableItem) ?? null
+    : null;
+  const anySurfaceCandidate = [...squareItems]
+    .filter((item) => String(item.params.surfaceId ?? '').trim().length > 0)
+    .sort((a, b) => Number(b.params.surfaceOrder ?? 0) - Number(a.params.surfaceOrder ?? 0))
+    .find(isClientGrabbableItem) ?? null;
+  const candidate = directCandidate ?? surfaceCandidate ?? anySurfaceCandidate;
+  if (candidate) {
+    focusItemForAction(candidate);
+    updateStatus(`You take ${itemLabel(candidate)} from ${String(candidate.params.surfaceTitle || 'the surface')}.`);
+    signaling.send({ type: 'item_pickup', itemId: candidate.id });
     return;
   }
 
@@ -2455,6 +2485,30 @@ function interactItemCommand(): void {
   updateStatus(`You shove ${itemLabel(placedObject)} off its surface.`);
   focusItemForAction(placedObject);
   signaling.send({ type: 'item_interact', itemId: placedObject.id, action: 'shove_off' });
+}
+
+/** Announces contents of the focused furniture surface, or loose items on the floor. */
+function describeSurfaceCommand(): void {
+  const surface = getFocusedSurface();
+  if (surface) {
+    const contents = getSurfaceContents(surface);
+    const description = contents.length > 0
+      ? contents.map(itemLabel).join(', ')
+      : 'nothing';
+    updateStatus(`${itemLabel(surface)} holds ${description}.`);
+    audio.sfxUiBlip();
+    return;
+  }
+  const floorItems = getCurrentSquareItems().filter(
+    (item) =>
+      !item.carrierId &&
+      String(item.params.surfaceId ?? '').trim().length === 0,
+  );
+  const description = floorItems.length > 0
+    ? floorItems.map(itemLabel).join(', ')
+    : 'nothing';
+  updateStatus(`The floor here holds ${description}.`);
+  audio.sfxUiBlip();
 }
 
 /** Reorders the focused item within its current furniture surface without leaving that surface. */
@@ -3825,7 +3879,9 @@ function updateItemBeacon(): void {
 }
 
 function pickupDropItemCommand(moveAttached = false): void {
-  const carried = getCarriedItem();
+  const carriedItems = getCarriedItems();
+  const carriedSurface = carriedItems.find((item) => item.type === 'furniture') ?? null;
+  const carried = carriedSurface ?? getCarriedItem();
   if (carried) {
     const surface = isSurfacePlaceableItem(carried) ? getAutomaticPlacementSurface() : null;
     if (surface && !moveAttached) {
@@ -3841,7 +3897,13 @@ function pickupDropItemCommand(moveAttached = false): void {
       return;
     }
     focusItemForAction(carried);
-    signaling.send({ type: 'item_drop', itemId: carried.id, x: state.player.x, y: state.player.y, moveAttached: true });
+    signaling.send({
+      type: 'item_drop',
+      itemId: carried.id,
+      x: state.player.x,
+      y: state.player.y,
+      moveAttached: moveAttached || carried.type === 'furniture',
+    });
     return;
   }
   const squareItems = getCurrentSquareItems();
@@ -3850,9 +3912,19 @@ function pickupDropItemCommand(moveAttached = false): void {
     audio.sfxUiCancel();
     return;
   }
-  if (squareItems.length === 1) {
-    focusItemForAction(squareItems[0]);
-    signaling.send({ type: 'item_pickup', itemId: squareItems[0].id, moveAttached });
+  const focused = getFocusedActionItem();
+  const pickupTarget = focused && squareItems.some((item) => item.id === focused.id)
+    ? focused
+    : squareItems.length === 1
+      ? squareItems[0]
+      : null;
+  if (pickupTarget) {
+    focusItemForAction(pickupTarget);
+    signaling.send({
+      type: 'item_pickup',
+      itemId: pickupTarget.id,
+      moveAttached: moveAttached || pickupTarget.type === 'furniture',
+    });
     return;
   }
   beginItemSelection('pickup', squareItems);
@@ -4125,6 +4197,7 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   radioRemoteVolumeDown: () => radioRemoteControlCommand('volume_down'),
   openUserActionMenu: openUserActionMenuCommand,
   interactItem: interactItemCommand,
+  describeSurface: describeSurfaceCommand,
   speakUsers: speakUsersCommand,
   addItem: addItemCommand,
   locateNearestItem: locateNearestItemCommand,

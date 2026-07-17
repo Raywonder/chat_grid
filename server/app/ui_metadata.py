@@ -138,8 +138,8 @@ MAIN_MODE_SERVER_COMMAND_DEFINITIONS: tuple[MainModeServerCommandDefinition, ...
     },
     {
         "id": "pickupDropItem",
-        "label": "Pick up or drop item",
-        "tooltip": "Pick up an item, place a carried small item on the focused open surface, or drop it on the floor.",
+        "label": "Pick up or set down item",
+        "tooltip": "Pick up an item or movable surface; tabletop and shelf contents remain balanced while the surface moves.",
     },
     {
         "id": "openItemManagement",
