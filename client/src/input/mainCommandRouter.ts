@@ -56,8 +56,9 @@ export type MainModeCommand =
  * Maps raw key events to a semantic command for main mode handling.
  */
 export function resolveMainModeCommand(code: string, shiftKey: boolean, ctrlKey = false): MainModeCommand | null {
-  if (ctrlKey && (code === 'Period' || code === 'ArrowRight')) return 'radioRemoteStationNext';
-  if (ctrlKey && (code === 'Comma' || code === 'ArrowLeft')) return 'radioRemoteStationPrevious';
+  if (ctrlKey && (code === 'Comma' || code === 'Period' || code === 'BracketLeft' || code === 'BracketRight')) return null;
+  if (ctrlKey && code === 'ArrowRight') return 'radioRemoteStationNext';
+  if (ctrlKey && code === 'ArrowLeft') return 'radioRemoteStationPrevious';
   if (ctrlKey && shiftKey && (code === 'ArrowUp' || code === 'KeyU')) return 'radioRemoteVolumeUp';
   if (ctrlKey && shiftKey && (code === 'ArrowDown' || code === 'KeyD')) return 'radioRemoteVolumeDown';
   if (ctrlKey && code === 'KeyM') return 'openDirectMessage';

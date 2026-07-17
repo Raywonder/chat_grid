@@ -105,6 +105,8 @@ type MessageHandlerDeps = {
   TELEPORT_START_SOUND_URL: string;
   getAudioLayers: () => { world: boolean; item: boolean };
   pushChatMessage: (message: string) => void;
+  pushPublicChatMessage: (message: string) => void;
+  pushDirectChatMessage: (message: string, peerId: string, peerName: string) => void;
   classifySystemMessageSound: (message: string) => 'logon' | 'logout' | 'notify' | null;
   ACTION_SOUND_URL: string;
   SYSTEM_SOUND_URLS: { logon: string; logout: string; notify: string };
@@ -372,16 +374,20 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           }
         } else {
           const sender = message.senderNickname || 'Unknown';
-          deps.pushChatMessage(`${sender}: ${message.message}`);
+          deps.pushPublicChatMessage(`${sender}: ${message.message}`);
         }
         break;
       }
 
       case 'direct_message': {
+        const peerId = message.outgoing ? message.targetId : message.senderId;
+        const peerName = message.outgoing
+          ? (message.targetNickname || 'Unknown')
+          : (message.senderNickname || 'Unknown');
         const label = message.outgoing
           ? `DM to ${message.targetNickname || 'Unknown'}`
           : `DM from ${message.senderNickname || 'Unknown'}`;
-        deps.pushChatMessage(`${label}: ${message.message}`);
+        deps.pushDirectChatMessage(`${label}: ${message.message}`, peerId, peerName);
         deps.playSample(deps.SYSTEM_SOUND_URLS.notify, 1);
         break;
       }

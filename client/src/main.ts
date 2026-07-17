@@ -488,6 +488,18 @@ let currentLocationName = '';
 let worldLocationOptions: WorldLocationOption[] = [];
 const messageBuffer: string[] = [];
 let messageCursor = -1;
+type ConversationBuffer = { peerId: string; peerName: string; messages: string[]; cursor: number };
+const publicMessageBuffer: string[] = [];
+const systemMessageBuffer: string[] = [];
+const directConversationBuffers = new Map<string, ConversationBuffer>();
+let publicMessageCursor = -1;
+let systemMessageCursor = -1;
+let focusedConversationPeerId: string | null = null;
+let focusedConversationPeerName: string | null = null;
+
+function conversationKey(peerName: string): string {
+  return peerName.trim().toLocaleLowerCase();
+}
 const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig);
 const tvScreenRuntime = new TvScreenRuntime();
 const itemEmitRuntime = new ItemEmitRuntime(audio, resolveIncomingSoundUrl, getItemSpatialConfig);
@@ -1603,6 +1615,40 @@ function pushChatMessage(message: string, announce = true): void {
   if (announce) {
     updateStatus(message);
   }
+  systemMessageBuffer.push(message);
+  if (systemMessageBuffer.length > 300) systemMessageBuffer.shift();
+  systemMessageCursor = systemMessageBuffer.length - 1;
+}
+
+/** Stores one public-room message separately from system and direct traffic. */
+function pushPublicChatMessage(message: string): void {
+  messageBuffer.push(message);
+  if (messageBuffer.length > 300) messageBuffer.shift();
+  messageCursor = messageBuffer.length - 1;
+  publicMessageBuffer.push(message);
+  if (publicMessageBuffer.length > 300) publicMessageBuffer.shift();
+  publicMessageCursor = publicMessageBuffer.length - 1;
+  updateStatus(message);
+}
+
+/** Stores one direct message in the two-person conversation for its peer. */
+function pushDirectChatMessage(message: string, peerId: string, peerName: string): void {
+  messageBuffer.push(message);
+  if (messageBuffer.length > 300) messageBuffer.shift();
+  messageCursor = messageBuffer.length - 1;
+  const key = conversationKey(peerName);
+  const existing = directConversationBuffers.get(key) ?? { peerId, peerName, messages: [], cursor: -1 };
+  existing.peerId = peerId;
+  existing.peerName = peerName;
+  existing.messages.push(message);
+  if (existing.messages.length > 300) existing.messages.shift();
+  existing.cursor = existing.messages.length - 1;
+  directConversationBuffers.set(key, existing);
+  if (!focusedConversationPeerId) {
+    focusedConversationPeerId = peerId;
+    focusedConversationPeerName = peerName;
+  }
+  updateStatus(message);
 }
 
 function loadQueuedChatMessages(): QueuedChatMessage[] {
@@ -1935,6 +1981,66 @@ function navigateChatBuffer(target: 'prev' | 'next' | 'first' | 'last'): void {
       audio.sfxUiBlip();
     }
   }
+}
+
+/** Reads one entry from a dedicated public or system-message buffer. */
+function navigateFilteredMessageBuffer(kind: 'public' | 'system', direction: 'prev' | 'next'): void {
+  const buffer = kind === 'public' ? publicMessageBuffer : systemMessageBuffer;
+  if (buffer.length === 0) {
+    updateStatus(`No ${kind} messages.`);
+    audio.sfxUiCancel();
+    return;
+  }
+  let cursor = kind === 'public' ? publicMessageCursor : systemMessageCursor;
+  cursor = direction === 'prev' ? Math.max(0, cursor - 1) : Math.min(buffer.length - 1, cursor + 1);
+  if (kind === 'public') publicMessageCursor = cursor;
+  else systemMessageCursor = cursor;
+  updateStatus(`${kind === 'public' ? 'Public' : 'System'}: ${buffer[cursor]}`);
+  if (cursor === 0 || cursor === buffer.length - 1) audio.sfxUiBlip();
+}
+
+/** Moves conversation focus between currently online users. */
+function cycleFocusedConversation(direction: 'prev' | 'next'): void {
+  const peers = Array.from(state.peers.values()).sort((a, b) => a.nickname.localeCompare(b.nickname));
+  if (peers.length === 0) {
+    updateStatus('No online users to focus.');
+    audio.sfxUiCancel();
+    return;
+  }
+  const currentIndex = peers.findIndex((peer) => peer.id === focusedConversationPeerId);
+  const step = direction === 'next' ? 1 : -1;
+  const nextIndex = currentIndex < 0
+    ? (direction === 'next' ? 0 : peers.length - 1)
+    : (currentIndex + step + peers.length) % peers.length;
+  const peer = peers[nextIndex];
+  focusedConversationPeerId = peer.id;
+  focusedConversationPeerName = peer.nickname;
+  state.directMessageTargetId = peer.id;
+  state.directMessageTargetName = peer.nickname;
+  const count = directConversationBuffers.get(conversationKey(peer.nickname))?.messages.length ?? 0;
+  updateStatus(`Conversation with ${peer.nickname}, ${count} ${count === 1 ? 'message' : 'messages'}. Control M to write.`);
+  audio.sfxUiBlip();
+}
+
+/** Reads the previous or next message in the focused two-person conversation. */
+function navigateFocusedConversation(direction: 'prev' | 'next'): void {
+  if (!focusedConversationPeerId) {
+    cycleFocusedConversation('next');
+    return;
+  }
+  const conversation = focusedConversationPeerName
+    ? directConversationBuffers.get(conversationKey(focusedConversationPeerName))
+    : undefined;
+  if (!conversation || conversation.messages.length === 0) {
+    updateStatus(`No direct messages with ${focusedConversationPeerName || 'this user'}.`);
+    audio.sfxUiCancel();
+    return;
+  }
+  conversation.cursor = direction === 'prev'
+    ? Math.max(0, conversation.cursor - 1)
+    : Math.min(conversation.messages.length - 1, conversation.cursor + 1);
+  updateStatus(conversation.messages[conversation.cursor]);
+  if (conversation.cursor === 0 || conversation.cursor === conversation.messages.length - 1) audio.sfxUiBlip();
 }
 
 /** Updates compact input/output device summary labels in the pre-connect UI. */
@@ -3194,6 +3300,8 @@ const onAppMessage = createOnMessageHandler({
   TELEPORT_START_SOUND_URL,
   getAudioLayers: () => audioLayers,
   pushChatMessage,
+  pushPublicChatMessage,
+  pushDirectChatMessage,
   classifySystemMessageSound,
   ACTION_SOUND_URL,
   SYSTEM_SOUND_URLS,
@@ -3827,7 +3935,8 @@ function getSelectedOrNearestPeer(): PeerState | null {
 }
 
 function openDirectMessageCommand(): void {
-  const target = getSelectedOrNearestPeer();
+  const focusedTarget = focusedConversationPeerId ? state.peers.get(focusedConversationPeerId) ?? null : null;
+  const target = focusedTarget ?? getSelectedOrNearestPeer();
   if (!target) {
     updateStatus('No user to message.');
     audio.sfxUiCancel();
@@ -3838,6 +3947,8 @@ function openDirectMessageCommand(): void {
   state.cursorPos = 0;
   state.directMessageTargetId = target.id;
   state.directMessageTargetName = target.nickname;
+  focusedConversationPeerId = target.id;
+  focusedConversationPeerName = target.nickname;
   replaceTextOnNextType = false;
   updateStatus(`Direct message to ${target.nickname}.`);
   audio.sfxUiBlip();
@@ -4055,6 +4166,15 @@ function handleNormalModeInput(code: string, shiftKey: boolean, ctrlKey: boolean
   }
   if (ctrlKey && shiftKey && (code === 'KeyJ' || code === 'KeyK')) {
     moveFocusedSurfaceItemCommand(code === 'KeyJ' ? 'left' : 'right');
+    return;
+  }
+  if (ctrlKey && (code === 'Comma' || code === 'Period')) {
+    if (shiftKey) cycleFocusedConversation(code === 'Comma' ? 'prev' : 'next');
+    else navigateFocusedConversation(code === 'Comma' ? 'prev' : 'next');
+    return;
+  }
+  if (ctrlKey && (code === 'BracketLeft' || code === 'BracketRight')) {
+    navigateFilteredMessageBuffer(shiftKey ? 'system' : 'public', code === 'BracketLeft' ? 'prev' : 'next');
     return;
   }
   if (getCarriedMediaRemote()) {

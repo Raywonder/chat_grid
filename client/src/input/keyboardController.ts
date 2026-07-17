@@ -166,7 +166,9 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
       deps.dom.canvas.focus();
     }
     if (event.altKey) return;
-    const allowedModifiedNormalShortcut = deps.state.mode === 'normal' && (code === 'KeyG' || code === 'KeyM');
+    const allowedModifiedNormalShortcut =
+      deps.state.mode === 'normal' &&
+      (code === 'KeyG' || code === 'KeyM' || code === 'Comma' || code === 'Period' || code === 'BracketLeft' || code === 'BracketRight');
     if (hasShortcutModifier && !deps.isTextEditingMode(deps.state.mode) && !allowedModifiedNormalShortcut) return;
     if (deps.hasBlockedArrowTeleport(code)) {
       event.preventDefault();
