@@ -98,7 +98,7 @@ export class BillboardRuntime {
         this.lastRecordedAnnouncementStartedAtMs = nowMs;
         this.audio.preloadSamples([voiceAssetUrl]);
         void this.audio
-          .playSpatialSample(voiceAssetUrl, { x: item.x, y: item.y }, listenerPosition, 0.96, range)
+          .playSpatialSample(voiceAssetUrl, { x: item.x, y: item.y }, listenerPosition, 0.96, range, 1, true)
           .then((played) => {
             if (played) {
               this.recordText(spoken);

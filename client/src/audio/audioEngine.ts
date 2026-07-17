@@ -7,6 +7,12 @@ import {
   type EffectId,
   type EffectRuntime,
 } from './effects';
+import {
+  connectDistanceReflections,
+  disconnectDistanceReflections,
+  updateDistanceReflections,
+  type DistanceReflectionRuntime,
+} from './distanceReflections';
 import { SPATIAL_TIME_CONSTANT_SECONDS, applySpatialMixToNodes, resolveSpatialMix } from './spatial';
 
 export type SpatialPeerRuntime = {
@@ -90,6 +96,7 @@ type ActiveSpatialSampleRuntime = {
   binauralPannerNode: PannerNode | null;
   sourceNode: AudioBufferSourceNode;
   startsAt: number;
+  distanceReflections: DistanceReflectionRuntime | null;
 };
 
 function isPortalTravelSample(url: string): boolean {
@@ -695,6 +702,7 @@ export class AudioEngine {
     gain = 1,
     range = HEARING_RADIUS,
     playbackRate = 1,
+    useDistanceReflections = false,
   ): Promise<boolean> {
     await this.ensureContext();
     const { audioCtx, sfxGainNode } = this;
@@ -723,6 +731,14 @@ export class AudioEngine {
       } else {
         gainNode.connect(sfxGainNode);
       }
+      const distanceReflections = useDistanceReflections
+        ? connectDistanceReflections(
+            audioCtx,
+            source,
+            sfxGainNode,
+            this.supportsStereoPanner() && this.outputMode === 'stereo',
+          )
+        : null;
       const runtime: ActiveSpatialSampleRuntime = {
         sourceX: sourcePosition.x,
         sourceY: sourcePosition.y,
@@ -733,6 +749,7 @@ export class AudioEngine {
         binauralPannerNode,
         sourceNode: source,
         startsAt: startAt,
+        distanceReflections,
       };
       this.activeSpatialSamples.add(runtime);
       this.applySpatialSampleRuntime(runtime, playerPosition, true, startAt);
@@ -746,6 +763,7 @@ export class AudioEngine {
         gainNode.disconnect();
         pannerNode?.disconnect();
         binauralPannerNode?.disconnect();
+        disconnectDistanceReflections(distanceReflections);
       };
       source.start(startAt);
       return true;
@@ -888,6 +906,7 @@ export class AudioEngine {
         binauralPannerNode,
         sourceNode: source,
         startsAt: startAt,
+        distanceReflections: null,
       };
       this.activeSpatialSamples.add(runtime);
       this.applySpatialSampleRuntime(runtime, playerPosition, true, startAt);
@@ -1497,6 +1516,16 @@ export class AudioEngine {
           this.outputMode === 'mono' ? 0 : sample.sourceY - playerPosition.y,
         );
       }
+      if (sample.distanceReflections) {
+        updateDistanceReflections({
+          audioCtx: this.audioCtx,
+          runtime: sample.distanceReflections,
+          mix,
+          range: sample.range,
+          outputMode: this.outputMode,
+          maxWetGain: 0.28,
+        });
+      }
       return;
     }
     if (this.audioCtx.currentTime < sample.startsAt) {
@@ -1516,6 +1545,16 @@ export class AudioEngine {
         this.outputMode === 'mono' ? 0 : sample.sourceX - playerPosition.x,
         this.outputMode === 'mono' ? 0 : sample.sourceY - playerPosition.y,
       );
+    }
+    if (sample.distanceReflections) {
+      updateDistanceReflections({
+        audioCtx: this.audioCtx,
+        runtime: sample.distanceReflections,
+        mix,
+        range: sample.range,
+        outputMode: this.outputMode,
+        maxWetGain: 0.28,
+      });
     }
   }
 
