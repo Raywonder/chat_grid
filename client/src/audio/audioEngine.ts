@@ -1684,23 +1684,30 @@ export class AudioEngine {
       return this.sampleCache.get(url)!;
     }
     if (!this.sampleLoaders.has(url)) {
+      const load = async (candidateUrl: string): Promise<AudioBuffer> => {
+        const response = await fetch(candidateUrl);
+        if (!response.ok) throw new Error(`Failed to fetch sample: ${candidateUrl}`);
+        const data = await response.arrayBuffer();
+        return this.audioCtx!.decodeAudioData(data);
+      };
+      const fallbackUrl = url.replace(/\.ogg(?=($|\?))/i, '.mp3');
       this.sampleLoaders.set(
         url,
-        fetch(url)
-          .then((response) => {
-            if (!response.ok) throw new Error(`Failed to fetch sample: ${url}`);
-            return response.arrayBuffer();
-          })
-          .then((data) => this.audioCtx!.decodeAudioData(data))
-          .then((buffer) => {
+        (async () => {
+          try {
+            const buffer = await load(url);
             this.sampleCache.set(url, buffer);
-            this.sampleLoaders.delete(url);
             return buffer;
-          })
-          .catch((error) => {
+          } catch (primaryError) {
+            if (fallbackUrl === url) throw primaryError;
+            const buffer = await load(fallbackUrl);
+            this.sampleCache.set(url, buffer);
+            this.sampleCache.set(fallbackUrl, buffer);
+            return buffer;
+          } finally {
             this.sampleLoaders.delete(url);
-            throw error;
-          }),
+          }
+        })(),
       );
     }
     return this.sampleLoaders.get(url)!;

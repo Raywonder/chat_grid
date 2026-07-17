@@ -38,7 +38,7 @@ Layer off prefers unsubscribe/cleanup instead of only muting:
 
 ## Location Ambience
 
-World locations advertise an `ambienceKey` and `ambienceName` from the server-owned location list. The browser maps those keys to low-volume looping sound files under `client/public/sounds/ambience/` and crossfades when the user enters another location. Each current location/room has its own loop file: Main City, Forest, Town Square, Arcade, Offices, Houses, and the Raywonder entry, living room, studio, kitchen, bedroom, and relaxation room. The arcade loop is longer and slightly louder to keep the tonal bed steady across loop wraps. The relaxation room uses an ocean-style loop and can also hold item/radio media from the relaxation library. When location data arrives, the client starts preloading the ambience loops for every known map/room profile. If an ambience file cannot be fetched or decoded, the browser falls back to the procedural bed for that same ambience key instead of going silent.
+World locations advertise an `ambienceKey` and `ambienceName` from the server-owned location list. The browser maps those keys to low-volume looping sound files under `client/public/sounds/ambience/` and crossfades when the user enters another location. Each current location/room has its own loop file: Main City, Forest, Town Square, Arcade, Offices, Houses, and the Raywonder entry, living room, studio, kitchen, bedroom, and relaxation room. The arcade loop is longer and slightly louder to keep the tonal bed steady across loop wraps. The relaxation room uses an ocean-style loop and can also hold item/radio media from the relaxation library. When location data arrives, the client starts preloading the ambience loops for every known map/room profile. Published ambience assets keep their existing folder and base filename, with both the original `.ogg` and a same-folder `.mp3` compatibility copy packaged together. The client tries the configured asset first and retries the matching MP3 when the browser cannot decode Ogg/Opus, before using the procedural bed for that same ambience key instead of going silent.
 
 The public Town Square Café uses its own low-volume conversation and kitchen-clatter loop. It is a separate interior location so the café bed starts only after a visitor enters and never leaks across the whole Town Square. The World Cup TV corner is spatial world audio/metadata, while the normal café bed remains on the world ambience layer.
 
@@ -202,3 +202,10 @@ can use **Admin > Location ambience** to select a location, browse all sounds
 by category and filename-derived label, hear metadata with Space, and assign
 the choice with Enter. Assignments persist in world state and are broadcast to
 listeners already in that location.
+
+When publishing an ambience catalog or another install of the client, copy the
+complete `client/public/sounds/ambience/` tree into the install's matching
+assets folder. Do not flatten, rename, or omit the compatibility copies; the
+server's configured paths remain stable while clients choose the format they
+can decode. Keep the original source asset until the replacement has been
+published and verified from the user-facing path.
