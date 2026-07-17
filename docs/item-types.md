@@ -265,6 +265,10 @@ This is behavior-focused documentation for item types and their defaults.
   - `guestCode=""`
   - `disarmCode=""`
   - `duressCode=""`
+  - `residentCode=""`
+  - `accessSetupComplete=false`
+  - `accessMethod="account"`
+  - `enrolledUsername=""`
   - `codeHint=""`
   - `authorizedNames=""`
   - `authorizedUsernames=""`
@@ -284,6 +288,8 @@ This is behavior-focused documentation for item types and their defaults.
   - `directional=false`
 
 ### Use
+- On first use, the owner or a pre-authorized resident must enroll access. The accessible setup offers signed-in account access or signed-in account plus a private in-world resident keypad code. Visitors cannot perform enrollment.
+- Alarm actions use generated spoken prompt assets for setup required, setup complete, access granted, access denied, and alarm triggered. These play spatially from the panel.
 - `use` on a disarmed alarm reports that the house alarm is disarmed.
 - `use` by an authorized signed-in account username speaks the allow prompt and does not trigger. Legacy display-name authorization is used only when no account usernames are configured.
 - `use` with a matching in-world guest code speaks the allow prompt and does not trigger.
@@ -301,7 +307,9 @@ This is behavior-focused documentation for item types and their defaults.
 - `alarmMode`: `monitor | entry_guard | privacy`
 - `armedState`: `disarmed | armed_home | armed_away | triggered`; aliases include `off`, `home`, `away`, `alarm`, and `siren`
 - `codeMode`: `off | guest | disarm | guest_disarm`; aliases include `none`, `guest_only`, `disarm_only`, `both`, and `all`
-- `guestCode`, `disarmCode`, `duressCode`: optional in-world keypad codes, 3-16 characters, digits plus `*` and `#` only after removing spaces/hyphens. Non-empty codes must be distinct. Do not use real home-security secrets.
+- `guestCode`, `disarmCode`, `duressCode`, `residentCode`: optional in-world keypad codes, 3-16 characters, digits plus `*` and `#` only after removing spaces/hyphens. Non-empty codes must be distinct. Do not use real home-security secrets.
+- `accessSetupComplete`: server-controlled boolean indicating that first-use enrollment finished.
+- `accessMethod`: `account | account_keypad`; `enrolledUsername` stores the enrolled signed-in Grid account.
 - `codeHint`: optional safe hint, max 120 chars
 - `authorizedNames`: legacy comma-separated display names, max 240 chars
 - `authorizedUsernames`: comma-separated signed-in account usernames, max 240 chars; when present these replace display-name identity checks

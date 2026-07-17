@@ -17,6 +17,7 @@ class ItemUseResult:
     updated_params: dict | None = None
     delayed_self_message: str | None = None
     delayed_others_message: str | None = None
+    sound: str | None = None
 
 
 @dataclass(frozen=True)

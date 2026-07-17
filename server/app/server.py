@@ -9217,14 +9217,24 @@ class SignalingServer:
                         credential,
                         client.username or "",
                     )
+                    setup_allowed = bool(client.user_id) and (
+                        use_item.createdBy == client.user_id
+                        or (client.username or "").strip().casefold()
+                        in {
+                            value.strip().casefold()
+                            for value in str(use_item.params.get("authorizedUsernames") or "").split(",")
+                            if value.strip()
+                        }
+                    )
                     use_result = use_house_alarm_with_credential(
                         use_item,
                         client.nickname,
                         credential,
                         self._format_clock_display_time,
                         client.username or "",
+                        setup_allowed,
                     )
-                    if access_result in {"authorized", "guest", "disarm"}:
+                    if access_result in {"authorized", "resident", "guest", "disarm"}:
                         for candidate in self.items.values():
                             if str(candidate.params.get("accessAlarmItemId") or "").strip() == use_item.id:
                                 self._house_entry_invites[(client.id, candidate.id)] = time.monotonic() + 120.0
@@ -9277,7 +9287,7 @@ class SignalingServer:
                     ),
                     exclude=client.websocket,
                 )
-            use_sound = self._resolve_item_use_sound(use_item)
+            use_sound = use_result.sound or self._resolve_item_use_sound(use_item)
             if use_sound:
                 sound_x, sound_y = self._get_item_sound_source_position(use_item)
                 sound_range = self._get_item_emit_range(use_item)

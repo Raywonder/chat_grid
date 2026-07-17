@@ -14,6 +14,7 @@ from .definition import (
 )
 
 KEYPAD_CODE_CHARS = set("0123456789*#")
+ACCESS_METHODS = {"account", "account_keypad"}
 
 
 def _clean_text(value: object, *, max_length: int, field_name: str) -> str:
@@ -133,6 +134,9 @@ def validate_update(_item: WorldItem, next_params: dict) -> dict:
         field_name="codeMode",
     )
     alarm_codes = {
+        "residentCode": _normalize_keypad_code(
+            next_params.get("residentCode", ""), field_name="residentCode"
+        ),
         "guestCode": _normalize_keypad_code(
             next_params.get("guestCode", ""), field_name="guestCode"
         ),
@@ -145,6 +149,18 @@ def validate_update(_item: WorldItem, next_params: dict) -> dict:
     }
     _ensure_distinct_codes(alarm_codes)
     next_params.update(alarm_codes)
+    next_params["accessSetupComplete"] = bool(
+        next_params.get("accessSetupComplete", False)
+    )
+    access_method = str(next_params.get("accessMethod") or "account").strip().lower()
+    if access_method not in ACCESS_METHODS:
+        raise ValueError("accessMethod must be account or account_keypad.")
+    next_params["accessMethod"] = access_method
+    next_params["enrolledUsername"] = _clean_text(
+        next_params.get("enrolledUsername", ""),
+        max_length=128,
+        field_name="enrolledUsername",
+    )
     next_params["codeHint"] = _clean_text(
         next_params.get("codeHint", ""), max_length=120, field_name="codeHint"
     )

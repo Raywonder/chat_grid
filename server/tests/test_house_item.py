@@ -101,6 +101,10 @@ def _house_alarm_item() -> WorldItem:
             "alarmMode": "entry_guard",
             "armedState": "armed_home",
             "codeMode": "off",
+            "residentCode": "",
+            "accessSetupComplete": True,
+            "accessMethod": "account",
+            "enrolledUsername": "",
             "guestCode": "",
             "disarmCode": "",
             "duressCode": "",
@@ -290,6 +294,10 @@ def test_house_alarm_validation_normalizes_hooks_and_aliases() -> None:
         "alarmMode": "privacy",
         "armedState": "armed_away",
         "codeMode": "guest_disarm",
+        "residentCode": "",
+        "accessSetupComplete": False,
+        "accessMethod": "account",
+        "enrolledUsername": "",
         "guestCode": "1234",
         "disarmCode": "9999",
         "duressCode": "*911#",
@@ -307,6 +315,48 @@ def test_house_alarm_validation_normalizes_hooks_and_aliases() -> None:
     }
     assert "Raywonder alarm protects Raywonder House." in details.self_message
     assert "In-grid alert only." in details.self_message
+
+
+def test_house_alarm_first_use_enrolls_account_and_resident_code() -> None:
+    item = _house_alarm_item()
+    item.params["accessSetupComplete"] = False
+
+    result = use_house_alarm_with_credential(
+        item,
+        "Dominique",
+        "setup:identity:2468",
+        lambda _params: "",
+        username="dominique",
+        allow_setup=True,
+    )
+
+    assert result.updated_params == {
+        "accessSetupComplete": True,
+        "accessMethod": "account_keypad",
+        "enrolledUsername": "dominique",
+        "authorizedUsernames": "dominique",
+        "residentCode": "2468",
+    }
+    assert "2468" not in result.self_message
+    item.params.update(result.updated_params)
+    assert evaluate_house_alarm_access(item, "Visitor", credential="2468") == "resident"
+
+
+def test_house_alarm_setup_rejects_unapproved_visitor() -> None:
+    item = _house_alarm_item()
+    item.params["accessSetupComplete"] = False
+
+    result = use_house_alarm_with_credential(
+        item,
+        "Visitor",
+        "setup:identity",
+        lambda _params: "",
+        username="visitor",
+        allow_setup=False,
+    )
+
+    assert result.updated_params is None
+    assert "restricted" in result.self_message
 
 
 def test_house_alarm_accepts_guest_code_without_speaking_code() -> None:

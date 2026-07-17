@@ -2337,6 +2337,14 @@ function useItem(item: WorldItem): void {
   focusItemForAction(item);
   if (item.type === 'house_alarm') {
     pendingAlarmItemId = item.id;
+    if (item.params.accessSetupComplete !== true) {
+      state.mode = 'alarmSetupMethod';
+      state.nicknameInput = '';
+      state.cursorPos = 0;
+      updateStatus('First-use alarm setup. Press 1 for signed-in account access, or 2 for account plus a private in-world keypad code. Escape cancels.');
+      audio.sfxDeviceKeypad();
+      return;
+    }
     state.mode = 'alarmKeypad';
     state.nicknameInput = '';
     state.cursorPos = 0;
@@ -2351,6 +2359,91 @@ function useItem(item: WorldItem): void {
     audio.sfxSoftPlasticPress();
   }
   signaling.send({ type: 'item_use', itemId: item.id });
+}
+
+/** Selects the first-use alarm access method without exposing credentials. */
+function handleAlarmSetupMethodInput(code: string): void {
+  if (code === 'Escape') {
+    pendingAlarmItemId = null;
+    state.mode = 'normal';
+    updateStatus('Alarm setup cancelled.');
+    audio.sfxUiCancel();
+    return;
+  }
+  if (code === 'Digit1' || code === 'Numpad1') {
+    const itemId = pendingAlarmItemId;
+    pendingAlarmItemId = null;
+    state.mode = 'normal';
+    if (itemId) signaling.send({ type: 'item_use', itemId, credential: 'setup:identity' });
+    updateStatus('Enrolling your signed-in account.');
+    audio.sfxUiConfirm();
+    return;
+  }
+  if (code === 'Digit2' || code === 'Numpad2') {
+    state.mode = 'alarmSetupCode';
+    state.nicknameInput = '';
+    state.cursorPos = 0;
+    updateStatus('Enter a private 3 to 16 character in-world resident code, then press Enter. Digits, star, and pound are accepted.');
+    audio.sfxDeviceKeypad();
+  }
+}
+
+/** Enrolls a masked resident code during first-use alarm setup. */
+function handleAlarmSetupCodeInput(code: string, key: string): void {
+  if (code === 'Escape') {
+    pendingAlarmItemId = null;
+    state.nicknameInput = '';
+    state.cursorPos = 0;
+    state.mode = 'normal';
+    updateStatus('Alarm setup cancelled.');
+    audio.sfxUiCancel();
+    return;
+  }
+  if (code === 'Enter') {
+    if (state.nicknameInput.length < 3) {
+      updateStatus('The resident code must contain at least 3 keypad characters.');
+      audio.sfxUiCancel();
+      return;
+    }
+    const itemId = pendingAlarmItemId;
+    const residentCode = state.nicknameInput;
+    pendingAlarmItemId = null;
+    state.nicknameInput = '';
+    state.cursorPos = 0;
+    state.mode = 'normal';
+    if (itemId) signaling.send({ type: 'item_use', itemId, credential: `setup:identity:${residentCode}` });
+    updateStatus('Enrolling account and private resident code.');
+    audio.sfxUiConfirm();
+    return;
+  }
+  handleAlarmKeypadCharacterInput(code, key);
+}
+
+/** Applies one masked keypad edit shared by normal access and setup. */
+function handleAlarmKeypadCharacterInput(code: string, key: string): void {
+  if (code === 'Backspace') {
+    if (state.nicknameInput.length > 0) {
+      state.nicknameInput = state.nicknameInput.slice(0, -1);
+      state.cursorPos = state.nicknameInput.length;
+      updateStatus('Last keypad character removed.');
+      audio.sfxDeviceKeypad();
+    }
+    return;
+  }
+  const value = /^Digit[0-9]$/.test(code)
+    ? code.slice(-1)
+    : /^Numpad[0-9]$/.test(code)
+      ? code.slice(-1)
+      : code === 'NumpadMultiply' || key === '*'
+        ? '*'
+        : code === 'NumpadDivide' || key === '#'
+          ? '#'
+          : '';
+  if (!value || state.nicknameInput.length >= 16) return;
+  state.nicknameInput += value;
+  state.cursorPos = state.nicknameInput.length;
+  updateStatus(`Keypad character entered. ${state.nicknameInput.length} total.`);
+  audio.sfxDeviceKeypad();
 }
 
 /** Handles the private house-alarm keypad without speaking entered digits. */
@@ -2377,27 +2470,7 @@ function handleAlarmKeypadModeInput(code: string, key: string): void {
     audio.sfxUiConfirm();
     return;
   }
-  if (code === 'Backspace') {
-    if (state.nicknameInput.length > 0) {
-      state.nicknameInput = state.nicknameInput.slice(0, -1);
-      state.cursorPos = state.nicknameInput.length;
-      updateStatus('Last keypad character removed.');
-      audio.sfxDeviceKeypad();
-    }
-    return;
-  }
-  const value = /^Digit[0-9]$/.test(code)
-    ? code.slice(-1)
-    : code === 'NumpadMultiply' || key === '*'
-      ? '*'
-      : code === 'NumpadDivide' || key === '#'
-        ? '#'
-        : '';
-  if (!value || state.nicknameInput.length >= 16) return;
-  state.nicknameInput += value;
-  state.cursorPos = state.nicknameInput.length;
-  updateStatus(`Keypad character entered. ${state.nicknameInput.length} total.`);
-  audio.sfxDeviceKeypad();
+  handleAlarmKeypadCharacterInput(code, key);
 }
 
 /** Sends an item secondary-use request for the selected item. */
@@ -4902,6 +4975,9 @@ function handleModeInput(input: ModeInput): void {
         handleChatModeInput(currentCode, currentKey, currentCtrlKey),
       alarmKeypad: ({ code: currentCode, key: currentKey }) =>
         handleAlarmKeypadModeInput(currentCode, currentKey),
+      alarmSetupMethod: ({ code: currentCode }) => handleAlarmSetupMethodInput(currentCode),
+      alarmSetupCode: ({ code: currentCode, key: currentKey }) =>
+        handleAlarmSetupCodeInput(currentCode, currentKey),
       micGainEdit: ({ code: currentCode, key: currentKey, ctrlKey: currentCtrlKey }) =>
         handleMicGainEditModeInput(currentCode, currentKey, currentCtrlKey),
       commandPalette: ({ code: currentCode, key: currentKey }) => handleCommandPaletteModeInput(currentCode, currentKey),

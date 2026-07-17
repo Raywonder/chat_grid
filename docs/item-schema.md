@@ -170,6 +170,10 @@
   "guestCode": "",
   "disarmCode": "",
   "duressCode": "",
+  "residentCode": "",
+  "accessSetupComplete": false,
+  "accessMethod": "account",
+  "enrolledUsername": "",
   "codeHint": "",
   "authorizedNames": "",
   "entryPrompt": "Please wait while the house checks whether someone can let you in.",
@@ -186,7 +190,8 @@
 - `alarmMode`: `monitor | entry_guard | privacy`.
 - `armedState`: `disarmed | armed_home | armed_away | triggered`; friendly aliases include `off`, `home`, `away`, and `siren`.
 - `codeMode`: `off | guest | disarm | guest_disarm`; friendly aliases include `none`, `guest_only`, `disarm_only`, `both`, and `all`.
-- `guestCode`, `disarmCode`, `duressCode`: optional in-world keypad codes, 3-16 characters, digits plus `*` and `#` only after removing spaces/hyphens. Non-empty codes must be distinct. These are item params visible to authorized editors, so never use real home-security secrets.
+- `guestCode`, `disarmCode`, `duressCode`, `residentCode`: optional in-world keypad codes, 3-16 characters, digits plus `*` and `#` only after removing spaces/hyphens. Non-empty codes must be distinct. These are item params visible to authorized editors, so never use real home-security secrets.
+- `accessSetupComplete` starts false and becomes true only after owner/authorized-resident first-use enrollment. `accessMethod` is `account` or `account_keypad`; `enrolledUsername` is the enrolled signed-in Grid account.
 - `codeHint`: optional safe hint visitors can hear without revealing the actual code, max 120 chars.
 - `authorizedNames`: comma-separated display names treated as already allowed, max 240 chars.
 - `entryPrompt`, `alertPrompt`, `allowPrompt`, `denyPrompt`, `description`: voiced/readout text, max 240 chars each.

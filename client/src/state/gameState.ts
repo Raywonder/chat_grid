@@ -33,6 +33,8 @@ export type GameMode =
   | 'nickname'
   | 'chat'
   | 'alarmKeypad'
+  | 'alarmSetupMethod'
+  | 'alarmSetupCode'
   | 'micGainEdit'
   | 'effectSelect'
   | 'listUsers'
