@@ -2069,15 +2069,18 @@ class SignalingServer:
     ) -> None:
         """Alert occupants and configured owner identities about one entry event."""
 
-        notified_locations: set[str] = set()
+        protected_scopes: set[str] = set()
         for door in self._doors_for_house_alarm(alarm):
             target_location = str(door.params.get("targetLocation") or "").strip()
-            if target_location and target_location not in notified_locations:
-                notified_locations.add(target_location)
-                await self._broadcast_location(
-                    target_location,
-                    BroadcastChatMessagePacket(type="chat_message", message=message, system=True),
-                )
+            if target_location:
+                protected_scopes.add(self._carry_scope_for_location(target_location))
+        for occupant in self.clients.values():
+            if self._carry_scope_for_location(occupant.location_id) not in protected_scopes:
+                continue
+            await self._send(
+                occupant.websocket,
+                BroadcastChatMessagePacket(type="chat_message", message=message, system=True),
+            )
         usernames = {
             value.strip()
             for value in str(alarm.params.get("authorizedUsernames") or "").split(",")
