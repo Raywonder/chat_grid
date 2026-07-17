@@ -459,6 +459,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.state.carriedItemId = deps.getCarriedItemId();
         deps.cleanupItemAudio(message.itemId);
         await deps.refreshAudioSubscriptions(true);
+        await deps.syncLocationAmbience();
         break;
       }
 

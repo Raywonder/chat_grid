@@ -77,7 +77,9 @@ def describe(path: Path) -> tuple[str, str, str]:
     phrase = re.sub(r"\s+", " ", phrase).strip(" ,-_")
     suffix = " alternate" if "(1)" in path.stem else ""
     label = f"{category}: {phrase}{suffix}".strip()
-    slug = re.sub(r"[^a-z0-9]+", "-", f"{code}-{phrase}".lower()).strip("-")[:48]
+    # Keep the complete normalized filename. The previous 48-character cap
+    # made distinct source names look identical in menus and on disk.
+    slug = re.sub(r"[^a-z0-9]+", "-", f"{code}-{phrase}".lower()).strip("-")
     digest = hashlib.sha256(path.name.encode("utf-8")).hexdigest()[:8]
     return f"amb-{slug}-{digest}", category, label
 

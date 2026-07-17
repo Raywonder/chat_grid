@@ -317,7 +317,7 @@ export class AudioEngine {
     return this.voiceLayerEnabled;
   }
 
-  async setLocationAmbience(profile: LocationAmbienceProfile | null, enabled: boolean): Promise<void> {
+  async setLocationAmbience(profile: LocationAmbienceProfile | null, enabled: boolean, forceRestart = false): Promise<void> {
     if (!enabled || !profile) {
       this.stopLocationAmbience();
       return;
@@ -325,7 +325,9 @@ export class AudioEngine {
     await this.ensureContext();
     const { audioCtx, sfxGainNode } = this;
     if (!audioCtx || !sfxGainNode) return;
-    if (this.locationAmbience?.key === profile.key) return;
+    // A failed or paused graph may retain the same key without producing sound.
+    // Focus/visibility recovery can explicitly rebuild this listener-local graph.
+    if (this.locationAmbience?.key === profile.key && !forceRestart) return;
 
     this.stopLocationAmbience();
 

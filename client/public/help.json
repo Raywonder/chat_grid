@@ -58,7 +58,7 @@
         },
         {
           "keys": "Shift+Enter",
-          "description": "Open actions toward the selected, focused, or nearest user, including hug, cuddle, kiss, focus, tap, wave, high-five, fist bump, handshake, hold hands, cheer, clap, laugh, smile, wink, nod, blush, cry, yawn, apologize, forgive, dance, comfort, poke, boop, playful smack, listen, hand, walk, teleport, and direct message options"
+          "description": "Use Shift+R for reactions and actions toward the selected, focused, or nearest user, including hug, cuddle, kiss, wave, clap, blush, cry, yawn, apologize, and forgive"
         },
         {
           "keys": "U",
@@ -132,7 +132,7 @@
         },
         {
           "keys": "House keepers",
-          "description": "Opt-in helper agents can be placed in houses; Enter checks the current room and Shift+Enter can sweep the house for supported in-world repair targets such as radios"
+          "description": "Opt-in helper agents can be placed in houses; Enter checks or uses the current room item and Shift+Enter performs the focused physical object interaction without picking it up"
         },
         {
           "keys": "O",
@@ -164,7 +164,7 @@
         },
         {
           "keys": "Shift+Enter",
-          "description": "Open contextual user actions such as hug, cuddle, kiss, focus, tap, wave, high-five, fist bump, handshake, hold hands, cheer, clap, laugh, smile, wink, nod, blush, cry, yawn, apologize, forgive, dance, comfort, poke, boop, playful smack, listen, hand, walk, teleport, or direct message"
+          "description": "Interact with the focused physical object or current item without picking it up; use Shift+R for contextual user reactions"
         },
         {
           "keys": "Shift+J",
@@ -177,7 +177,7 @@
       "items": [
         {
           "keys": "Radio stations",
-          "description": "Use toggles radio power; Shift+Enter or a carried remote turns the station knob on preset radios, with short static IDs, crossfade, and radio-style EQ"
+          "description": "Use toggles radio power; Shift+Enter performs the focused physical object interaction, while the radio remote controls station tuning"
         },
         {
           "keys": "Interactive links",
@@ -299,8 +299,8 @@
           "description": "Turn the selected radio station on or off"
         },
         {
-          "keys": "Shift+Enter on radio",
-          "description": "Tune preset radios to the next station with a station-name static stinger, or hear now-playing information on single-station radios"
+          "keys": "Shift+Enter on an object",
+          "description": "Perform the focused physical object interaction; it does not pick the item up"
         },
         {
           "keys": "Comma / Period with radio remote",

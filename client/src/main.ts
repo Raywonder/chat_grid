@@ -943,10 +943,23 @@ function profileForLocationFootsteps(location: WorldLocationOption | undefined):
   return profiles[surfaceKey] ?? profiles[location?.kind ?? ''] ?? DEFAULT_FOOTSTEP_PROFILE;
 }
 
-async function syncLocationAmbience(): Promise<void> {
+async function syncLocationAmbience(forceRestart = false): Promise<void> {
   const location = currentLocationOption();
-  await audio.setLocationAmbience(profileForLocationAmbience(location), audioLayers.world);
+  await audio.setLocationAmbience(profileForLocationAmbience(location), audioLayers.world, forceRestart);
 }
+
+/** Re-primes world audio when a browser/tab/audio-context pause has recovered. */
+function resumeWorldAudioAfterFocus(forceRestart = true): void {
+  if (!state.running) return;
+  void audio.ensureContext().then(() => syncLocationAmbience(forceRestart)).catch(() => undefined);
+}
+
+window.addEventListener('focus', resumeWorldAudioAfterFocus);
+window.addEventListener('pageshow', resumeWorldAudioAfterFocus);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') resumeWorldAudioAfterFocus();
+});
+document.addEventListener('pointerdown', () => resumeWorldAudioAfterFocus(false), { passive: true });
 
 async function loadClientBranding(): Promise<void> {
   try {
@@ -2518,14 +2531,6 @@ function secondaryUseItem(item: WorldItem): void {
   signaling.send({ type: 'item_secondary_use', itemId: item.id });
 }
 
-/** Returns whether the client should offer direct pickup for one world item. */
-function isClientGrabbableItem(item: WorldItem): boolean {
-  if (!item.capabilities.includes('carryable') || item.carrierId) return false;
-  if (item.type !== 'house_object') return true;
-  const placement = String(item.params.placement ?? '').trim().toLowerCase();
-  return !['wall', 'ceiling', 'window', 'fixture'].includes(placement);
-}
-
 /** Returns one surface's supported contents in stable left-to-right order. */
 function getSurfaceContents(surface: WorldItem): WorldItem[] {
   return Array.from(state.items.values())
@@ -2547,29 +2552,10 @@ function getFocusedSurface(): WorldItem | null {
   return surfaceId ? state.items.get(surfaceId) ?? null : null;
 }
 
-/** Picks up the most recently focused grabbable item from a furniture surface. */
+/** Performs a physical interaction without changing item custody. */
 function interactItemCommand(): void {
-  const squareItems = getCurrentSquareItems();
   const focused = getFocusedActionItem();
-  const focusedSurface = getFocusedSurface();
-  const directCandidate = focused && String(focused.params.surfaceId ?? '').trim() && isClientGrabbableItem(focused)
-    ? focused
-    : null;
-  const surfaceCandidate = focusedSurface
-    ? [...getSurfaceContents(focusedSurface)].reverse().find(isClientGrabbableItem) ?? null
-    : null;
-  const anySurfaceCandidate = [...squareItems]
-    .filter((item) => String(item.params.surfaceId ?? '').trim().length > 0)
-    .sort((a, b) => Number(b.params.surfaceOrder ?? 0) - Number(a.params.surfaceOrder ?? 0))
-    .find(isClientGrabbableItem) ?? null;
-  const candidate = directCandidate ?? surfaceCandidate ?? anySurfaceCandidate;
-  if (candidate) {
-    focusItemForAction(candidate);
-    updateStatus(`You take ${itemLabel(candidate)} from ${String(candidate.params.surfaceTitle || 'the surface')}.`);
-    signaling.send({ type: 'item_pickup', itemId: candidate.id });
-    return;
-  }
-
+  const squareItems = getCurrentSquareItems();
   const damaged = squareItems.find(
     (item) =>
       item.type === 'house_object' &&
@@ -2584,6 +2570,10 @@ function interactItemCommand(): void {
 
   const placedObject = getPlacedHouseObjectForInteraction(squareItems);
   if (!placedObject) {
+    if (focused) {
+      secondaryUseItem(focused);
+      return;
+    }
     updateStatus(describeMissingPlacedHouseObject(squareItems));
     audio.sfxUiCancel();
     return;
@@ -2591,6 +2581,27 @@ function interactItemCommand(): void {
   updateStatus(`You shove ${itemLabel(placedObject)} off its surface.`);
   focusItemForAction(placedObject);
   signaling.send({ type: 'item_interact', itemId: placedObject.id, action: 'shove_off' });
+}
+
+/** Picks up the last focused grabbable item from a furniture surface. */
+function pickupSurfaceItemCommand(): void {
+  const focused = getFocusedActionItem();
+  const focusedSurface = getFocusedSurface();
+  const directCandidate = focused && String(focused.params.surfaceId ?? '').trim() && focused.capabilities.includes('carryable') && !focused.carrierId
+    ? focused
+    : null;
+  const surfaceCandidate = focusedSurface
+    ? [...getSurfaceContents(focusedSurface)].reverse().find((item) => item.capabilities.includes('carryable') && !item.carrierId) ?? null
+    : null;
+  const candidate = directCandidate ?? surfaceCandidate ?? null;
+  if (!candidate) {
+    updateStatus('No grabbable item is available on the focused surface.');
+    audio.sfxUiCancel();
+    return;
+  }
+  focusItemForAction(candidate);
+  updateStatus(`You take ${itemLabel(candidate)} from ${String(candidate.params.surfaceTitle || 'the surface')}.`);
+  signaling.send({ type: 'item_pickup', itemId: candidate.id });
 }
 
 /** Announces contents of the focused furniture surface, or loose items on the floor. */
@@ -2777,10 +2788,25 @@ function distanceDirectionPhrase(px: number, py: number, tx: number, ty: number)
 function peerLocationPhrase(peer: PeerState): string {
   const peerLocationId = peer.locationId || currentLocationId;
   const coordinates = `${formatCoordinate(peer.x)}, ${formatCoordinate(peer.y)}`;
+  const presence = describePresence(peer.posture, peer.seatedItemId);
   if (peerLocationId && peerLocationId !== currentLocationId) {
-    return `in ${locationNameForId(peerLocationId)} at ${coordinates}`;
+    return `in ${locationNameForId(peerLocationId)} at ${coordinates}, ${presence}`;
   }
-  return `${distanceDirectionPhrase(state.player.x, state.player.y, peer.x, peer.y)}, ${coordinates}`;
+  return `${distanceDirectionPhrase(state.player.x, state.player.y, peer.x, peer.y)}, ${coordinates}, ${presence}`;
+}
+
+/** Gives a truthful, compact posture/mood/looking description for presence narration. */
+function describePresence(posture: PeerState['posture'], seatedItemId?: string | null): string {
+  const item = seatedItemId ? state.items.get(seatedItemId) : null;
+  const kind = String(item?.params.furnitureKind ?? item?.params.objectKind ?? '').trim().toLowerCase();
+  const furniture = item?.title || 'the furniture';
+  const bedPhrase = kind === 'bed' ? 'in bed' : `on ${furniture}`;
+  if (posture === 'lying') {
+    const nextToYou = item && item.id === state.player.seatedItemId ? ' next to you' : '';
+    return `lying${nextToYou} ${bedPhrase}, relaxed, looking around the room`;
+  }
+  if (posture === 'sitting') return `sitting ${bedPhrase}, at ease, looking around the room`;
+  return 'standing, alert, looking around the room';
 }
 
 /** Names a one-step movement direction without the "directly" prefix. */
@@ -4308,6 +4334,7 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   radioRemoteVolumeDown: () => radioRemoteControlCommand('volume_down'),
   openUserActionMenu: openUserActionMenuCommand,
   interactItem: interactItemCommand,
+  pickupSurfaceItem: pickupSurfaceItemCommand,
   describeSurface: describeSurfaceCommand,
   speakUsers: speakUsersCommand,
   addItem: addItemCommand,

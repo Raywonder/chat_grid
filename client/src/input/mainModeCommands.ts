@@ -181,7 +181,7 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
   {
     id: 'useItem',
     label: 'Use item',
-    shortcut: 'Enter / Space / Shift+J',
+    shortcut: 'Enter / Space',
     tooltip: 'Use the focused, carried, current doorway, or portal-style item on your square.',
     section: 'Items',
     isAvailable: (context) => context.hasCarriedItem || context.usableItemCount > 0,
@@ -237,8 +237,16 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
   {
     id: 'interactItem',
     label: 'Object interaction',
-    shortcut: 'J / Shift+Enter',
-    tooltip: 'Interact with the focused object: take it from a surface, repair it, or move it off its surface.',
+    shortcut: 'Shift+Enter',
+    tooltip: 'Interact with the focused object without picking it up: repair it or move it off its surface.',
+    section: 'Items',
+    isAvailable: (context) => context.squareItemCount > 0,
+  },
+  {
+    id: 'pickupSurfaceItem',
+    label: 'Pick up surface item',
+    shortcut: 'J',
+    tooltip: 'Pick up the focused grabbable item from a table, shelf, counter, or other surface.',
     section: 'Items',
     isAvailable: (context) => context.squareItemCount > 0,
   },

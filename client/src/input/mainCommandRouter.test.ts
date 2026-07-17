@@ -19,7 +19,7 @@ describe('conversation shortcuts', () => {
   });
 
   it('separates taking an item from describing its surface', () => {
-    expect(resolveMainModeCommand('KeyJ', false, false)).toBe('interactItem');
+    expect(resolveMainModeCommand('KeyJ', false, false)).toBe('pickupSurfaceItem');
     expect(resolveMainModeCommand('KeyJ', true, false)).toBe('describeSurface');
   });
 
