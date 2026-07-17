@@ -487,6 +487,8 @@ const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig);
 const itemEmitRuntime = new ItemEmitRuntime(audio, resolveIncomingSoundUrl, getItemSpatialConfig);
 const billboardRuntime = new BillboardRuntime(audio, getItemSpatialConfig, (message) => {
   pushChatMessage(message);
+}, (message) => {
+  pushChatMessage(message, false);
 }, shouldSpeakItemAnnouncement);
 const clockAnnouncer = new ClockAnnouncer(audio, () => getListenerPosition());
 const initialExternalAuthAssertion = consumeExternalAuthAssertion();
@@ -1533,7 +1535,7 @@ function clearVersionReloadMarker(): void {
 }
 
 /** Appends a chat/system line to the bounded status history buffer. */
-function pushChatMessage(message: string): void {
+function pushChatMessage(message: string, announce = true): void {
   messageBuffer.push(message);
   if (messageBuffer.length > 300) {
     messageBuffer.shift();
@@ -1543,7 +1545,9 @@ function pushChatMessage(message: string): void {
   if (state.running && normalized.endsWith(' has logged in.')) {
     setConnectionStatus(`${message} Press Shift+L to find them or / to say hello.`);
   }
-  updateStatus(message);
+  if (announce) {
+    updateStatus(message);
+  }
 }
 
 function loadQueuedChatMessages(): QueuedChatMessage[] {

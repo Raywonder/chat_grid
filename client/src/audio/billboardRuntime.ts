@@ -7,10 +7,11 @@ type BillboardSpatialConfig = {
   facingDeg: number;
 };
 
-const MIN_ROTATION_SECONDS = 3;
-const DEFAULT_ROTATION_SECONDS = 12;
+const MIN_ROTATION_SECONDS = 60;
+const DEFAULT_ROTATION_SECONDS = 60;
 const APPROACH_COOLDOWN_MS = 4500;
 const MIN_SPEECH_GAP_MS = 900;
+const MIN_RECORDED_ANNOUNCEMENT_GAP_MS = 15_000;
 
 type BillboardState = {
   lastText: string;
@@ -24,11 +25,13 @@ export class BillboardRuntime {
   private readonly stateByItemId = new Map<string, BillboardState>();
   private layerEnabled = true;
   private lastSpeechStartedAtMs = 0;
+  private lastRecordedAnnouncementStartedAtMs = 0;
 
   constructor(
     private readonly audio: AudioEngine,
     private readonly getSpatialConfig: (item: WorldItem) => BillboardSpatialConfig,
     private readonly announceText: (message: string) => void,
+    private readonly recordText: (message: string) => void = announceText,
     private readonly shouldSpeakAnnouncement: (item: WorldItem) => boolean = () => true,
   ) {}
 
@@ -84,26 +87,36 @@ export class BillboardRuntime {
         this.stateByItemId.set(item.id, state);
         continue;
       }
+      const spoken = `${item.title}: ${next.text}`;
+      const voiceAssetUrl = resolveVoiceAssetUrl(item);
+      if (voiceAssetUrl) {
+        if (nowMs - this.lastRecordedAnnouncementStartedAtMs < MIN_RECORDED_ANNOUNCEMENT_GAP_MS) {
+          state.wasInRange = true;
+          this.stateByItemId.set(item.id, state);
+          continue;
+        }
+        this.lastRecordedAnnouncementStartedAtMs = nowMs;
+        this.audio.preloadSamples([voiceAssetUrl]);
+        void this.audio
+          .playSpatialSample(voiceAssetUrl, { x: item.x, y: item.y }, listenerPosition, 0.96, range)
+          .then((played) => {
+            if (played) {
+              this.recordText(spoken);
+              return;
+            }
+            this.announceText(spoken);
+            this.playSyntheticBillboardVoice(spoken, item, listenerPosition, range);
+          });
+      } else {
+        this.announceText(spoken);
+        this.playSyntheticBillboardVoice(spoken, item, listenerPosition, range);
+      }
       state.lastBannerIndex = next.bannerIndex;
       state.lastText = next.text;
       state.lastPlayedAtMs = nowMs;
       state.wasInRange = true;
       state.playedIntro = true;
       this.stateByItemId.set(item.id, state);
-      const spoken = `${item.title}: ${next.text}`;
-      const voiceAssetUrl = resolveVoiceAssetUrl(item);
-      this.announceText(spoken);
-      if (voiceAssetUrl) {
-        this.audio.preloadSamples([voiceAssetUrl]);
-        void this.audio
-          .playSpatialSample(voiceAssetUrl, { x: item.x, y: item.y }, listenerPosition, 0.96, range)
-          .then((played) => {
-            if (played) return;
-            this.playSyntheticBillboardVoice(spoken, item, listenerPosition, range);
-          });
-      } else {
-        this.playSyntheticBillboardVoice(spoken, item, listenerPosition, range);
-      }
     }
 
     for (const itemId of Array.from(this.stateByItemId.keys())) {
