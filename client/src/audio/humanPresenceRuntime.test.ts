@@ -20,7 +20,7 @@ describe('HumanPresenceRuntime', () => {
 
   it('plays a subtle settle cue when a person lies down', () => {
     const playSpatialSample = vi.fn().mockResolvedValue(true);
-    const runtime = new HumanPresenceRuntime({ playSpatialSample }, (path) => `/chatgrid/${path}`);
+    const runtime = new HumanPresenceRuntime({ playSpatialSample, playUserBeacon: vi.fn() }, (path) => `/chatgrid/${path}`);
     runtime.update({ player: player('standing'), peers: [], currentLocationId: 'bedroom', listenerPosition: { x: 10, y: 12 }, nowMs: 0 });
     runtime.update({ player: player('lying'), peers: [], currentLocationId: 'bedroom', listenerPosition: { x: 10, y: 12 }, nowMs: 100 });
 
@@ -30,7 +30,7 @@ describe('HumanPresenceRuntime', () => {
 
   it('stays silent while a person remains standing', () => {
     const playSpatialSample = vi.fn().mockResolvedValue(true);
-    const runtime = new HumanPresenceRuntime({ playSpatialSample }, (path) => path);
+    const runtime = new HumanPresenceRuntime({ playSpatialSample, playUserBeacon: vi.fn() }, (path) => path);
     runtime.update({ player: player('standing'), peers: [], currentLocationId: 'hall', listenerPosition: { x: 10, y: 12 }, nowMs: 0 });
     runtime.update({ player: player('standing'), peers: [], currentLocationId: 'hall', listenerPosition: { x: 10, y: 12 }, nowMs: 120_000 });
 
@@ -40,7 +40,7 @@ describe('HumanPresenceRuntime', () => {
   it('uses sleepy breathing for a dreamy person who is lying down', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0);
     const playSpatialSample = vi.fn().mockResolvedValue(true);
-    const runtime = new HumanPresenceRuntime({ playSpatialSample }, (path) => path);
+    const runtime = new HumanPresenceRuntime({ playSpatialSample, playUserBeacon: vi.fn() }, (path) => path);
     runtime.update({ player: player('lying', 'dreamy'), peers: [], currentLocationId: 'bedroom', listenerPosition: { x: 10, y: 12 }, nowMs: 0 });
     runtime.update({ player: player('lying', 'dreamy'), peers: [], currentLocationId: 'bedroom', listenerPosition: { x: 10, y: 12 }, nowMs: 7_000 });
 
@@ -50,11 +50,26 @@ describe('HumanPresenceRuntime', () => {
 
   it('does not render presence sounds while the world layer is disabled', () => {
     const playSpatialSample = vi.fn().mockResolvedValue(true);
-    const runtime = new HumanPresenceRuntime({ playSpatialSample }, (path) => path);
+    const runtime = new HumanPresenceRuntime({ playSpatialSample, playUserBeacon: vi.fn() }, (path) => path);
     runtime.update({ player: player('standing'), peers: [], currentLocationId: 'bedroom', listenerPosition: { x: 10, y: 12 }, nowMs: 0 });
     runtime.setEnabled(false);
     runtime.update({ player: player('lying'), peers: [], currentLocationId: 'bedroom', listenerPosition: { x: 10, y: 12 }, nowMs: 100 });
 
     expect(playSpatialSample).not.toHaveBeenCalled();
+  });
+
+  it('plays a spatial identity beacon for a nearby peer after its interval', () => {
+    const playUserBeacon = vi.fn();
+    const runtime = new HumanPresenceRuntime({ playSpatialSample: vi.fn(), playUserBeacon }, (path) => path);
+    const peer = { id: 'matt', userId: 'matthew-account', nickname: 'Matthew', x: 14, y: 12, locationId: 'living-room' };
+    runtime.update({ player: player('standing'), peers: [peer], currentLocationId: 'living-room', listenerPosition: { x: 10, y: 12 }, nowMs: 0 });
+    runtime.update({ player: player('standing'), peers: [peer], currentLocationId: 'living-room', listenerPosition: { x: 10, y: 12 }, nowMs: 7_000 });
+
+    expect(playUserBeacon).toHaveBeenCalledOnce();
+    expect(playUserBeacon).toHaveBeenCalledWith(expect.objectContaining({
+      identity: 'matthew-account',
+      nickname: 'Matthew',
+      sourcePosition: { x: 14, y: 12 },
+    }));
   });
 });

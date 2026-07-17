@@ -863,6 +863,86 @@ export class AudioEngine {
     });
   }
 
+  /** Plays a short, descending, identity-stable spatial beacon for one user. */
+  playUserBeacon(options: {
+    identity: string;
+    nickname: string;
+    sourcePosition: { x: number; y: number };
+    playerPosition: { x: number; y: number };
+    range?: number;
+  }): void {
+    void this.ensureContext().then(() => {
+      const { audioCtx, sfxGainNode } = this;
+      if (!audioCtx || !sfxGainNode) return;
+
+      const range = Math.max(1, options.range ?? HEARING_RADIUS);
+      const mix = resolveSpatialMix({
+        dx: options.sourcePosition.x - options.playerPosition.x,
+        dy: options.sourcePosition.y - options.playerPosition.y,
+        range,
+        baseGain: 0.035,
+        nearFieldDistance: 1.1,
+        nearFieldGain: 0.026,
+        nearFieldCenterPan: true,
+      });
+      if (!mix || mix.gain <= 0) return;
+
+      const identityHash = this.hashText(`${options.identity} ${options.nickname}`.trim().toLowerCase());
+      const baseFrequency = 720 + (identityHash % 13) * 38;
+      const intervalRatio = 0.72 + ((identityHash >>> 8) % 5) * 0.025;
+      const oscillatorTypes: OscillatorType[] = ['sine', 'triangle', 'sine', 'triangle'];
+      const oscillatorType = oscillatorTypes[(identityHash >>> 16) % oscillatorTypes.length] ?? 'sine';
+      const delaySeconds = 0.085 + ((identityHash >>> 20) % 4) * 0.012;
+      const durationSeconds = 0.065;
+      const now = audioCtx.currentTime;
+      const outputGain = audioCtx.createGain();
+      outputGain.gain.setValueAtTime(mix.gain, now);
+      outputGain.gain.setTargetAtTime(0.0001, now + delaySeconds * 2 + durationSeconds, 0.03);
+
+      let pannerNode: StereoPannerNode | null = null;
+      let binauralPannerNode: PannerNode | null = null;
+      if (this.supportsBinauralPanner() && this.outputMode === 'stereo') {
+        binauralPannerNode = this.createBinauralPannerNode(range);
+        this.setBinauralPannerPosition(
+          binauralPannerNode,
+          options.sourcePosition.x - options.playerPosition.x,
+          options.sourcePosition.y - options.playerPosition.y,
+        );
+        outputGain.connect(binauralPannerNode).connect(sfxGainNode);
+      } else if (this.supportsStereoPanner() && this.outputMode === 'stereo') {
+        pannerNode = audioCtx.createStereoPanner();
+        pannerNode.pan.setValueAtTime(Math.max(-1, Math.min(1, mix.pan)), now);
+        outputGain.connect(pannerNode).connect(sfxGainNode);
+      } else {
+        outputGain.connect(sfxGainNode);
+      }
+
+      const nodes: AudioNode[] = [outputGain];
+      for (let index = 0; index < 3; index += 1) {
+        const startAt = now + index * delaySeconds;
+        const oscillator = audioCtx.createOscillator();
+        oscillator.type = oscillatorType;
+        oscillator.frequency.setValueAtTime(baseFrequency * Math.pow(intervalRatio, index), startAt);
+        const envelope = audioCtx.createGain();
+        envelope.gain.setValueAtTime(0.0001, startAt);
+        envelope.gain.linearRampToValueAtTime(1, startAt + 0.008);
+        envelope.gain.exponentialRampToValueAtTime(0.0001, startAt + durationSeconds);
+        oscillator.connect(envelope).connect(outputGain);
+        oscillator.start(startAt);
+        oscillator.stop(startAt + durationSeconds + 0.01);
+        nodes.push(oscillator, envelope);
+      }
+
+      window.setTimeout(() => {
+        for (const node of nodes) {
+          try { node.disconnect(); } catch { /* Ignore already-cleaned beacon nodes. */ }
+        }
+        pannerNode?.disconnect();
+        binauralPannerNode?.disconnect();
+      }, Math.ceil((delaySeconds * 2 + durationSeconds + 0.08) * 1000));
+    });
+  }
+
   /** Plays one spatial sample and resolves when playback finishes. */
   async playSpatialSampleAndWait(
     url: string,

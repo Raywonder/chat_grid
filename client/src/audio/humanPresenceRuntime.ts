@@ -1,7 +1,7 @@
 import { HEARING_RADIUS, type PeerState, type Player } from '../state/gameState';
 import { AudioEngine } from './audioEngine';
 
-type PresenceAudio = Pick<AudioEngine, 'playSpatialSample'>;
+type PresenceAudio = Pick<AudioEngine, 'playSpatialSample' | 'playUserBeacon'>;
 
 type PresencePerson = Pick<Player, 'id' | 'nickname' | 'x' | 'y' | 'posture' | 'mood'> & {
   locationId?: string;
@@ -10,10 +10,12 @@ type PresencePerson = Pick<Player, 'id' | 'nickname' | 'x' | 'y' | 'posture' | '
 type PresenceSchedule = {
   posture: PresencePerson['posture'];
   nextBreathAtMs: number;
+  nextBeaconAtMs: number;
   breathCount: number;
 };
 
 const HUMAN_SOUND_RANGE = Math.min(8, HEARING_RADIUS);
+const USER_BEACON_RANGE = HEARING_RADIUS;
 const GENTLE_BREATH_URL = 'sounds/human/gentle-rest-breath.mp3?v=20260716-human-presence';
 const SLEEPY_BREATH_URL = 'sounds/human/sleepy-breath.mp3?v=20260716-human-presence';
 const BEDDING_SETTLE_URL = 'sounds/human/bedding-settle.mp3?v=20260716-human-presence';
@@ -73,6 +75,7 @@ export class HumanPresenceRuntime {
         options.listenerPosition,
         nowMs,
       );
+      this.updatePeerBeacon(peer, peerLocationId, options.currentLocationId, options.listenerPosition, nowMs);
       presentIds.add(peer.id);
     }
 
@@ -93,6 +96,7 @@ export class HumanPresenceRuntime {
       this.schedules.set(id, {
         posture: person.posture,
         nextBreathAtMs: nowMs + this.randomInterval(7_000, 14_000),
+        nextBeaconAtMs: nowMs + this.beaconInterval(id),
         breathCount: 0,
       });
       return;
@@ -136,6 +140,35 @@ export class HumanPresenceRuntime {
       ? sleepy ? this.randomInterval(13_000, 21_000) : this.randomInterval(18_000, 30_000)
       : this.randomInterval(32_000, 52_000);
     previous.nextBreathAtMs = nowMs + interval;
+  }
+
+  private updatePeerBeacon(
+    peer: PeerState,
+    peerLocationId: string,
+    currentLocationId: string,
+    listenerPosition: { x: number; y: number },
+    nowMs: number,
+  ): void {
+    if (!this.enabled || peerLocationId !== currentLocationId) return;
+    const schedule = this.schedules.get(peer.id);
+    if (!schedule || nowMs < schedule.nextBeaconAtMs) return;
+    this.audio.playUserBeacon({
+      identity: peer.userId || peer.id,
+      nickname: peer.nickname,
+      sourcePosition: { x: peer.x, y: peer.y },
+      playerPosition: listenerPosition,
+      range: USER_BEACON_RANGE,
+    });
+    schedule.nextBeaconAtMs = nowMs + this.beaconInterval(peer.id);
+  }
+
+  private beaconInterval(identity: string): number {
+    let hash = 2166136261;
+    for (let index = 0; index < identity.length; index += 1) {
+      hash ^= identity.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return 4_500 + (hash >>> 0) % 1_500;
   }
 
   private randomInterval(minimum: number, maximum: number): number {
