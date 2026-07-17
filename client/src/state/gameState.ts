@@ -32,6 +32,7 @@ export type GameMode =
   | 'helpView'
   | 'nickname'
   | 'chat'
+  | 'alarmKeypad'
   | 'micGainEdit'
   | 'effectSelect'
   | 'listUsers'

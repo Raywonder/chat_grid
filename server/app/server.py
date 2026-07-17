@@ -58,6 +58,8 @@ from .item_catalog import (
 from .item_type_handlers import get_item_type_handler
 from .item_service import ItemService
 from .items.types.clock.time_format import parse_alarm_time_flexible
+from .items.types.house_alarm.actions import evaluate_access as evaluate_house_alarm_access
+from .items.types.house_alarm.actions import use_with_credential as use_house_alarm_with_credential
 from .items.types.radio_station.aaastreamer import resolve_aaastreamer_playback
 from .items.types.service_link.portal_state import effective_portal_state
 from .models import (
@@ -584,6 +586,7 @@ class SignalingServer:
         self._started_at_monotonic = time.monotonic()
         self._pending_reboot_task: asyncio.Task[None] | None = None
         self._studio_entry_invites: dict[str, float] = {}
+        self._house_entry_invites: dict[tuple[str, str], float] = {}
 
     @staticmethod
     def _resolve_server_version(release_version: str) -> str:
@@ -1985,6 +1988,46 @@ class SignalingServer:
             if key_id == required_key_id:
                 return candidate
         return None
+
+    def _linked_house_alarm(self, door: WorldItem) -> WorldItem | None:
+        """Return the alarm panel that authoritatively guards one exterior door."""
+
+        alarm_id = str(door.params.get("accessAlarmItemId") or "").strip()
+        alarm = self.items.get(alarm_id) if alarm_id else None
+        return alarm if alarm is not None and alarm.type == "house_alarm" else None
+
+    def _has_house_entry_access(self, client: ClientConnection, door: WorldItem) -> bool:
+        """Return whether identity or a recent successful keypad entry permits travel."""
+
+        alarm = self._linked_house_alarm(door)
+        if alarm is None:
+            return True
+        if evaluate_house_alarm_access(alarm, client.nickname) == "authorized":
+            return True
+        key = (client.id, door.id)
+        expires_at = self._house_entry_invites.get(key)
+        if expires_at is None:
+            return False
+        if expires_at < time.monotonic():
+            self._house_entry_invites.pop(key, None)
+            return False
+        self._house_entry_invites.pop(key, None)
+        return True
+
+    async def _deny_guarded_house_entry(
+        self, client: ClientConnection, door: WorldItem
+    ) -> None:
+        """Keep an unauthorized visitor outside and identify the nearby keypad."""
+
+        alarm = self._linked_house_alarm(door)
+        alarm_name = alarm.title if alarm is not None else "alarm keypad"
+        await self._send_item_result(
+            client,
+            False,
+            "use",
+            f"The door is secured. Use {alarm_name} on this square to request or enter access.",
+            door.id,
+        )
 
     @staticmethod
     def _is_raywonder_studio_entry_door(item: WorldItem) -> bool:
@@ -8952,6 +8995,10 @@ class SignalingServer:
                 return
             if await self._handle_house_keeper_use(client, use_item, deep_scan=False):
                 return
+            if use_item.type == "service_link" and self._linked_house_alarm(use_item):
+                if not self._has_house_entry_access(client, use_item):
+                    await self._deny_guarded_house_entry(client, use_item)
+                    return
             if use_item.type == "ecrypto_bank":
                 await self._send_item_result(
                     client,
@@ -9010,9 +9057,25 @@ class SignalingServer:
                 )
                 return
             try:
-                use_result = handler.use(
-                    use_item, client.nickname, self._format_clock_display_time
-                )
+                if use_item.type == "house_alarm":
+                    credential = str(packet.credential or "")
+                    access_result = evaluate_house_alarm_access(
+                        use_item, client.nickname, credential
+                    )
+                    use_result = use_house_alarm_with_credential(
+                        use_item,
+                        client.nickname,
+                        credential,
+                        self._format_clock_display_time,
+                    )
+                    if access_result in {"authorized", "guest", "disarm"}:
+                        for candidate in self.items.values():
+                            if str(candidate.params.get("accessAlarmItemId") or "").strip() == use_item.id:
+                                self._house_entry_invites[(client.id, candidate.id)] = time.monotonic() + 120.0
+                else:
+                    use_result = handler.use(
+                        use_item, client.nickname, self._format_clock_display_time
+                    )
             except ValueError as exc:
                 await self._send_item_result(
                     client, False, "use", str(exc), use_item.id

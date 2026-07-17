@@ -244,7 +244,7 @@ def test_builtin_items_seed_without_replacing_existing_station(tmp_path: Path) -
     assert service.items["seed-raywonder-entry-house-alarm"].type == "house_alarm"
     assert (
         service.items["seed-raywonder-entry-house-alarm"].locationId
-        == "raywonder_house_entry"
+        == "houses"
     )
     assert (
         service.items["seed-raywonder-entry-house-alarm"].params["authorizedNames"]
@@ -263,6 +263,9 @@ def test_builtin_items_seed_without_replacing_existing_station(tmp_path: Path) -
         service.items["seed-raywonder-entry-house-keeper"].params["targetKinds"]
         == "radio, object"
     )
+    assert service.items["seed-houses-matthew-front-door"].params["accessAlarmItemId"] == "seed-houses-matthew-alarm"
+    assert service.items["seed-houses-matthew-alarm"].locationId == "houses"
+    assert service.items["seed-matthew-music-piano"].locationId == "matthew_house_music_room"
     assert service.items["seed-raywonder-entry-bedroom-key"].type == "house_object"
     assert (
         service.items["seed-raywonder-entry-bedroom-key"].params["keyId"]

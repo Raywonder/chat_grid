@@ -3,9 +3,23 @@ from __future__ import annotations
 from app.items.types.house.actions import secondary_use_item, use_item
 from app.items.types.house.validator import validate_update
 from app.items.types.house_alarm.actions import (
+    use_with_credential as use_house_alarm_with_credential,
     secondary_use_item as secondary_use_house_alarm,
     use_item as use_house_alarm,
 )
+
+
+def test_house_alarm_keypad_keeps_invalid_code_out_of_visitor_identity() -> None:
+    item = _house_alarm_item()
+    item.params.update({"codeMode": "guest", "guestCode": "2468"})
+
+    allowed = use_house_alarm_with_credential(item, "Visitor", "2468", lambda _params: "")
+    denied = use_house_alarm_with_credential(item, "Visitor", "1111", lambda _params: "")
+
+    assert allowed.self_message == "Access allowed."
+    assert "2468" not in allowed.self_message + allowed.others_message
+    assert "1111" not in denied.self_message + denied.others_message
+    assert "Visitor: Visitor" in denied.others_message
 from app.items.types.house_alarm.validator import validate_update as validate_house_alarm
 from app.items.types.house_keeper.actions import (
     secondary_use_item as secondary_use_house_keeper,

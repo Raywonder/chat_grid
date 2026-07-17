@@ -511,6 +511,7 @@ const billboardRuntime = new BillboardRuntime(audio, getItemSpatialConfig, (mess
 const clockAnnouncer = new ClockAnnouncer(audio, () => getListenerPosition());
 const initialExternalAuthAssertion = consumeExternalAuthAssertion();
 let replaceTextOnNextType = false;
+let pendingAlarmItemId: string | null = null;
 let pendingEscapeDisconnect = false;
 let micGainLoopbackRestoreState: boolean | null = null;
 let mainHelpViewerLines: string[] = [];
@@ -2334,6 +2335,15 @@ function recomputeActiveItemPropertyKeys(itemId: string): void {
 /** Sends an item-use request for the selected item. */
 function useItem(item: WorldItem): void {
   focusItemForAction(item);
+  if (item.type === 'house_alarm') {
+    pendingAlarmItemId = item.id;
+    state.mode = 'alarmKeypad';
+    state.nicknameInput = '';
+    state.cursorPos = 0;
+    updateStatus('Alarm keypad. Enter an in-world code, or press Enter blank to identify yourself. Escape cancels.');
+    audio.sfxDeviceKeypad();
+    return;
+  }
   updateStatus(`You use ${itemLabel(item)}.`);
   if (item.type === 'radio_station') {
     audio.sfxRadioPower();
@@ -2341,6 +2351,53 @@ function useItem(item: WorldItem): void {
     audio.sfxSoftPlasticPress();
   }
   signaling.send({ type: 'item_use', itemId: item.id });
+}
+
+/** Handles the private house-alarm keypad without speaking entered digits. */
+function handleAlarmKeypadModeInput(code: string, key: string): void {
+  if (code === 'Escape') {
+    pendingAlarmItemId = null;
+    state.nicknameInput = '';
+    state.cursorPos = 0;
+    state.mode = 'normal';
+    updateStatus('Keypad cancelled.');
+    audio.sfxUiCancel();
+    return;
+  }
+  if (code === 'Enter') {
+    const itemId = pendingAlarmItemId;
+    const credential = state.nicknameInput;
+    pendingAlarmItemId = null;
+    state.nicknameInput = '';
+    state.cursorPos = 0;
+    state.mode = 'normal';
+    if (!itemId) return;
+    signaling.send({ type: 'item_use', itemId, credential });
+    updateStatus('Keypad entry submitted.');
+    audio.sfxUiConfirm();
+    return;
+  }
+  if (code === 'Backspace') {
+    if (state.nicknameInput.length > 0) {
+      state.nicknameInput = state.nicknameInput.slice(0, -1);
+      state.cursorPos = state.nicknameInput.length;
+      updateStatus('Last keypad character removed.');
+      audio.sfxDeviceKeypad();
+    }
+    return;
+  }
+  const value = /^Digit[0-9]$/.test(code)
+    ? code.slice(-1)
+    : code === 'NumpadMultiply' || key === '*'
+      ? '*'
+      : code === 'NumpadDivide' || key === '#'
+        ? '#'
+        : '';
+  if (!value || state.nicknameInput.length >= 16) return;
+  state.nicknameInput += value;
+  state.cursorPos = state.nicknameInput.length;
+  updateStatus(`Keypad character entered. ${state.nicknameInput.length} total.`);
+  audio.sfxDeviceKeypad();
 }
 
 /** Sends an item secondary-use request for the selected item. */
@@ -4769,6 +4826,8 @@ function handleModeInput(input: ModeInput): void {
         handleNicknameModeInput(currentCode, currentKey, currentCtrlKey),
       chat: ({ code: currentCode, key: currentKey, ctrlKey: currentCtrlKey }) =>
         handleChatModeInput(currentCode, currentKey, currentCtrlKey),
+      alarmKeypad: ({ code: currentCode, key: currentKey }) =>
+        handleAlarmKeypadModeInput(currentCode, currentKey),
       micGainEdit: ({ code: currentCode, key: currentKey, ctrlKey: currentCtrlKey }) =>
         handleMicGainEditModeInput(currentCode, currentKey, currentCtrlKey),
       commandPalette: ({ code: currentCode, key: currentKey }) => handleCommandPaletteModeInput(currentCode, currentKey),

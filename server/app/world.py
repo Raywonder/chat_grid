@@ -192,6 +192,36 @@ WORLD_LOCATIONS: tuple[WorldLocation, ...] = (
         ambience_key="relaxation_ocean",
         ambience_name="Relaxation ocean",
     ),
+    WorldLocation(
+        id="matthew_house_entry",
+        name="Matthew's House Entry",
+        kind="house",
+        description="Matthew's accessible front entry, protected by his own alarm and keypad.",
+        spawn_x=20,
+        spawn_y=20,
+        ambience_key="front_entry",
+        ambience_name="Front entry",
+    ),
+    WorldLocation(
+        id="matthew_house_living_room",
+        name="Matthew's Living Room",
+        kind="room",
+        description="A comfortable living room for conversation, radio, and listening together.",
+        spawn_x=18,
+        spawn_y=20,
+        ambience_key="living_room_warmth",
+        ambience_name="Living room warmth",
+    ),
+    WorldLocation(
+        id="matthew_house_music_room",
+        name="Matthew's Music Room",
+        kind="room",
+        description="An accessible music room with a piano, listening radio, and space to create.",
+        spawn_x=22,
+        spawn_y=20,
+        ambience_key="studio_current",
+        ambience_name="Music room current",
+    ),
 )
 
 WORLD_LOCATION_BY_ID = {location.id: location for location in WORLD_LOCATIONS}

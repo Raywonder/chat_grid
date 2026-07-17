@@ -82,10 +82,24 @@ def _notification_text(item: WorldItem) -> str:
     return "Notification hooks staged for " + " and ".join(targets) + "."
 
 
-def use_item(
-    item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], str]
+def evaluate_access(item: WorldItem, nickname: str, credential: str = "") -> str:
+    """Return the safe access result for one resident identity or keypad entry."""
+
+    code_kind = _matched_code_kind(item, credential)
+    if code_kind:
+        return code_kind
+    if _is_authorized(item, nickname):
+        return "authorized"
+    return "denied"
+
+
+def use_with_credential(
+    item: WorldItem,
+    nickname: str,
+    credential: str,
+    _clock_formatter: Callable[[dict], str],
 ) -> ItemUseResult:
-    """Trigger or acknowledge the house alarm panel."""
+    """Trigger or acknowledge the house alarm with a private keypad credential."""
 
     label = _label(item)
     house_name = str(item.params.get("houseName") or "the house").strip()
@@ -94,7 +108,7 @@ def use_item(
     alert_prompt = str(item.params.get("alertPrompt") or "").strip()
     allow_prompt = str(item.params.get("allowPrompt") or "").strip()
     notification = _notification_text(item)
-    code_kind = _matched_code_kind(item, nickname)
+    code_kind = evaluate_access(item, nickname, credential)
 
     if armed_state == "disarmed":
         return ItemUseResult(
@@ -123,7 +137,7 @@ def use_item(
             updated_params={"armedState": "triggered"},
         )
 
-    if _is_authorized(item, nickname):
+    if code_kind == "authorized":
         return ItemUseResult(
             self_message=allow_prompt or f"{label} recognizes you. Access allowed.",
             others_message=f"{label} recognizes {nickname} at {house_name}.",
@@ -137,6 +151,14 @@ def use_item(
         updated_params={"armedState": "triggered"},
         delayed_self_message="The alarm is waiting for an owner or authorized resident to allow or deny entry.",
     )
+
+
+def use_item(
+    item: WorldItem, nickname: str, clock_formatter: Callable[[dict], str]
+) -> ItemUseResult:
+    """Use identity-only alarm access for non-keypad clients."""
+
+    return use_with_credential(item, nickname, nickname, clock_formatter)
 
 
 def secondary_use_item(

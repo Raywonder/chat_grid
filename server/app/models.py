@@ -256,6 +256,7 @@ class ItemTransferTargetsPacket(BasePacket):
 class ItemUsePacket(BasePacket):
     type: Literal["item_use"]
     itemId: str
+    credential: str | None = None
 
 
 class ItemSecondaryUsePacket(BasePacket):

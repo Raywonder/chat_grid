@@ -53,6 +53,7 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `Z`: Item management menu (delete/transfer when permitted)
 - `Space` in item management menu: Read tooltip/help for the selected action
 - `Enter` or `Space`: Use the focused/current item, doorway, portal, chair, couch, or bed; beds support sitting, then lying down, then getting up when used again. When several items are available, selection starts on the item you last focused or used
+- Using a house alarm opens its private keypad. Enter digits, `*`, or `#`; `Backspace` removes the last character; `Enter` submits without speaking the code; blank `Enter` checks the signed-in resident identity; `Escape` cancels.
 - `Shift+J`: Jump through or activate the focused/current portal-style item
 
 ### Audio
@@ -78,7 +79,7 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `-` / `=`: Lower/raise master volume
 - `_` / `+` (`Shift+-` / `Shift+=`): Lower/raise active effect value
 
-## Text Entry Modes (`nickname`, `chat`, `itemPropertyEdit`)
+## Text Entry Modes (`nickname`, `chat`, `alarmKeypad`, `itemPropertyEdit`)
 
 - `Enter`: Confirm
 - `Escape`: Cancel

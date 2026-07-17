@@ -626,7 +626,7 @@ export type OutgoingMessage =
   | { type: 'item_delete'; itemId: string }
   | { type: 'item_transfer_targets'; itemId: string }
   | { type: 'item_transfer'; itemId: string; targetUserId: string }
-  | { type: 'item_use'; itemId: string }
+  | { type: 'item_use'; itemId: string; credential?: string }
   | { type: 'item_secondary_use'; itemId: string }
   | {
       type: 'item_remote_control';
