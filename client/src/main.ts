@@ -854,6 +854,8 @@ function profileForLocationAmbience(location: WorldLocationOption | undefined): 
       name: ambienceName,
       loopUrl: resolveIncomingSoundUrl(emitSound),
       loopGain: 0.12 * (volume / 100),
+      loopStartSeconds: Number(locationAmbienceItem.params.ambienceLoopStartSeconds ?? 0),
+      loopEndSeconds: Number(locationAmbienceItem.params.ambienceLoopEndSeconds ?? 0) || undefined,
     };
   }
   const ambienceKey = location.ambienceKey || location.kind || location.id;
@@ -3264,6 +3266,10 @@ function handleAdminNotificationsList(message: Extract<IncomingMessage, { type: 
   adminController.handleAdminNotificationsList(message);
 }
 
+function handleAdminAmbienceCatalog(message: Extract<IncomingMessage, { type: 'admin_ambience_catalog' }>): void {
+  adminController.handleAdminAmbienceCatalog(message);
+}
+
 /** Handles server transfer-target list response for item-management transfer flow. */
 function handleItemTransferTargets(message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>): void {
   itemInteractionController.handleItemTransferTargets(message);
@@ -3528,6 +3534,7 @@ const onAppMessage = createOnMessageHandler({
   handleAdminUsersList,
   handleAdminPlatformOverview,
   handleAdminNotificationsList,
+  handleAdminAmbienceCatalog,
   handleAdminActionResult,
   handleNtfyPreferences,
   handleItemTransferTargets,
@@ -4906,6 +4913,14 @@ function handleAdminRoleNameEditModeInput(code: string, key: string, ctrlKey: bo
   adminController.handleAdminRoleNameEditModeInput(code, key, ctrlKey);
 }
 
+function handleAdminAmbienceLocationListModeInput(code: string, key: string): void {
+  adminController.handleAdminAmbienceLocationListModeInput(code, key);
+}
+
+function handleAdminAmbienceSoundListModeInput(code: string, key: string): void {
+  adminController.handleAdminAmbienceSoundListModeInput(code, key);
+}
+
 const itemPropertyEditor = createItemPropertyEditor({
   state,
   signalingSend: (message) => signaling.send(message as OutgoingMessage),
@@ -5005,6 +5020,10 @@ function handleModeInput(input: ModeInput): void {
       adminUserDeleteConfirm: ({ code: currentCode, key: currentKey }) => handleAdminUserDeleteConfirmModeInput(currentCode, currentKey),
       adminRoleNameEdit: ({ code: currentCode, key: currentKey, ctrlKey: currentCtrlKey }) =>
         handleAdminRoleNameEditModeInput(currentCode, currentKey, currentCtrlKey),
+      adminAmbienceLocationList: ({ code: currentCode, key: currentKey }) =>
+        handleAdminAmbienceLocationListModeInput(currentCode, currentKey),
+      adminAmbienceSoundList: ({ code: currentCode, key: currentKey }) =>
+        handleAdminAmbienceSoundListModeInput(currentCode, currentKey),
       itemProperties: ({ code: currentCode, key: currentKey }) =>
         itemPropertyEditor.handleItemPropertiesModeInput(currentCode, currentKey),
       itemPropertyEdit: ({ code: currentCode, key: currentKey, ctrlKey: currentCtrlKey }) =>

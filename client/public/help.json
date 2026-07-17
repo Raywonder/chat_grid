@@ -4,6 +4,10 @@
       "title": "Chat Grid Help",
       "items": [
         {
+          "keys": "Admin menu, Location ambience",
+          "description": "Choose a location, browse all categorized FX ambience loops, press Space for source and loop details, and Enter to assign"
+        },
+        {
           "keys": "Arrow Keys",
           "description": "Move on the grid; the status reader narrates direction, location, surface, people, and items like interactive fiction"
         },

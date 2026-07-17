@@ -34,6 +34,12 @@ class MainModeServerCommandDefinition(TypedDict):
 
 ADMIN_MENU_ACTION_DEFINITIONS: tuple[AdminMenuActionDefinition, ...] = (
     {
+        "id": "location_ambience",
+        "label": "Location ambience",
+        "tooltip": "Review and reassign seamless FX ambience loops for outdoor areas, interiors, and houses.",
+        "permission": "server.manage_settings",
+    },
+    {
         "id": "platform_overview",
         "label": "Platform overview",
         "tooltip": "Speak server, user, item, and BlindSoftware platform link status.",

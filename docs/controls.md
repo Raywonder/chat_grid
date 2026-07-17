@@ -175,3 +175,10 @@ Applies to effect select, user/item list modes, item selection, item property li
 - `Home` / `End`: First/last help line
 - `Escape`: Exit help viewer
 - No first-letter navigation in this mode
+# Location ambience administration
+
+Open the Admin menu and choose **Location ambience**. Choose a world location,
+then use the normal list keys to browse the full FX ambience library. Press
+Space for the original source filename, duration, seam crossfade, and loop
+points. Press Enter to assign the highlighted loop. Escape returns first to
+the location list and then to the Admin menu.

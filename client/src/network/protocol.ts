@@ -482,6 +482,17 @@ export const adminNotificationsListSchema = z.object({
   ),
 });
 
+export const adminAmbienceCatalogSchema = z.object({
+  type: z.literal('admin_ambience_catalog'),
+  locations: z.array(z.object({
+    id: z.string(), name: z.string(), currentSoundId: z.string(), currentSoundLabel: z.string(),
+  })),
+  sounds: z.array(z.object({
+    id: z.string(), label: z.string(), category: z.string(), url: z.string(), sourceFilename: z.string(),
+    durationSeconds: z.number(), loopStartSeconds: z.number(), loopEndSeconds: z.number(), seamCrossfadeSeconds: z.number(),
+  })),
+});
+
 export const adminActionResultSchema = z.object({
   type: z.literal('admin_action_result'),
   ok: z.boolean(),
@@ -496,6 +507,7 @@ export const adminActionResultSchema = z.object({
     'user_delete',
     'notifications_mark_read',
     'blindsoftware_admin_sync',
+    'location_ambience_set',
   ]),
   message: z.string(),
 });
@@ -539,6 +551,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   adminUsersListSchema,
   adminPlatformOverviewSchema,
   adminNotificationsListSchema,
+  adminAmbienceCatalogSchema,
   adminActionResultSchema,
   ntfyPreferencesSchema,
 ]);
@@ -563,6 +576,8 @@ export type OutgoingMessage =
   | { type: 'admin_notifications_list'; scope?: 'own' | 'admin' }
   | { type: 'admin_notification_mark_read'; scope?: 'own' | 'admin'; notificationId?: string }
   | { type: 'admin_blindsoftware_sync' }
+  | { type: 'admin_ambience_catalog' }
+  | { type: 'admin_location_ambience_set'; locationId: string; soundId: string }
   | { type: 'admin_user_set_role'; username: string; role: string }
   | { type: 'admin_user_ban'; username: string }
   | { type: 'admin_user_unban'; username: string }

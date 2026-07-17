@@ -132,6 +132,7 @@ type MessageHandlerDeps = {
   handleAdminUsersList: (message: Extract<IncomingMessage, { type: 'admin_users_list' }>) => void;
   handleAdminPlatformOverview: (message: Extract<IncomingMessage, { type: 'admin_platform_overview' }>) => void;
   handleAdminNotificationsList: (message: Extract<IncomingMessage, { type: 'admin_notifications_list' }>) => void;
+  handleAdminAmbienceCatalog: (message: Extract<IncomingMessage, { type: 'admin_ambience_catalog' }>) => void;
   handleAdminActionResult: (message: Extract<IncomingMessage, { type: 'admin_action_result' }>) => void;
   handleNtfyPreferences: (message: Extract<IncomingMessage, { type: 'ntfy_preferences' }>) => void;
   handleItemTransferTargets: (message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>) => void;
@@ -166,6 +167,9 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         break;
       case 'admin_notifications_list':
         deps.handleAdminNotificationsList(message);
+        break;
+      case 'admin_ambience_catalog':
+        deps.handleAdminAmbienceCatalog(message);
         break;
       case 'admin_action_result':
         deps.handleAdminActionResult(message);

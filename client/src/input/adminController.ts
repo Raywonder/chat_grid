@@ -34,6 +34,12 @@ export type AdminNotificationSummary = {
   read?: boolean;
 };
 
+type AdminAmbienceLocation = { id: string; name: string; currentSoundId: string; currentSoundLabel: string };
+type AdminAmbienceSound = {
+  id: string; label: string; category: string; url: string; sourceFilename: string;
+  durationSeconds: number; loopStartSeconds: number; loopEndSeconds: number; seamCrossfadeSeconds: number;
+};
+
 export type AdminPendingUserMutation =
   | { action: 'set_role'; username: string; role: string }
   | { action: 'ban'; username: string }
@@ -68,6 +74,7 @@ export function createAdminController(deps: AdminControllerDeps): {
   handleAdminUsersList: (message: Extract<IncomingMessage, { type: 'admin_users_list' }>) => void;
   handleAdminPlatformOverview: (message: Extract<IncomingMessage, { type: 'admin_platform_overview' }>) => void;
   handleAdminNotificationsList: (message: Extract<IncomingMessage, { type: 'admin_notifications_list' }>) => void;
+  handleAdminAmbienceCatalog: (message: Extract<IncomingMessage, { type: 'admin_ambience_catalog' }>) => void;
   handleAdminActionResult: (message: Extract<IncomingMessage, { type: 'admin_action_result' }>) => void;
   handleAdminMenuModeInput: (code: string, key: string) => void;
   handleAdminRoleListModeInput: (code: string, key: string) => void;
@@ -77,6 +84,8 @@ export function createAdminController(deps: AdminControllerDeps): {
   handleAdminUserRoleSelectModeInput: (code: string, key: string) => void;
   handleAdminUserDeleteConfirmModeInput: (code: string, key: string) => void;
   handleAdminRoleNameEditModeInput: (code: string, key: string, ctrlKey: boolean) => void;
+  handleAdminAmbienceLocationListModeInput: (code: string, key: string) => void;
+  handleAdminAmbienceSoundListModeInput: (code: string, key: string) => void;
 } {
   const adminMenuActions: AdminMenuAction[] = [];
   let serverAdminMenuActions: AdminMenuAction[] = [];
@@ -94,6 +103,11 @@ export function createAdminController(deps: AdminControllerDeps): {
   let adminSelectedUsername = '';
   let adminPendingUserMutation: AdminPendingUserMutation | null = null;
   let adminDeleteConfirmIndex = 0;
+  let adminAmbienceLocations: AdminAmbienceLocation[] = [];
+  let adminAmbienceSounds: AdminAmbienceSound[] = [];
+  let adminAmbienceLocationIndex = 0;
+  let adminAmbienceSoundIndex = 0;
+  let adminPendingAmbience: { locationId: string; soundId: string } | null = null;
 
   function setServerAdminMenuActions(actions: Array<{ id: string; label: string; tooltip?: string }> | null | undefined): void {
     serverAdminMenuActions = (actions || [])
@@ -216,7 +230,36 @@ export function createAdminController(deps: AdminControllerDeps): {
     deps.sfxUiBlip();
   }
 
+  function ambienceLocationLabel(entry: AdminAmbienceLocation): string {
+    return `${entry.name}, current ${entry.currentSoundLabel || 'not assigned'}`;
+  }
+
+  function handleAdminAmbienceCatalog(message: Extract<IncomingMessage, { type: 'admin_ambience_catalog' }>): void {
+    adminAmbienceLocations = [...message.locations];
+    adminAmbienceSounds = [...message.sounds].sort((a, b) =>
+      a.category.localeCompare(b.category) || a.label.localeCompare(b.label));
+    adminAmbienceLocationIndex = 0;
+    deps.state.mode = 'adminAmbienceLocationList';
+    if (adminAmbienceLocations[0]) deps.announceMenuEntry('Location ambience', ambienceLocationLabel(adminAmbienceLocations[0]));
+    else deps.updateStatus('No world locations available.');
+  }
+
   function handleAdminActionResult(message: Extract<IncomingMessage, { type: 'admin_action_result' }>): void {
+    if (message.action === 'location_ambience_set') {
+      if (message.ok && adminPendingAmbience) {
+        const location = adminAmbienceLocations.find((entry) => entry.id === adminPendingAmbience?.locationId);
+        const sound = adminAmbienceSounds.find((entry) => entry.id === adminPendingAmbience?.soundId);
+        if (location && sound) {
+          location.currentSoundId = sound.id;
+          location.currentSoundLabel = sound.label;
+        }
+        deps.state.mode = 'adminAmbienceLocationList';
+      }
+      adminPendingAmbience = null;
+      deps.updateStatus(message.message);
+      message.ok ? deps.sfxUiBlip() : deps.sfxUiCancel();
+      return;
+    }
     if (message.action === 'role_update_permissions') {
       return;
     }
@@ -322,6 +365,11 @@ export function createAdminController(deps: AdminControllerDeps): {
       if (selected.id === 'platform_overview') {
         deps.signalingSend({ type: 'admin_platform_overview', scope: 'platform' });
         deps.updateStatus('Loading platform overview...');
+        return;
+      }
+      if (selected.id === 'location_ambience') {
+        deps.signalingSend({ type: 'admin_ambience_catalog' });
+        deps.updateStatus('Loading location ambience library...');
         return;
       }
       if (selected.id === 'owned_content') {
@@ -679,6 +727,48 @@ export function createAdminController(deps: AdminControllerDeps): {
     deps.applyTextInputEdit(code, key, 32, ctrlKey, true);
   }
 
+
+  function handleAdminAmbienceLocationListModeInput(code: string, key: string): void {
+    const control = handleListControlKey(code, key, adminAmbienceLocations, adminAmbienceLocationIndex, ambienceLocationLabel);
+    if (control.type === 'move') {
+      adminAmbienceLocationIndex = control.index;
+      deps.updateStatus(ambienceLocationLabel(adminAmbienceLocations[adminAmbienceLocationIndex]));
+      deps.sfxUiBlip(); return;
+    }
+    if (control.type === 'select') {
+      const location = adminAmbienceLocations[adminAmbienceLocationIndex];
+      const currentIndex = adminAmbienceSounds.findIndex((entry) => entry.id === location.currentSoundId);
+      adminAmbienceSoundIndex = currentIndex >= 0 ? currentIndex : 0;
+      deps.state.mode = 'adminAmbienceSoundList';
+      if (adminAmbienceSounds[adminAmbienceSoundIndex]) {
+        deps.announceMenuEntry(`Ambience for ${location.name}`, adminAmbienceSounds[adminAmbienceSoundIndex].label);
+      } else deps.updateStatus('No ambience sounds available.');
+      return;
+    }
+    if (control.type === 'cancel') { deps.state.mode = 'adminMenu'; deps.updateStatus('Admin menu.'); deps.sfxUiCancel(); }
+  }
+
+  function handleAdminAmbienceSoundListModeInput(code: string, key: string): void {
+    const control = handleListControlKey(code, key, adminAmbienceSounds, adminAmbienceSoundIndex, (entry) => entry.label);
+    if (control.type === 'move') {
+      adminAmbienceSoundIndex = control.index;
+      deps.updateStatus(adminAmbienceSounds[adminAmbienceSoundIndex].label);
+      deps.sfxUiBlip(); return;
+    }
+    const sound = adminAmbienceSounds[adminAmbienceSoundIndex];
+    const location = adminAmbienceLocations[adminAmbienceLocationIndex];
+    if (code === 'Space' && sound) {
+      deps.updateStatus(`${sound.label}. Source ${sound.sourceFilename}. ${sound.durationSeconds.toFixed(1)} seconds, seamless ${sound.seamCrossfadeSeconds.toFixed(1)} second boundary crossfade, loop ${sound.loopStartSeconds.toFixed(1)} to ${sound.loopEndSeconds.toFixed(1)} seconds.`);
+      deps.sfxUiBlip(); return;
+    }
+    if (control.type === 'select' && sound && location) {
+      adminPendingAmbience = { locationId: location.id, soundId: sound.id };
+      deps.signalingSend({ type: 'admin_location_ambience_set', locationId: location.id, soundId: sound.id });
+      deps.updateStatus(`Assigning ${sound.label} to ${location.name}...`); return;
+    }
+    if (control.type === 'cancel') { deps.state.mode = 'adminAmbienceLocationList'; deps.updateStatus(ambienceLocationLabel(location)); deps.sfxUiCancel(); }
+  }
+
   return {
     setServerAdminMenuActions,
     getAvailableAdminActions,
@@ -687,6 +777,7 @@ export function createAdminController(deps: AdminControllerDeps): {
     handleAdminUsersList,
     handleAdminPlatformOverview,
     handleAdminNotificationsList,
+    handleAdminAmbienceCatalog,
     handleAdminActionResult,
     handleAdminMenuModeInput,
     handleAdminRoleListModeInput,
@@ -696,5 +787,7 @@ export function createAdminController(deps: AdminControllerDeps): {
     handleAdminUserRoleSelectModeInput,
     handleAdminUserDeleteConfirmModeInput,
     handleAdminRoleNameEditModeInput,
+    handleAdminAmbienceLocationListModeInput,
+    handleAdminAmbienceSoundListModeInput,
   };
 }

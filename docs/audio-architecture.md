@@ -182,3 +182,22 @@ The relaxation room ambience uses a short loop excerpt prepared from the archive
 ## TappedIn Archive Sounds
 
 Reusable public FX and ambience files live at `https://tappedin.fm/wp-content/uploads/Archive/fx/`. Use full HTTPS Archive URLs in widget `emitSound` for looping ambience or `useSound` for one-shot effects. See `docs/archive-sound-library.md` for the local path, categories, and a verified example URL.
+# FX ambience catalog and location loops
+
+The world ambience catalog is generated from the filename-reviewed WAV files in
+`Archive/fx/Ambiance` by `scripts/build_fx_ambience_catalog.py`. It produces a
+web catalog plus compact 48 kHz stereo Opus files under
+`client/public/sounds/ambience/fx/`.
+
+Each output is made into a true seamless full-buffer loop: the source tail is
+equal-power crossfaded into the source head, then the file is rotated so its
+end and beginning meet at that constructed seam. Catalog entries record the
+original filename, duration, loop start/end, and crossfade length. Playback
+therefore loops from zero to the catalog end without a second fallback tone.
+
+Every configured world location has a server-owned location-scoped ambience
+control, including outdoor hubs, interiors, and both houses. Administrators
+can use **Admin > Location ambience** to select a location, browse all sounds
+by category and filename-derived label, hear metadata with Space, and assign
+the choice with Enter. Assignments persist in world state and are broadcast to
+listeners already in that location.

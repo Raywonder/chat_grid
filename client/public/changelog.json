@@ -3,6 +3,7 @@
     {
       "date": "July 14, 2026",
       "items": [
+        "Added filename-reviewed seamless FX ambience loops to every outdoor area, interior, and house location, plus an accessible Admin menu browser for reassigning any location from the full 74-sound library.",
         "Fixed world audio recovery so walking no longer repeatedly restarts nearby sounds, intentional loop delays remain quiet, and footstep samples preload with room ambience.",
         "Audio now checks itself quietly in the background across browser and desktop shells, rebuilding paused server streams from current radio, TV, object, and location state with a gentle fade-in.",
         "The Raywonder entry, living room, studio, kitchen, and bedroom now use 96-second layered ambience beds instead of short eight-second loops.",

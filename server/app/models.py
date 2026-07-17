@@ -192,6 +192,20 @@ class AdminBlindSoftwareSyncPacket(BasePacket):
     type: Literal["admin_blindsoftware_sync"]
 
 
+class AdminAmbienceCatalogPacket(BasePacket):
+    """Request the location and FX ambience assignment catalog."""
+
+    type: Literal["admin_ambience_catalog"]
+
+
+class AdminLocationAmbienceSetPacket(BasePacket):
+    """Assign one approved FX ambience loop to one world location."""
+
+    type: Literal["admin_location_ambience_set"]
+    locationId: str = Field(min_length=1, max_length=64)
+    soundId: str = Field(min_length=1, max_length=96)
+
+
 class AdminUserSetRolePacket(BasePacket):
     type: Literal["admin_user_set_role"]
     username: str = Field(min_length=1, max_length=128)
@@ -337,6 +351,8 @@ ClientPacket = (
     | AdminNotificationsListPacket
     | AdminNotificationMarkReadPacket
     | AdminBlindSoftwareSyncPacket
+    | AdminAmbienceCatalogPacket
+    | AdminLocationAmbienceSetPacket
     | AdminUserSetRolePacket
     | AdminUserBanPacket
     | AdminUserUnbanPacket
@@ -746,6 +762,31 @@ class AdminNotificationsListResultPacket(BasePacket):
     notifications: list[AdminNotificationSummary]
 
 
+class AdminAmbienceSoundSummary(BaseModel):
+    id: str
+    label: str
+    category: str
+    url: str
+    sourceFilename: str
+    durationSeconds: float
+    loopStartSeconds: float
+    loopEndSeconds: float
+    seamCrossfadeSeconds: float
+
+
+class AdminAmbienceLocationSummary(BaseModel):
+    id: str
+    name: str
+    currentSoundId: str = ""
+    currentSoundLabel: str = ""
+
+
+class AdminAmbienceCatalogResultPacket(BasePacket):
+    type: Literal["admin_ambience_catalog"]
+    locations: list[AdminAmbienceLocationSummary]
+    sounds: list[AdminAmbienceSoundSummary]
+
+
 class AdminActionResultPacket(BasePacket):
     type: Literal["admin_action_result"]
     ok: bool
@@ -760,5 +801,6 @@ class AdminActionResultPacket(BasePacket):
         "user_delete",
         "notifications_mark_read",
         "blindsoftware_admin_sync",
+        "location_ambience_set",
     ]
     message: str

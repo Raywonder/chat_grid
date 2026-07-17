@@ -76,6 +76,8 @@ export type LocationAmbienceProfile = {
   name: string;
   loopUrl?: string;
   loopGain?: number;
+  loopStartSeconds?: number;
+  loopEndSeconds?: number;
   rootHz: number;
   colorHz: number;
   airHz: number;
@@ -346,6 +348,11 @@ export class AudioEngine {
         const source = audioCtx.createBufferSource();
         source.buffer = buffer;
         source.loop = true;
+        const loopStart = Math.max(0, Math.min(buffer.duration, profile.loopStartSeconds ?? 0));
+        const requestedEnd = profile.loopEndSeconds ?? buffer.duration;
+        const loopEnd = Math.max(loopStart + 0.01, Math.min(buffer.duration, requestedEnd));
+        source.loopStart = loopStart;
+        source.loopEnd = loopEnd;
         source.connect(masterGain);
         source.start();
         this.locationAmbience = {

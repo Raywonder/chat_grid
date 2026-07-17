@@ -189,3 +189,11 @@ This is a behavior guide for packet semantics beyond raw schemas.
   `Reconnected to server. Version <version>.` after reconnect.
 - If `auth_required.expectedClientRevision` or `welcome.serverInfo.expectedClientRevision` differs from the running client revision, client auto-reloads.
 - Server-only version changes do not trigger browser reload unless `expectedClientRevision` also changes.
+# Admin location ambience packets
+
+- `admin_ambience_catalog` requests and returns the accessible location list
+  and approved FX sound catalog.
+- `admin_location_ambience_set` assigns a catalog sound ID to a location ID.
+  The server requires `server.manage_settings`, validates both IDs, persists
+  the system ambience item, and broadcasts an item upsert to that location.
+- `admin_action_result` uses action `location_ambience_set` for the receipt.

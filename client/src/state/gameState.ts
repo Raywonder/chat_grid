@@ -57,6 +57,8 @@ export type GameMode =
   | 'adminUserRoleSelect'
   | 'adminUserDeleteConfirm'
   | 'adminRoleNameEdit'
+  | 'adminAmbienceLocationList'
+  | 'adminAmbienceSoundList'
   | 'pianoUse';
 
 export type Player = {

@@ -75,6 +75,11 @@ from .models import (
     NtfyPreferencesResultPacket,
     NtfyPreferencesUpdatePacket,
     AdminActionResultPacket,
+    AdminAmbienceCatalogPacket,
+    AdminAmbienceCatalogResultPacket,
+    AdminAmbienceLocationSummary,
+    AdminAmbienceSoundSummary,
+    AdminLocationAmbienceSetPacket,
     AdminRoleCreatePacket,
     AdminRoleDeletePacket,
     AdminRoleSummary,
@@ -441,6 +446,7 @@ AdminActionName: TypeAlias = Literal[
     "user_delete",
     "notifications_mark_read",
     "blindsoftware_admin_sync",
+    "location_ambience_set",
 ]
 
 
@@ -7742,6 +7748,8 @@ class SignalingServer:
                 AdminNotificationsListPacket,
                 AdminNotificationMarkReadPacket,
                 AdminBlindSoftwareSyncPacket,
+                AdminAmbienceCatalogPacket,
+                AdminLocationAmbienceSetPacket,
                 AdminUserSetRolePacket,
                 AdminUserBanPacket,
                 AdminUserUnbanPacket,
@@ -7754,6 +7762,69 @@ class SignalingServer:
             await self._send_admin_action_result(
                 client, ok=False, action=action, message=message
             )
+
+        if isinstance(packet, (AdminAmbienceCatalogPacket, AdminLocationAmbienceSetPacket)):
+            if not self._client_has_permission(client, "server.manage_settings"):
+                await deny("location_ambience_set", "Not authorized.")
+                return True
+            catalog_path = Path(__file__).resolve().parents[1] / "config" / "ambience_catalog.json"
+            try:
+                catalog_data = json.loads(catalog_path.read_text(encoding="utf-8"))
+                catalog_sounds = [AdminAmbienceSoundSummary.model_validate(entry) for entry in catalog_data["sounds"]]
+            except (OSError, KeyError, TypeError, ValueError) as exc:
+                LOGGER.error("Unable to load ambience catalog: %s", exc)
+                await deny("location_ambience_set", "The ambience catalog could not be loaded.")
+                return True
+            sounds_by_id = {entry.id: entry for entry in catalog_sounds}
+            if isinstance(packet, AdminAmbienceCatalogPacket):
+                locations = []
+                for location in WORLD_LOCATIONS:
+                    item = self.item_service.items.get(f"seed-location-ambience-{location.id}")
+                    sound_id = str(item.params.get("ambienceSoundId") or "") if item else ""
+                    locations.append(AdminAmbienceLocationSummary(
+                        id=location.id,
+                        name=location.name,
+                        currentSoundId=sound_id,
+                        currentSoundLabel=(sounds_by_id[sound_id].label if sound_id in sounds_by_id else ""),
+                    ))
+                await self._send(client.websocket, AdminAmbienceCatalogResultPacket(
+                    type="admin_ambience_catalog", locations=locations, sounds=catalog_sounds
+                ))
+                return True
+            if packet.locationId not in WORLD_LOCATION_BY_ID:
+                await deny("location_ambience_set", "Unknown world location.")
+                return True
+            sound = sounds_by_id.get(packet.soundId)
+            if sound is None:
+                await deny("location_ambience_set", "Unknown ambience sound.")
+                return True
+            item = self.item_service.items.get(f"seed-location-ambience-{packet.locationId}")
+            if item is None:
+                await deny("location_ambience_set", "That location ambience control is unavailable.")
+                return True
+            item.params.update({
+                "enabled": True,
+                "emitSound": sound.url,
+                "emitVolume": 50,
+                "ambienceScope": "location",
+                "ambienceName": sound.label,
+                "ambiencePriority": 100,
+                "ambienceSoundId": sound.id,
+                "ambienceLoopStartSeconds": sound.loopStartSeconds,
+                "ambienceLoopEndSeconds": sound.loopEndSeconds,
+            })
+            item.emitSound = sound.url
+            item.updatedBy = client.user_id or "admin"
+            item.updatedByName = client.nickname
+            item.updatedAt = int(time.time() * 1000)
+            item.version += 1
+            self._request_state_save()
+            await self._broadcast_item(item)
+            await self._send_admin_action_result(
+                client, ok=True, action="location_ambience_set",
+                message=f"{WORLD_LOCATION_BY_ID[packet.locationId].name} now uses {sound.label}.",
+            )
+            return True
 
         if isinstance(packet, (NtfyPreferencesGetPacket, NtfyPreferencesUpdatePacket)):
             if not client.user_id:

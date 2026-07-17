@@ -2472,6 +2472,51 @@ BUILTIN_WORLD_ITEMS: tuple[SeedItem, ...] = (
     ),
 )
 
+# Filename-reviewed defaults from Archive/fx/Ambiance. These are location-scoped
+# controls rather than audible point sources; the generated files have a
+# crossfaded seam and therefore loop from zero through their declared end.
+LOCATION_AMBIENCE_DEFAULTS: tuple[tuple[str, str, str], ...] = (
+    ("city", "amb-urbn-realistic-city-stree-bbbee213", "Urban: realistic city street"),
+    ("forest", "amb-forst-natural-ambient-soun-50f65b96", "Forest: natural ambient sound"),
+    ("town", "amb-park-ambience-of-a-outdoo-ba37fe64", "Park: outdoor ambience"),
+    ("town_cafe", "amb-rest-create-background-cr-2e0dfff2", "Restaurant: café background"),
+    ("arcade", "amb-sci-an-ambient-cosmic-so-dbe72782", "Science fiction: ambient cosmic sound"),
+    ("offices", "amb-offc-seamless-quiet-offic-9342289f", "Office: seamless quiet office"),
+    ("ecrypto_bank_lobby", "amb-offc-ambience-of-a-high-e-8cd5a665", "Office: high-end lobby"),
+    ("houses", "amb-subn-late-spring-afternoo-c2bc153e", "Suburban: late spring afternoon"),
+    ("raywonder_house_entry", "amb-room-basic-room-tone-with-27615d58", "Room: basic room tone"),
+    ("matthew_house_entry", "amb-room-basic-room-tone-with-27615d58", "Room: basic room tone"),
+    ("raywonder_house_living_room", "amb-home-a-quiet-apartment-li-0b41f25f", "Home: quiet apartment living room"),
+    ("matthew_house_living_room", "amb-home-a-quiet-apartment-li-0b41f25f", "Home: quiet apartment living room"),
+    ("raywonder_house_studio", "amb-offc-background-studio-am-9ef0c15f", "Office: background studio ambience"),
+    ("matthew_house_music_room", "amb-offc-background-studio-am-9ef0c15f", "Office: background studio ambience"),
+    ("raywonder_house_kitchen", "amb-rest-busy-kitchen-ambienc-2ad7c414", "Restaurant: busy kitchen ambience"),
+    ("raywonder_house_bedroom", "amb-room-quiet-vintage-hotel-e66f04d7", "Room: quiet vintage bedroom"),
+    ("raywonder_house_relaxation_room", "amb-sea-looping-ambient-soun-817274bf", "Sea: looping ambient sound"),
+)
+
+BUILTIN_WORLD_ITEMS += tuple(
+    SeedItem(
+        id=f"seed-location-ambience-{location_id}",
+        type="widget",
+        title=f"{location_id.replace('_', ' ').title()} ambience control",
+        location_id=location_id,
+        x=1,
+        y=1,
+        params={
+            "enabled": True,
+            "emitSound": f"sounds/ambience/fx/{sound_id}.ogg?v=20260716-fx-loops",
+            "emitVolume": 50,
+            "ambienceScope": "location",
+            "ambienceName": label,
+            "ambiencePriority": 100,
+            "ambienceSoundId": sound_id,
+            "ambienceLoopStartSeconds": 0.0,
+        },
+    )
+    for location_id, sound_id, label in LOCATION_AMBIENCE_DEFAULTS
+)
+
 
 def _matching_seed_exists(items: dict[str, WorldItem], seed: SeedItem) -> bool:
     """Return true if this built-in seed is already represented."""
