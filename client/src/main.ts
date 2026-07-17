@@ -3832,10 +3832,11 @@ function pickupDropItemCommand(moveAttached = false): void {
       updateStatus(`You place ${itemLabel(carried)} on ${itemLabel(surface)}.`);
       focusItemForAction(surface);
       signaling.send({
-        type: 'item_interact',
+        type: 'item_drop',
         itemId: carried.id,
-        targetItemId: surface.id,
-        action: 'place_on',
+        x: surface.x,
+        y: surface.y,
+        targetSurfaceId: surface.id,
       });
       return;
     }

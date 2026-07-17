@@ -8675,6 +8675,85 @@ class SignalingServer:
                     drop_item.id,
                 )
                 return
+            if packet.targetSurfaceId:
+                target = self.items.get(packet.targetSurfaceId)
+                if target is None or target.type != "furniture":
+                    await self._send_item_result(
+                        client, False, "drop", "Surface not found.", drop_item.id
+                    )
+                    return
+                if not self._item_can_sit_on_surface(drop_item):
+                    await self._send_item_result(
+                        client,
+                        False,
+                        "drop",
+                        "That item cannot be placed on furniture.",
+                        drop_item.id,
+                    )
+                    return
+                if (
+                    target.locationId != client.location_id
+                    or target.carrierId is not None
+                    or target.x != client.x
+                    or target.y != client.y
+                ):
+                    await self._send_item_result(
+                        client, False, "drop", "Surface is not on your square.", drop_item.id
+                    )
+                    return
+                if not self._surface_has_open_slot(
+                    target, excluding_ids={drop_item.id}
+                ):
+                    await self._send_item_result(
+                        client,
+                        False,
+                        "drop",
+                        f"{target.title} has no open surface space.",
+                        drop_item.id,
+                    )
+                    return
+                now_ms = self.item_service.now_ms()
+                actor_id, actor_name = self._item_updated_actor(client)
+                drop_item.carrierId = None
+                drop_item.locationId = target.locationId
+                drop_item.x = target.x
+                drop_item.y = target.y
+                drop_item.params = self._normalize_surface_location_params(
+                    drop_item,
+                    placement=self._surface_placement_value(target),
+                    surface_id=target.id,
+                    surface_title=target.title,
+                    surface_order=self._next_surface_order(
+                        target, excluding_ids={drop_item.id}
+                    ),
+                )
+                if self._auto_link_radio_component_to_nearby_group(drop_item):
+                    drop_item.version += 1
+                if await self._sync_dropped_radio_with_playing_group(drop_item):
+                    drop_item.version += 1
+                drop_item.updatedAt = now_ms
+                drop_item.updatedBy = actor_id
+                drop_item.updatedByName = actor_name
+                drop_item.version += 1
+                self._request_state_save()
+                await self._broadcast_item(drop_item)
+                await self._broadcast_location(
+                    drop_item.locationId,
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message=f"{client.nickname} places {drop_item.title} on {target.title}.",
+                        system=True,
+                    ),
+                    exclude=client.websocket,
+                )
+                await self._send_item_result(
+                    client,
+                    True,
+                    "drop",
+                    f"You place {drop_item.title} on {target.title}.",
+                    drop_item.id,
+                )
+                return
             linked_items = [
                 item
                 for item in self._linked_relocation_items(

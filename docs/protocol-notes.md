@@ -33,6 +33,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `direct_message`: private player chat to a visible peer. The browser queues unsent direct messages across reconnect and re-resolves the target by nickname before retrying.
 - `ping`: latency measurement.
 - `item_add`, `item_pickup`, `item_drop`, `item_delete`, `item_use`, `item_update`: item actions.
+- `item_drop.targetSurfaceId` atomically places a carried surface-safe item on the exact table, shelf, counter, or other open furniture surface selected by the client. The server verifies location, capacity, and item suitability before changing custody.
 - `item_transfer_targets`: request transfer target accounts for one item (includes online + offline active users, excluding current owner).
 - `item_transfer`: transfer item ownership to another account (`targetUserId` required).
 - `item_secondary_use`: trigger type-specific secondary action when implemented.

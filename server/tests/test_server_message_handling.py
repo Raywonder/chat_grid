@@ -3169,6 +3169,68 @@ async def test_drop_radio_onto_shelf_places_radio_on_shelf(
 
 
 @pytest.mark.asyncio
+async def test_item_drop_targets_exact_open_table_or_shelf_atomically(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="builder", x=5, y=6),
+        permissions={"item.pickup_drop.any"},
+    )
+    server.clients[ws] = client
+    table = server.item_service.default_item(client, "furniture")
+    table.id = "table-1"
+    table.title = "Coffee table"
+    table.params["furnitureKind"] = "table"
+    table.params["surfaceSlots"] = 4
+    server.item_service.add_item(table)
+    shelf = server.item_service.default_item(client, "furniture")
+    shelf.id = "shelf-1"
+    shelf.title = "Book shelf"
+    shelf.params["furnitureKind"] = "shelf"
+    shelf.params["surfaceSlots"] = 4
+    server.item_service.add_item(shelf)
+    remote = server.item_service.default_item(client, "house_object")
+    remote.id = "remote-1"
+    remote.title = "Remote"
+    remote.carrierId = client.id
+    server.item_service.add_item(remote)
+    sent_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        sent_payloads.append(packet)
+
+    async def fake_broadcast_item(_item: object) -> None:
+        return None
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+
+    await server._handle_message(
+        client,
+        json.dumps(
+            {
+                "type": "item_drop",
+                "itemId": remote.id,
+                "x": client.x,
+                "y": client.y,
+                "targetSurfaceId": shelf.id,
+            }
+        ),
+    )
+
+    assert remote.carrierId is None
+    assert remote.params["placement"] == "shelf"
+    assert remote.params["surfaceId"] == shelf.id
+    assert remote.params["surfaceTitle"] == shelf.title
+    assert remote.params["surfaceId"] != table.id
+    result = _last_packet_of_type(sent_payloads, ItemActionResultPacket)
+    assert result.ok is True
+    assert result.message == "You place Remote on Book shelf."
+
+
+@pytest.mark.asyncio
 async def test_drop_shelf_onto_loose_radio_places_radio_on_shelf(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

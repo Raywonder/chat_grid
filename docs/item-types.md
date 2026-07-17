@@ -461,7 +461,7 @@ This is behavior-focused documentation for item types and their defaults.
   Bed occupancy should respect the physical bed size instead of allowing unlimited
   users.
 - A carried `house_object` or portable `radio_station` can be placed on furniture that supports objects.
-- Pressing Drop with a carried placeable item automatically places it on the focused open furniture surface, or the first open surface on the current square. Manual object interaction still works as a fallback.
+- Pressing Drop with a carried placeable item atomically places it on the focused open furniture surface, or the first open surface on the current square. The exact surface is sent with the drop so tables and shelves cannot be lost to a focus/update race. Manual object interaction still works as a fallback.
 - Dropping a portable radio onto an open shelf, or dropping an open shelf onto a loose radio, resolves to the same physical relationship: the radio sits on the shelf.
 - Normal pickup moves only the selected item. Attached/group pickup moves the selected item plus attached, surfaced, or linked parts, so a shelf can move with the radio sitting on it or a room can move with its door and included objects when the user chooses to move the whole attached set.
 - `surfaceSlots` is the capacity limit for placed objects and portable radios. A surface with `0` slots has no item space; the default table has `4`, and shelf items can use multiple slots to model top-to-bottom shelf space.

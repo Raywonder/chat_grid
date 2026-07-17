@@ -622,7 +622,7 @@ export type OutgoingMessage =
   | { type: 'ping'; clientSentAt: number }
   | { type: 'item_add'; itemType: string }
   | { type: 'item_pickup'; itemId: string; moveAttached?: boolean }
-  | { type: 'item_drop'; itemId: string; x: number; y: number; moveAttached?: boolean }
+  | { type: 'item_drop'; itemId: string; x: number; y: number; moveAttached?: boolean; targetSurfaceId?: string }
   | { type: 'item_delete'; itemId: string }
   | { type: 'item_transfer_targets'; itemId: string }
   | { type: 'item_transfer'; itemId: string; targetUserId: string }

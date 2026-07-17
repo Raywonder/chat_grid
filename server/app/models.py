@@ -235,6 +235,7 @@ class ItemDropPacket(BasePacket):
     x: int
     y: int
     moveAttached: bool = False
+    targetSurfaceId: str | None = None
 
 
 class ItemDeletePacket(BasePacket):
