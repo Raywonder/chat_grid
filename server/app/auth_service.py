@@ -1318,6 +1318,48 @@ class AuthService:
         self._db_commit()
         return {"enabled": bool(enabled), "topic": topic}
 
+    def get_flexpbx_dialing_preferences(self, user_id: str) -> dict[str, object]:
+        """Return persisted outbound convenience settings for one user."""
+
+        try:
+            row = self._db_fetchone(
+                "SELECT outbound_enabled, dial_prefixes FROM flexpbx_dialing_settings WHERE user_id = ?",
+                (int(user_id),),
+            )
+        except sqlite3.OperationalError:
+            row = None
+        if row is None:
+            return {"enabled": False, "prefixes": ["9"]}
+        try:
+            prefixes = json.loads(str(row["dial_prefixes"] or "[\"9\"]"))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            prefixes = ["9"]
+        if not isinstance(prefixes, list):
+            prefixes = ["9"]
+        return {"enabled": bool(row["outbound_enabled"]), "prefixes": [str(item) for item in prefixes]}
+
+    def update_flexpbx_dialing_preferences(
+        self, user_id: str, *, enabled: bool, prefixes: list[str]
+    ) -> dict[str, object]:
+        """Persist only user convenience settings; PBX eligibility stays server-owned."""
+
+        normalized = sorted({str(prefix).strip() for prefix in prefixes if str(prefix).strip().isdigit()})[:8]
+        if not normalized:
+            normalized = ["9"]
+        self._db_execute(
+            """
+            INSERT INTO flexpbx_dialing_settings (user_id, outbound_enabled, dial_prefixes, updated_at_ms)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                outbound_enabled = excluded.outbound_enabled,
+                dial_prefixes = excluded.dial_prefixes,
+                updated_at_ms = excluded.updated_at_ms
+            """,
+            (int(user_id), 1 if enabled else 0, json.dumps(normalized), self.now_ms()),
+        )
+        self._db_commit()
+        return {"enabled": bool(enabled), "prefixes": normalized}
+
     @staticmethod
     def now_ms() -> int:
         """Return unix epoch timestamp in milliseconds."""
@@ -1452,6 +1494,17 @@ class AuthService:
                 created_at_ms INTEGER NOT NULL,
                 last_login_at_ms INTEGER NOT NULL,
                 PRIMARY KEY(provider, subject),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        self._db_execute(
+            """
+            CREATE TABLE IF NOT EXISTS flexpbx_dialing_settings (
+                user_id INTEGER PRIMARY KEY,
+                outbound_enabled INTEGER NOT NULL DEFAULT 0,
+                dial_prefixes TEXT NOT NULL DEFAULT '[\"9\"]',
+                updated_at_ms INTEGER NOT NULL,
                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
             )
             """

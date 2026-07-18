@@ -13,6 +13,8 @@ type UiDom = {
   radioAnnouncementModeSelect: HTMLSelectElement;
   itemBeaconsToggle: HTMLInputElement;
   movementDirectionsToggle: HTMLInputElement;
+  flexPbxOutboundDialingToggle: HTMLInputElement;
+  flexPbxDialingPrefixesInput: HTMLInputElement;
   settingsModal: HTMLDivElement;
   canvas: HTMLCanvasElement;
 };
@@ -39,6 +41,7 @@ type UiBindingsDeps = {
   setRadioAnnouncementMode: (mode: string) => void;
   setItemBeacons: (enabled: boolean) => void;
   setMovementDirections: (enabled: boolean) => void;
+  setFlexPbxDialingPreferences: (enabled: boolean, prefixesText: string) => void;
 };
 
 /**
@@ -100,6 +103,20 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
   deps.dom.movementDirectionsToggle.addEventListener('change', (event) => {
     const target = event.target as HTMLInputElement;
     deps.setMovementDirections(target.checked);
+  });
+
+  deps.dom.flexPbxOutboundDialingToggle.addEventListener('change', () => {
+    deps.setFlexPbxDialingPreferences(
+      deps.dom.flexPbxOutboundDialingToggle.checked,
+      deps.dom.flexPbxDialingPrefixesInput.value,
+    );
+  });
+
+  deps.dom.flexPbxDialingPrefixesInput.addEventListener('change', () => {
+    deps.setFlexPbxDialingPreferences(
+      deps.dom.flexPbxOutboundDialingToggle.checked,
+      deps.dom.flexPbxDialingPrefixesInput.value,
+    );
   });
 
   deps.dom.settingsModal.addEventListener('keydown', (event) => {

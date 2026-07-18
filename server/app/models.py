@@ -151,6 +151,32 @@ class NtfyPreferencesUpdatePacket(BasePacket):
     rotateTopic: bool = False
 
 
+class FlexPbxDialingPreferencesGetPacket(BasePacket):
+    """Request the signed-in user's verified FlexPBX dialing settings."""
+
+    type: Literal["flexpbx_dialing_preferences_get"]
+
+
+class FlexPbxDialingPreferencesUpdatePacket(BasePacket):
+    """Update convenience settings without granting PBX authorization."""
+
+    type: Literal["flexpbx_dialing_preferences_update"]
+    enabled: bool
+    prefixes: list[str] = Field(default_factory=lambda: ["9"], max_length=8)
+
+
+class FlexPbxDialingPreferencesPacket(BasePacket):
+    """Server-owned FlexPBX eligibility and dialing preferences."""
+
+    type: Literal["flexpbx_dialing_preferences"]
+    verified: bool
+    extension: str = ""
+    outboundAllowed: bool = False
+    enabled: bool = False
+    prefixes: list[str] = Field(default_factory=lambda: ["9"])
+    message: str = ""
+
+
 class WelcomeReadyPacket(BasePacket):
     type: Literal["welcome_ready"]
 
@@ -434,6 +460,8 @@ ClientPacket = (
     | AuthLogoutPacket
     | NtfyPreferencesGetPacket
     | NtfyPreferencesUpdatePacket
+    | FlexPbxDialingPreferencesGetPacket
+    | FlexPbxDialingPreferencesUpdatePacket
     | WelcomeReadyPacket
     | AdminRolesListPacket
     | AdminRoleCreatePacket

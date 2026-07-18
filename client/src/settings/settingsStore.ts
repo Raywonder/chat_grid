@@ -14,6 +14,12 @@ const PEER_LISTEN_GAINS_STORAGE_KEY = 'chatGridPeerListenGains';
 const NICKNAME_STORAGE_KEY = 'spatialChatNickname';
 const AUTH_USERNAME_STORAGE_KEY = 'chatGridAuthUsername';
 const LEGACY_AUTH_SESSION_TOKEN_STORAGE_KEY = 'chatGridAuthSessionToken';
+const FLEXPBX_DIALING_PREFERENCES_STORAGE_KEY = 'chatGridFlexPbxDialingPreferences';
+
+export type FlexPbxDialingPreferences = {
+  enabled: boolean;
+  prefixes: string[];
+};
 
 type DevicePreference = {
   id: string;
@@ -32,6 +38,21 @@ const DEFAULT_AUDIO_ANNOUNCEMENT_SETTINGS: AudioAnnouncementSettings = {
   movementDirections: false,
 };
 
+const DEFAULT_FLEXPBX_DIALING_PREFERENCES: FlexPbxDialingPreferences = {
+  enabled: false,
+  prefixes: ['9'],
+};
+
+function normalizeFlexPbxPrefixes(raw: unknown): string[] {
+  const values = Array.isArray(raw) ? raw : [];
+  const prefixes = values
+    .map((value) => String(value).trim())
+    .filter((value) => /^\d+$/.test(value))
+    .filter((value, index, all) => all.indexOf(value) === index)
+    .slice(0, 8);
+  return prefixes.length > 0 ? prefixes : [...DEFAULT_FLEXPBX_DIALING_PREFERENCES.prefixes];
+}
+
 function normalizeAnnouncementMode(raw: unknown): AnnouncementMode {
   return raw === 'sounds_only' || raw === 'required_only' || raw === 'full' ? raw : 'full';
 }
@@ -44,6 +65,27 @@ function normalizeRadioAnnouncementMode(raw: unknown): RadioAnnouncementMode {
  * Wraps localStorage reads/writes for client user settings.
  */
 export class SettingsStore {
+  loadFlexPbxDialingPreferences(): FlexPbxDialingPreferences {
+    const raw = localStorage.getItem(FLEXPBX_DIALING_PREFERENCES_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_FLEXPBX_DIALING_PREFERENCES, prefixes: [...DEFAULT_FLEXPBX_DIALING_PREFERENCES.prefixes] };
+    try {
+      const parsed = JSON.parse(raw) as Partial<FlexPbxDialingPreferences>;
+      return {
+        enabled: parsed.enabled === true,
+        prefixes: normalizeFlexPbxPrefixes(parsed.prefixes),
+      };
+    } catch {
+      return { ...DEFAULT_FLEXPBX_DIALING_PREFERENCES, prefixes: [...DEFAULT_FLEXPBX_DIALING_PREFERENCES.prefixes] };
+    }
+  }
+
+  saveFlexPbxDialingPreferences(preferences: FlexPbxDialingPreferences): void {
+    localStorage.setItem(
+      FLEXPBX_DIALING_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({ enabled: preferences.enabled === true, prefixes: normalizeFlexPbxPrefixes(preferences.prefixes) }),
+    );
+  }
+
   loadEffectLevels(): Partial<Record<'reverb' | 'echo' | 'flanger' | 'high_pass' | 'low_pass' | 'off', number>> | null {
     const raw = localStorage.getItem(EFFECT_LEVELS_STORAGE_KEY);
     if (!raw) return null;

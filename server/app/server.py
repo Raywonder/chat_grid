@@ -75,6 +75,9 @@ from .models import (
     NtfyPreferencesGetPacket,
     NtfyPreferencesResultPacket,
     NtfyPreferencesUpdatePacket,
+    FlexPbxDialingPreferencesGetPacket,
+    FlexPbxDialingPreferencesPacket,
+    FlexPbxDialingPreferencesUpdatePacket,
     AdminActionResultPacket,
     AdminAmbienceCatalogPacket,
     AdminAmbienceCatalogResultPacket,
@@ -685,6 +688,7 @@ class SignalingServer:
         # enough to replay to a client that joins after the cast began.
         self._active_media_casts: dict[str, dict[str, MediaCastStatePacket]] = {}
         self._world_phone_calls: dict[str, WorldPhoneStatePacket] = {}
+        self._flexpbx_bindings = self._load_flexpbx_bindings()
 
     @staticmethod
     def _resolve_server_version(release_version: str) -> str:
@@ -695,6 +699,48 @@ class SignalingServer:
             return env_override
 
         return format_server_version(release_version)
+
+    @staticmethod
+    def _load_flexpbx_bindings() -> dict[str, dict[str, object]]:
+        """Load verified Chat Grid username-to-FlexPBX bindings from service config."""
+
+        raw = os.getenv("CHGRID_FLEXPBX_BINDINGS", "").strip()
+        if not raw:
+            return {}
+        try:
+            payload = json.loads(raw)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            LOGGER.error("Invalid CHGRID_FLEXPBX_BINDINGS; outbound dialing disabled")
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        bindings: dict[str, dict[str, object]] = {}
+        for username, value in payload.items():
+            if not isinstance(value, dict):
+                continue
+            extension = "".join(character for character in str(value.get("extension") or "") if character.isdigit())
+            if extension:
+                bindings[str(username).strip().casefold()] = {
+                    "extension": extension,
+                    "outboundAllowed": bool(value.get("outboundAllowed", True)),
+                }
+        return bindings
+
+    def _flexpbx_binding_for_client(self, client: ClientConnection) -> dict[str, object]:
+        """Return the server-verified PBX binding for one authenticated client."""
+
+        return self._flexpbx_bindings.get((client.username or "").strip().casefold(), {})
+
+    def _flexpbx_preferences_for_client(self, client: ClientConnection) -> dict[str, object]:
+        binding = self._flexpbx_binding_for_client(client)
+        stored = self.auth_service.get_flexpbx_dialing_preferences(client.user_id or "0")
+        return {
+            "verified": bool(binding),
+            "extension": str(binding.get("extension") or ""),
+            "outboundAllowed": bool(binding.get("outboundAllowed")),
+            "enabled": bool(stored.get("enabled")) and bool(binding.get("outboundAllowed")),
+            "prefixes": list(stored.get("prefixes") or ["9"]),
+        }
 
     @staticmethod
     def _resolve_client_version_metadata() -> tuple[str, str]:
@@ -8920,6 +8966,43 @@ class SignalingServer:
 
         return True
 
+    async def _handle_flexpbx_preferences_packet(
+        self, client: ClientConnection, packet: ClientPacket
+    ) -> bool:
+        """Handle per-user FlexPBX convenience settings."""
+
+        if not isinstance(packet, (FlexPbxDialingPreferencesGetPacket, FlexPbxDialingPreferencesUpdatePacket)):
+            return False
+        if not client.user_id:
+            return True
+        if isinstance(packet, FlexPbxDialingPreferencesUpdatePacket):
+            binding = self._flexpbx_binding_for_client(client)
+            if not binding or not bool(binding.get("outboundAllowed")):
+                await self._send(client.websocket, FlexPbxDialingPreferencesPacket(
+                    type="flexpbx_dialing_preferences",
+                    verified=bool(binding),
+                    extension=str(binding.get("extension") or ""),
+                    outboundAllowed=False,
+                    message="Outbound dialing is unavailable because this account has no verified FlexPBX outbound extension.",
+                ))
+                return True
+            stored = self.auth_service.update_flexpbx_dialing_preferences(
+                client.user_id, enabled=packet.enabled, prefixes=packet.prefixes
+            )
+        else:
+            stored = self.auth_service.get_flexpbx_dialing_preferences(client.user_id)
+        binding = self._flexpbx_binding_for_client(client)
+        await self._send(client.websocket, FlexPbxDialingPreferencesPacket(
+            type="flexpbx_dialing_preferences",
+            verified=bool(binding),
+            extension=str(binding.get("extension") or ""),
+            outboundAllowed=bool(binding.get("outboundAllowed")),
+            enabled=bool(stored.get("enabled")) and bool(binding.get("outboundAllowed")),
+            prefixes=list(stored.get("prefixes") or ["9"]),
+            message="FlexPBX outbound convenience settings saved." if isinstance(packet, FlexPbxDialingPreferencesUpdatePacket) else "",
+        ))
+        return True
+
     async def _handle_world_phone(
         self, client: ClientConnection, packet: WorldPhonePacket
     ) -> None:
@@ -9015,12 +9098,34 @@ class SignalingServer:
                 ),
                 None,
             )
-            if target_client is None and target.startswith("9"):
-                if not os.getenv("CHGRID_FLEXPBX_BRIDGE_URL", "").strip():
-                    await self._send(client.websocket, state("failed", target=target, message="External dialing is not configured on this world yet."))
+            if target_client is None:
+                dialing = self._flexpbx_preferences_for_client(client)
+                prefixes = [str(prefix) for prefix in dialing["prefixes"]]
+                outbound_target = next((prefix for prefix in prefixes if target.startswith(prefix)), None)
+                known_world_extension = any(
+                    "".join(character for character in str(item.params.get("phoneExtension") or "") if character.isdigit())
+                    == normalized_extension
+                    for item in self.items.values()
+                    if str(item.params.get("objectKind") or "").strip().lower() == "phone"
+                )
+                if outbound_target is not None and not known_world_extension:
+                    if not dialing["verified"] or not dialing["outboundAllowed"]:
+                        await self._send(client.websocket, state(
+                            "failed", target=target,
+                            message="Outbound dialing requires a verified FlexPBX extension with outbound permission.",
+                        ))
+                        return
+                    if not dialing["enabled"]:
+                        await self._send(client.websocket, state(
+                            "failed", target=target,
+                            message="Outbound dialing is disabled in your Chat Grid phone settings.",
+                        ))
+                        return
+                    if not os.getenv("CHGRID_FLEXPBX_BRIDGE_URL", "").strip():
+                        await self._send(client.websocket, state("failed", target=target, message="FlexPBX outbound dialing is not connected to this world yet."))
+                        return
+                    await self._send(client.websocket, state("failed", target=target, message="The FlexPBX bridge is configured but its outbound adapter is not ready."))
                     return
-                await self._send(client.websocket, state("failed", target=target, message="FlexPBX bridge is configured but external dialing still needs its server adapter."))
-                return
             if target_client is None and normalized_extension:
                 # World extensions are user-owned, server-assigned numbers. Match
                 # the exact digits across all of that user's phones so a caller
@@ -9115,6 +9220,9 @@ class SignalingServer:
 
         if isinstance(packet, WorldPhonePacket):
             await self._handle_world_phone(client, packet)
+            return
+
+        if await self._handle_flexpbx_preferences_packet(client, packet):
             return
 
         if await self._handle_admin_packet(client, packet):

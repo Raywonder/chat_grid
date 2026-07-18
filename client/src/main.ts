@@ -67,7 +67,7 @@ import { createItemInteractionController } from './items/itemInteractionControll
 import { createItemPropertyEditor } from './items/itemPropertyEditor';
 import { createItemPropertyPresentation } from './items/itemPropertyPresentation';
 import { ItemBehaviorRegistry } from './items/types/behaviorRegistry';
-import { SettingsStore } from './settings/settingsStore';
+import { SettingsStore, type FlexPbxDialingPreferences } from './settings/settingsStore';
 import { createAuthController } from './session/authController';
 import { startClientUpdateWatcher, type ClientVersionMetadata } from './session/clientUpdateWatcher';
 import { runConnectFlow, runDisconnectFlow, type ConnectFlowDeps } from './session/connectionFlow';
@@ -142,6 +142,9 @@ type Dom = {
   radioAnnouncementModeSelect: HTMLSelectElement;
   itemBeaconsToggle: HTMLInputElement;
   movementDirectionsToggle: HTMLInputElement;
+  flexPbxOutboundDialingToggle: HTMLInputElement;
+  flexPbxDialingPrefixesInput: HTMLInputElement;
+  flexPbxDialingStatus: HTMLParagraphElement;
   castLocalOnlyToggle: HTMLInputElement;
   ntfyNotificationsToggle: HTMLInputElement;
   ntfyNotificationsStatus: HTMLParagraphElement;
@@ -192,6 +195,9 @@ const dom: Dom = {
   radioAnnouncementModeSelect: requiredById('radioAnnouncementModeSelect'),
   itemBeaconsToggle: requiredById('itemBeaconsToggle'),
   movementDirectionsToggle: requiredById('movementDirectionsToggle'),
+  flexPbxOutboundDialingToggle: requiredById('flexPbxOutboundDialingToggle'),
+  flexPbxDialingPrefixesInput: requiredById('flexPbxDialingPrefixesInput'),
+  flexPbxDialingStatus: requiredById('flexPbxDialingStatus'),
   castLocalOnlyToggle: requiredById('castLocalOnlyToggle'),
   ntfyNotificationsToggle: requiredById('ntfyNotificationsToggle'),
   ntfyNotificationsStatus: requiredById('ntfyNotificationsStatus'),
@@ -741,6 +747,12 @@ let audioLayers: AudioLayerState = {
   world: true,
 };
 let audioAnnouncementSettings: AudioAnnouncementSettings = settings.loadAudioAnnouncementSettings();
+let flexPbxDialingPreferences: FlexPbxDialingPreferences = settings.loadFlexPbxDialingPreferences();
+let flexPbxServerState: {
+  verified: boolean;
+  outboundAllowed: boolean;
+  message: string;
+} | null = null;
 let lastItemBeaconTile = '';
 let lastItemBeaconItemId = '';
 let lastItemBeaconAtMs = 0;
@@ -1352,6 +1364,50 @@ function syncAnnouncementSettingsControls(): void {
   dom.radioAnnouncementModeSelect.value = audioAnnouncementSettings.radioAnnouncementMode;
   dom.itemBeaconsToggle.checked = audioAnnouncementSettings.itemBeacons;
   dom.movementDirectionsToggle.checked = audioAnnouncementSettings.movementDirections;
+}
+
+function syncFlexPbxDialingControls(): void {
+  dom.flexPbxOutboundDialingToggle.checked = flexPbxDialingPreferences.enabled;
+  dom.flexPbxDialingPrefixesInput.value = flexPbxDialingPreferences.prefixes.join(', ');
+  const serverState = flexPbxServerState;
+  const unavailable = !state.running || (serverState !== null && (!serverState.verified || !serverState.outboundAllowed));
+  dom.flexPbxOutboundDialingToggle.disabled = unavailable;
+  dom.flexPbxDialingPrefixesInput.disabled = !state.running;
+  if (!state.running) {
+    dom.flexPbxDialingStatus.textContent = 'Connect to the server to check FlexPBX verification.';
+  } else if (!serverState) {
+    dom.flexPbxDialingStatus.textContent = 'Checking server verification… these settings do not grant outbound authorization.';
+  } else if (!serverState.verified) {
+    dom.flexPbxDialingStatus.textContent = 'The server has not verified FlexPBX outbound dialing for this account. Settings do not grant authorization.';
+  } else if (!serverState.outboundAllowed) {
+    dom.flexPbxDialingStatus.textContent = serverState.message || 'The server has not enabled FlexPBX outbound dialing for this account.';
+  } else {
+    dom.flexPbxDialingStatus.textContent = serverState.message || 'Server verification allows convenience outbound dialing. In-world extensions remain the primary path.';
+  }
+}
+
+function parseFlexPbxPrefixes(value: string): string[] {
+  const prefixes = value
+    .split(/[\s,]+/)
+    .map((prefix) => prefix.trim())
+    .filter((prefix) => /^\d+$/.test(prefix))
+    .filter((prefix, index, all) => all.indexOf(prefix) === index)
+    .slice(0, 8);
+  return prefixes.length > 0 ? prefixes : ['9'];
+}
+
+function setFlexPbxDialingPreferences(enabled: boolean, prefixesText: string): void {
+  flexPbxDialingPreferences = { enabled, prefixes: parseFlexPbxPrefixes(prefixesText) };
+  settings.saveFlexPbxDialingPreferences(flexPbxDialingPreferences);
+  syncFlexPbxDialingControls();
+  if (state.running) {
+    signaling.send({
+      type: 'flexpbx_dialing_preferences_update',
+      enabled: flexPbxDialingPreferences.enabled,
+      prefixes: flexPbxDialingPreferences.prefixes,
+    });
+    dom.flexPbxDialingStatus.textContent = 'Saving convenience dialing preferences; server verification is still required.';
+  }
 }
 
 function shouldAnnounceRadioStatus(): boolean {
@@ -3401,6 +3457,23 @@ function handleNtfyPreferences(message: Extract<IncomingMessage, { type: 'ntfy_p
   }
 }
 
+/** Applies server-owned FlexPBX eligibility and convenience dialing settings. */
+function handleFlexPbxDialingPreferences(
+  message: Extract<IncomingMessage, { type: 'flexpbx_dialing_preferences' }>,
+): void {
+  flexPbxServerState = {
+    verified: message.verified,
+    outboundAllowed: message.outboundAllowed,
+    message: message.message,
+  };
+  flexPbxDialingPreferences = {
+    enabled: message.enabled,
+    prefixes: parseFlexPbxPrefixes(message.prefixes.join(', ')),
+  };
+  settings.saveFlexPbxDialingPreferences(flexPbxDialingPreferences);
+  syncFlexPbxDialingControls();
+}
+
 /** Builds dependencies shared by connect/disconnect flow helpers. */
 function getConnectionFlowDeps(): ConnectFlowDeps {
   return {
@@ -3673,6 +3746,7 @@ const onAppMessage = createOnMessageHandler({
   handleAdminAmbienceCatalog,
   handleAdminActionResult,
   handleNtfyPreferences,
+  handleFlexPbxDialingPreferences,
   handleItemTransferTargets,
   isPeerNegotiationReady: () => peerNegotiationReady,
   enqueuePendingSignal: (message) => {
@@ -4121,7 +4195,7 @@ function openWorldPhoneCommand(): void {
     audio.sfxUiCancel();
     return;
   }
-  const action = (window.prompt('World phone: enter a number or user to dial, A to answer, H to hang up, C for contacts, or M for audio mode.') || '').trim();
+  const action = (window.prompt('World phone: enter an in-world extension or user first (the primary dialing path). Outbound phone numbers are optional and require server verification; A to answer, H to hang up, C for contacts, or M for audio mode.') || '').trim();
   if (!action) return;
   const upper = action.toUpperCase();
   if (upper === 'A' || upper === 'H' || upper === 'C') {
@@ -5403,8 +5477,12 @@ function openSettings(): void {
   dom.settingsModal.classList.remove('hidden');
   dom.settingsModal.hidden = false;
   syncAnnouncementSettingsControls();
+  syncFlexPbxDialingControls();
   void populateAudioDevices();
-  if (state.running) signaling.send({ type: 'ntfy_preferences_get' });
+  if (state.running) {
+    signaling.send({ type: 'ntfy_preferences_get' });
+    signaling.send({ type: 'flexpbx_dialing_preferences_get' });
+  }
   dom.audioInputSelect.focus();
 }
 
@@ -5505,6 +5583,7 @@ setupDomUiHandlers({
   setRadioAnnouncementMode,
   setItemBeacons,
   setMovementDirections,
+  setFlexPbxDialingPreferences,
 });
 authController.setupUiHandlers({
   connect,
@@ -5512,6 +5591,7 @@ authController.setupUiHandlers({
 authController.initializeUi();
 updateDeviceSummary();
 syncAnnouncementSettingsControls();
+syncFlexPbxDialingControls();
 setConnectionStatus(
   STARTED_FROM_VERSION_RELOAD
     ? 'Client updated. Reconnecting...'

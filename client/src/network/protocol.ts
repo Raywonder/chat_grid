@@ -567,6 +567,16 @@ export const ntfyPreferencesSchema = z.object({
   message: z.string().optional(),
 });
 
+export const flexPbxDialingPreferencesSchema = z.object({
+  type: z.literal('flexpbx_dialing_preferences'),
+  verified: z.boolean(),
+  extension: z.string(),
+  outboundAllowed: z.boolean(),
+  enabled: z.boolean(),
+  prefixes: z.array(z.string()),
+  message: z.string(),
+});
+
 export const incomingMessageSchema = z.discriminatedUnion('type', [
   authRequiredSchema,
   authResultSchema,
@@ -604,6 +614,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   adminAmbienceCatalogSchema,
   adminActionResultSchema,
   ntfyPreferencesSchema,
+  flexPbxDialingPreferencesSchema,
 ]);
 
 export type IncomingMessage = z.infer<typeof incomingMessageSchema>;
@@ -616,6 +627,8 @@ export type OutgoingMessage =
   | { type: 'auth_logout' }
   | { type: 'ntfy_preferences_get' }
   | { type: 'ntfy_preferences_update'; enabled: boolean; rotateTopic?: boolean }
+  | { type: 'flexpbx_dialing_preferences_get' }
+  | { type: 'flexpbx_dialing_preferences_update'; enabled: boolean; prefixes: string[] }
   | { type: 'welcome_ready' }
   | { type: 'admin_roles_list' }
   | { type: 'admin_role_create'; name: string }

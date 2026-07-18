@@ -139,6 +139,7 @@ type MessageHandlerDeps = {
   handleAdminAmbienceCatalog: (message: Extract<IncomingMessage, { type: 'admin_ambience_catalog' }>) => void;
   handleAdminActionResult: (message: Extract<IncomingMessage, { type: 'admin_action_result' }>) => void;
   handleNtfyPreferences: (message: Extract<IncomingMessage, { type: 'ntfy_preferences' }>) => void;
+  handleFlexPbxDialingPreferences: (message: Extract<IncomingMessage, { type: 'flexpbx_dialing_preferences' }>) => void;
   handleItemTransferTargets: (message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>) => void;
   isPeerNegotiationReady: () => boolean;
   enqueuePendingSignal: (message: Extract<IncomingMessage, { type: 'signal' }>) => void;
@@ -538,6 +539,9 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         break;
       case 'world_phone_state':
         deps.handleWorldPhoneState?.(message);
+        break;
+      case 'flexpbx_dialing_preferences':
+        deps.handleFlexPbxDialingPreferences(message);
         break;
 
       case 'item_use_sound': {

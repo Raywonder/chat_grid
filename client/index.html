@@ -131,6 +131,17 @@
             <input id="movementDirectionsToggle" type="checkbox" />
             Speak movement directions and nearby-user movement
           </label>
+          <fieldset>
+            <legend>FlexPBX outbound dialing</legend>
+            <label class="checkbox-row" for="flexPbxOutboundDialingToggle">
+              <input id="flexPbxOutboundDialingToggle" type="checkbox" />
+              Enable convenience outbound dialing
+            </label>
+            <label for="flexPbxDialingPrefixesInput">Outbound prefix digits</label>
+            <input id="flexPbxDialingPrefixesInput" type="text" inputmode="numeric" autocomplete="off" aria-describedby="flexPbxDialingHelp" />
+            <p id="flexPbxDialingHelp" class="auth-hint">Enter one or more digit prefixes separated by commas, such as 9 or 8, 9. In-world extensions are the primary dialing path. This preference does not authorize calling: the server must verify and allow FlexPBX outbound dialing.</p>
+            <p id="flexPbxDialingStatus" class="auth-hint" aria-live="polite">Connect to the server to check FlexPBX verification.</p>
+          </fieldset>
           <label class="checkbox-row" for="castLocalOnlyToggle">
             <input id="castLocalOnlyToggle" type="checkbox" />
             Keep my cast local only (do not play it in the world)
