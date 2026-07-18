@@ -135,11 +135,12 @@ if [[ -f "$PUBLIC_HTACCESS_SRC" ]]; then
   cp "$PUBLIC_HTACCESS_SRC" "$PUBLISH_DIR/.htaccess"
 fi
 
-# Normalize publish permissions for restrictive shared-host PHP handlers.
-# - Directories must be executable/traversable.
-# - PHP/static files must not be group-writable.
-find "$PUBLISH_DIR" -type d -exec chmod 755 {} +
-find "$PUBLISH_DIR" -type f -exec chmod 644 {} +
+# Normalize only files/directories owned by the deploy account. Shared public
+# trees may deliberately remain owned by the hosting account; ACLs grant this
+# deploy user write access without allowing chmod to fail the deployment.
+DEPLOY_USER="$(id -un)"
+find "$PUBLISH_DIR" -user "$DEPLOY_USER" -type d -exec chmod 755 {} +
+find "$PUBLISH_DIR" -user "$DEPLOY_USER" -type f -exec chmod 644 {} +
 
 echo "client deploy complete: $PUBLISH_DIR"
 echo "client base path: $BASE_PATH"
