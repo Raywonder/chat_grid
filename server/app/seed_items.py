@@ -32,6 +32,11 @@ RADIO_STATION_PRESETS: tuple[dict[str, str], ...] = (
         "switchSound": "sounds/radio/station-switch/acb-media-1.mp3",
     },
     {
+        "title": "Tony Gebhard Radio",
+        "streamUrl": "https://radio.tonygebhard.me/radio",
+        "switchSound": "sounds/radio/station-switch/acb-media-2.mp3",
+    },
+    {
         "title": "BBC Radio 1",
         "streamUrl": "http://bbcmedia.ic.llnwd.net/stream/bbcmedia_radio1_mf_p",
         "switchSound": "sounds/radio/station-switch/acb-media-2.mp3",

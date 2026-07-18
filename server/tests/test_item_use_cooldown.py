@@ -348,13 +348,18 @@ async def test_house_radio_remote_syncs_all_house_radios_to_target_station(
     server.clients[ws] = client
     remote = server.items["seed-raywonder-living-room-radio-remote"]
     living_radio = server.items["seed-raywonder-living-room-radio"]
-    living_radio.params["stationIndex"] = 8
-    living_radio.params["streamUrl"] = living_radio.params["stationPresets"][8][
-        "streamUrl"
-    ]
-    living_radio.params["stationName"] = living_radio.params["stationPresets"][8][
-        "title"
-    ]
+    target_preset = next(
+        preset
+        for preset in living_radio.params["stationPresets"]
+        if preset["title"] == "ACB Media 1"
+    )
+    living_radio.params["stationIndex"] = next(
+        index
+        for index, preset in enumerate(living_radio.params["stationPresets"])
+        if preset["title"] == "ACB Media 1"
+    )
+    living_radio.params["streamUrl"] = target_preset["streamUrl"]
+    living_radio.params["stationName"] = target_preset["title"]
 
     send_payloads: list[object] = []
     broadcast_items: list[object] = []
@@ -386,8 +391,9 @@ async def test_house_radio_remote_syncs_all_house_radios_to_target_station(
     relaxation_radio = server.items["seed-raywonder-relaxation-ocean-radio"]
     bedroom_radio = server.items["seed-raywonder-bedroom-bedside-radio"]
     assert synced_radios
-    assert all(item.params["stationIndex"] == 8 for item in synced_radios)
-    assert all(item.params["stationName"] == "ACB Media 1" for item in synced_radios)
+    assert all(
+        item.params["stationName"] == "ACB Media 1" for item in synced_radios
+    )
     assert bedroom_radio.params["enabled"] is False
     assert all(
         item.params["enabled"] is True

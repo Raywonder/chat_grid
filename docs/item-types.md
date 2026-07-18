@@ -428,7 +428,7 @@ This is behavior-focused documentation for item types and their defaults.
 - `enabled`: boolean or on/off style input
 
 ### Built-In Seeds
-- City: `Chat Grid Radio` with SoulFoodRadio, DivineCreations radio, Chris Mix Radio, StreamMadness, VoiceLink-popular streams, and ACB Media 1 through 10 as knob presets, plus `AAAStreamer`, `blind.software`, `tappedin.fm`, and portals to Town, Arcade, Offices, and Houses
+- City: `Chat Grid Radio` with SoulFoodRadio, DivineCreations radio, Chris Mix Radio, StreamMadness, Tony Gebhard Radio, VoiceLink-popular streams, and ACB Media 1 through 10 as knob presets, plus `AAAStreamer`, `blind.software`, `tappedin.fm`, and portals to Town, Arcade, Offices, and Houses
 - Town: `tCast`, `Bema Media Player`, `Thrive Messenger`, and a return portal to Main City
 
 ### BlindSoftware Catalog Placement

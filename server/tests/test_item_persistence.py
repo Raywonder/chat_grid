@@ -152,6 +152,7 @@ def test_builtin_items_seed_without_replacing_existing_station(tmp_path: Path) -
     preset_titles = [preset["title"] for preset in radio.params["stationPresets"]]
     assert "Chris Mix Radio" in preset_titles
     assert "StreamMadness - The Plague" in preset_titles
+    assert "Tony Gebhard Radio" in preset_titles
     assert "BBC Radio 1" in preset_titles
     assert "NPR Program Stream" in preset_titles
     assert "Classical KUSC" in preset_titles
@@ -159,7 +160,12 @@ def test_builtin_items_seed_without_replacing_existing_station(tmp_path: Path) -
     assert [title for title in preset_titles if title.startswith("ACB Media ")] == [
         f"ACB Media {index}" for index in range(1, 11)
     ]
-    assert radio.params["stationPresets"][8]["streamUrl"] == "https://streaming.live365.com/a11911"
+    acb_one = next(
+        preset for preset in radio.params["stationPresets"] if preset["title"] == "ACB Media 1"
+    )
+    assert acb_one["streamUrl"] == "https://streaming.live365.com/a11911"
+    tony_preset = next(preset for preset in radio.params["stationPresets"] if preset["title"] == "Tony Gebhard Radio")
+    assert tony_preset["streamUrl"] == "https://radio.tonygebhard.me/radio"
     assert "seed-city-acb-media-1" not in service.items
     assert service.items["seed-arcade-moonstep-runner"].locationId == "arcade"
     assert service.items["seed-arcade-moonstep-runner"].params["serviceKind"] == "game"
@@ -323,12 +329,10 @@ def test_builtin_items_seed_without_replacing_existing_station(tmp_path: Path) -
         ]
         == "Chris Mix Radio"
     )
-    assert (
-        service.items["seed-raywonder-living-room-radio"].params["stationPresets"][8][
-            "title"
-        ]
-        == "ACB Media 1"
-    )
+    house_radio_presets = service.items["seed-raywonder-living-room-radio"].params[
+        "stationPresets"
+    ]
+    assert next(preset for preset in house_radio_presets if preset["title"] == "ACB Media 1")
     assert (
         service.items["seed-raywonder-living-room-radio"].params["stationPresets"][-1][
             "title"
