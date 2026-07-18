@@ -2306,6 +2306,28 @@ class SignalingServer:
             return False
         return self._house_access_scope_for_location(client.location_id) in protected_scopes
 
+    def _controls_alarm_from_entry_context(
+        self, alarm: WorldItem, client: ClientConnection
+    ) -> bool:
+        """Return whether a resident can approve entry from inside or at the door.
+
+        Owners and authorized residents may let someone in while standing with
+        them outside the guarded house.  The server still requires an enrolled
+        account and the exact exterior-door square; being in the same public
+        area is not enough.
+        """
+
+        if self._controls_alarm_from_current_house(alarm, client):
+            return True
+        if not self._is_house_alarm_controller(alarm, client):
+            return False
+        return any(
+            door.locationId == client.location_id
+            and door.x == client.x
+            and door.y == client.y
+            for door in self._doors_for_house_alarm(alarm)
+        )
+
     def _guarded_entry_matches_for_name(
         self, client: ClientConnection, requested_name: str
     ) -> list[tuple[WorldItem, WorldItem, ClientConnection]]:
@@ -2317,13 +2339,18 @@ class SignalingServer:
         for alarm in self.items.values():
             if alarm.type != "house_alarm":
                 continue
-            if not self._controls_alarm_from_current_house(alarm, client):
+            if not self._controls_alarm_from_entry_context(alarm, client):
                 continue
             for door in self._doors_for_house_alarm(alarm):
                 waiting = self._find_user_by_name_in_location(
                     requested_name, door.locationId
                 )
-                if waiting is not None:
+                if (
+                    waiting is not None
+                    and waiting.location_id == door.locationId
+                    and waiting.x == door.x
+                    and waiting.y == door.y
+                ):
                     matches.append((alarm, door, waiting))
         return matches
 
@@ -7208,7 +7235,7 @@ class SignalingServer:
                 return True
             if requested_name and any(
                 alarm.type == "house_alarm"
-                and self._controls_alarm_from_current_house(alarm, client)
+                and self._controls_alarm_from_entry_context(alarm, client)
                 for alarm in self.items.values()
             ):
                 await self._send(

@@ -4430,6 +4430,17 @@ function openUserActionMenuCommand(): void {
   announceMenuEntry('User actions', formatUserActionOption(options[userActionMenuIndex] ?? options[0], target));
 }
 
+function allowNearbyUserCommand(): void {
+  const target = getSelectedOrNearestPeer();
+  if (!target) {
+    updateStatus('No nearby user to allow into the house.');
+    audio.sfxUiCancel();
+    return;
+  }
+  signaling.send({ type: 'chat_message', message: `/allow ${target.nickname}` });
+  updateStatus(`Requesting entry approval for ${target.nickname}.`);
+}
+
 function runUserAction(option: UserActionOption, target: PeerState): void {
   state.mode = 'normal';
   userActionTargetId = null;
@@ -4508,6 +4519,7 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   radioRemoteVolumeDown: () => radioRemoteControlCommand('volume_down'),
   castToDevice: () => void castToNearestDevice(),
   openUserActionMenu: openUserActionMenuCommand,
+  allowNearbyUser: allowNearbyUserCommand,
   interactItem: interactItemCommand,
   pickupSurfaceItem: pickupSurfaceItemCommand,
   describeSurface: describeSurfaceCommand,

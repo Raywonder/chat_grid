@@ -31,4 +31,9 @@ describe('conversation shortcuts', () => {
   it('assigns Y to the current location', () => {
     expect(resolveMainModeCommand('KeyY', false, false)).toBe('speakLocation');
   });
+
+  it('assigns shifted H to house entry approval while keeping H for chat', () => {
+    expect(resolveMainModeCommand('KeyH', true, false)).toBe('allowNearbyUser');
+    expect(resolveMainModeCommand('KeyH', false, false)).toBe('openChat');
+  });
 });

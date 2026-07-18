@@ -259,6 +259,14 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
     isAvailable: (context) => context.hasFocusedUserTarget,
   },
   {
+    id: 'allowNearbyUser',
+    label: 'Allow nearby user into house',
+    shortcut: 'Shift+H',
+    tooltip: 'Approve the focused or nearest visitor at your guarded house door without requiring an access code.',
+    section: 'Users',
+    isAvailable: (context) => context.hasFocusedUserTarget,
+  },
+  {
     id: 'interactItem',
     label: 'Object interaction',
     shortcut: 'Shift+Enter',

@@ -30,6 +30,7 @@ export type MainModeCommand =
   | 'radioRemoteVolumeDown'
   | 'castToDevice'
   | 'openUserActionMenu'
+  | 'allowNearbyUser'
   | 'interactItem'
   | 'pickupSurfaceItem'
   | 'describeSurface'
@@ -93,6 +94,7 @@ export function resolveMainModeCommand(code: string, shiftKey: boolean, ctrlKey 
   if (code === 'KeyK') return shiftKey ? 'castToDevice' : null;
   if (code === 'KeyJ') return shiftKey ? 'describeSurface' : 'pickupSurfaceItem';
   if (code === 'KeyR') return shiftKey ? 'openUserActionMenu' : null;
+  if (code === 'KeyH') return shiftKey ? 'allowNearbyUser' : 'openChat';
   if (code === 'KeyU') return shiftKey ? null : 'speakUsers';
   if (code === 'KeyA') return shiftKey ? null : 'addItem';
   if (code === 'KeyI') return shiftKey ? 'listItems' : 'locateNearestItem';
@@ -101,7 +103,6 @@ export function resolveMainModeCommand(code: string, shiftKey: boolean, ctrlKey 
   if (code === 'KeyP') return shiftKey ? null : 'pingServer';
   if (code === 'KeyL') return shiftKey ? 'listUsers' : 'locateNearestUser';
   if (code === 'Slash') return shiftKey ? 'openHelp' : 'openChat';
-  if (code === 'KeyH') return shiftKey ? null : 'openChat';
   if (code === 'KeyZ') return shiftKey ? 'openAdminMenu' : 'openItemManagement';
   if (code === 'Comma') return shiftKey ? 'chatFirst' : 'chatPrev';
   if (code === 'Period') return shiftKey ? 'chatLast' : 'chatNext';

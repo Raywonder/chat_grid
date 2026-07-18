@@ -20,6 +20,7 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `L`: Locate nearest user
 - `Shift+L`: List users alphabetically; `Enter` teleports to selected user; `ArrowLeft`/`ArrowRight` adjust selected user volume
 - `Shift+R`: Open reactions and actions toward the selected, focused, or nearest user, including hug, focus, tap, hand, walk, teleport, and direct message options. `Enter` runs the highlighted action; `Space` lets the system pick a safe dynamic action such as announcing focus or tapping a shoulder
+- `Shift+H`: Ask the server to allow the selected, focused, or nearest visitor into the guarded house. The owner or authorized resident must be inside that house or standing with the visitor on the exact exterior-door square; the visitor does not need an access code.
 - `U`: Speak your current location, connected-user count, and connected users
 - `N`: Edit nickname
 - `/`: Start chat
@@ -58,7 +59,7 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `Shift+Enter`: Perform the focused/current physical object interaction, such as repairing a damaged object or moving a placed object off its surface. It never picks an item up; use `J` or `D` for pickup/drop.
 - First use of an unconfigured house alarm opens access enrollment. Press `1` for signed-in account access or `2` for signed-in account plus a private resident keypad code. Code entry is masked; `Enter` saves and `Escape` cancels. Only the owner or an already authorized resident can complete setup.
 - After setup, using a house alarm opens its private keypad. Enter digits, `*`, or `#`; `Backspace` removes the last character; `Enter` submits without speaking the code; blank `Enter` checks the signed-in resident identity; `Escape` cancels.
-- At a guarded house front door, a visitor uses the alarm keypad and presses `Enter` with no code to request entry. The resident/owner receives an in-world alert with the exact visitor name and can use `/allow <user>` or `/deny <user>` from any room inside that same protected house. Approval keeps the visitor outside for ten seconds, then opens the door and moves them inside; denial leaves them outside.
+- At a guarded house front door, a visitor uses the alarm keypad and presses `Enter` with no code to request entry. The resident/owner receives an in-world alert with the exact visitor name and can use `/allow <user>` or `/deny <user>` from any room inside that same protected house. The owner or authorized resident may also stand on the exact exterior-door square with the visitor and use `Shift+H` or `/allow <user>`; no access code is required. Approval keeps the visitor outside for ten seconds, then opens the door and moves them inside; denial leaves them outside.
 - A resident can also configure a separate in-world guest keypad code in the house alarm properties/Admin item editor. The visitor enters that code at the alarm keypad; it grants temporary guest access after the short entry delay. Use a game-only code, not a real home-security code.
 - `Shift+J`: Jump through or activate the focused/current portal-style item
 

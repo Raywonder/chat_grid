@@ -856,6 +856,69 @@ async def test_guarded_house_request_reaches_deeper_house_rooms(
 
 
 @pytest.mark.asyncio
+async def test_guarded_house_owner_can_allow_visitor_while_standing_outside(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    guest_ws = _fake_ws()
+    owner_ws = cast(ServerConnection, object())
+    door = server.items["seed-houses-raywonder-front-door"]
+    guest = _activate_client(
+        ClientConnection(
+            websocket=guest_ws,
+            id="guest-1",
+            nickname="Tony",
+            x=door.x,
+            y=door.y,
+            location_id=door.locationId,
+        ),
+        username="tony",
+        permissions={"item.use", "chat.send"},
+    )
+    owner = _activate_client(
+        ClientConnection(
+            websocket=owner_ws,
+            id="owner-1",
+            nickname="Dom",
+            x=door.x,
+            y=door.y,
+            location_id=door.locationId,
+        ),
+        username="dominique",
+        permissions={"item.use", "chat.send"},
+    )
+    server.clients[guest_ws] = guest
+    server.clients[owner_ws] = owner
+    sent_payloads: dict[ServerConnection, list[object]] = {
+        guest_ws: [],
+        owner_ws: [],
+    }
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        sent_payloads[websocket].append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+
+    await server._handle_message(
+        guest,
+        json.dumps({"type": "item_use", "itemId": door.id}),
+    )
+    await server._handle_message(
+        owner,
+        json.dumps({"type": "chat_message", "message": "/allow Tony"}),
+    )
+
+    owner_notice = _last_packet_of_type(
+        sent_payloads[owner_ws], BroadcastChatMessagePacket
+    )
+    guest_notice = _last_packet_of_type(
+        sent_payloads[guest_ws], BroadcastChatMessagePacket
+    )
+    assert "approve Tony" in owner_notice.message
+    assert "approved your entry" in guest_notice.message
+
+
+@pytest.mark.asyncio
 async def test_guarded_house_allow_works_from_deeper_house_room(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
