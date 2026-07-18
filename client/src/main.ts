@@ -4480,6 +4480,7 @@ function escapeCommand(): void {
 
 const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   editNickname: openNicknameEditor,
+  openNotifications: () => adminController.openNotifications(),
   toggleMute,
   toggleOutputMode: toggleOutputModeCommand,
   toggleLoopback: toggleLoopbackCommand,
@@ -5153,6 +5154,10 @@ function handleAdminAmbienceSoundListModeInput(code: string, key: string): void 
   adminController.handleAdminAmbienceSoundListModeInput(code, key);
 }
 
+function handleNotificationsModeInput(code: string, key: string): void {
+  adminController.handleNotificationsModeInput(code, key);
+}
+
 const itemPropertyEditor = createItemPropertyEditor({
   state,
   signalingSend: (message) => signaling.send(message as OutgoingMessage),
@@ -5256,6 +5261,8 @@ function handleModeInput(input: ModeInput): void {
         handleAdminAmbienceLocationListModeInput(currentCode, currentKey),
       adminAmbienceSoundList: ({ code: currentCode, key: currentKey }) =>
         handleAdminAmbienceSoundListModeInput(currentCode, currentKey),
+      notifications: ({ code: currentCode, key: currentKey }) =>
+        handleNotificationsModeInput(currentCode, currentKey),
       itemProperties: ({ code: currentCode, key: currentKey }) =>
         itemPropertyEditor.handleItemPropertiesModeInput(currentCode, currentKey),
       itemPropertyEdit: ({ code: currentCode, key: currentKey, ctrlKey: currentCtrlKey }) =>

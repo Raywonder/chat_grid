@@ -77,6 +77,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_upsert.item.display` is server-owned display text for readonly/system properties (for example: `createdBy`, `updatedBy`, `createdAt`, `updatedAt`, `capabilities`, `useSound`, `emitSound`).
 - `item_action_result` messages are intended for direct screen-reader/user status feedback.
   - `action` includes: `add`, `pickup`, `drop`, `delete`, `transfer`, `use`, `secondary_use`, `update`
+- `media_cast_state` is room-scoped cast state. A user discovers an active cast by entering the receiver's room, focusing or inspecting the TV/radio, and reading its device name, station code, station name, and now-playing metadata. The server replays active cast state to users who join later; the matching WebRTC stream is attached automatically when peer negotiation completes. When casting stops, the temporary station disappears from the receiver.
 - Successful `item_pickup` and `item_drop` also emit system chat lines to other users in the room.
 - Item transfer ownership is account-based; target accounts do not need to be currently connected.
 - Piano runtime control no longer depends on parsing `item_action_result.message` text.

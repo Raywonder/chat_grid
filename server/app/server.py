@@ -679,6 +679,9 @@ class SignalingServer:
         self._studio_entry_invites: dict[str, float] = {}
         self._house_entry_invites: dict[tuple[str, str], float] = {}
         self._telepad_drift_task: asyncio.Task[None] | None = None
+        # Active casts are room state, not one-shot chat events. Keep them long
+        # enough to replay to a client that joins after the cast began.
+        self._active_media_casts: dict[str, dict[str, MediaCastStatePacket]] = {}
 
     @staticmethod
     def _resolve_server_version(release_version: str) -> str:
@@ -6590,6 +6593,16 @@ class SignalingServer:
                     disconnected
                 ):
                     await self._broadcast_item(item)
+                room_casts = self._active_media_casts.get(disconnected.location_id, {})
+                ended_cast = room_casts.pop(disconnected.id, None)
+                if ended_cast is not None:
+                    if not room_casts:
+                        self._active_media_casts.pop(disconnected.location_id, None)
+                    await self._broadcast_location(
+                        disconnected.location_id,
+                        ended_cast.model_copy(update={"active": False}),
+                        exclude=websocket,
+                    )
                 self._request_state_save()
                 LOGGER.info(
                     "client disconnected id=%s nickname=%s total=%d",
@@ -6687,6 +6700,8 @@ class SignalingServer:
             },
         )
         await self._send(client.websocket, packet)
+        for cast in self._active_media_casts.get(client.location_id, {}).values():
+            await self._send(client.websocket, cast)
 
     async def _send_authenticated_welcome(self, client: ClientConnection) -> None:
         """Prepare authenticated client state and send welcome before world activation."""
@@ -10206,6 +10221,13 @@ class SignalingServer:
                 title=packet.title.strip(),
                 artist=packet.artist.strip(),
             )
+            room_casts = self._active_media_casts.setdefault(client.location_id, {})
+            if packet.active:
+                room_casts[client.id] = state_packet
+            else:
+                room_casts.pop(client.id, None)
+                if not room_casts:
+                    self._active_media_casts.pop(client.location_id, None)
             await self._broadcast_location(client.location_id, state_packet)
             await self._send_item_result(
                 client,

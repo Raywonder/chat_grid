@@ -35,6 +35,14 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
     isAvailable: () => true,
   },
   {
+    id: 'openNotifications',
+    label: 'Open notifications',
+    shortcut: 'Shift+N',
+    tooltip: 'Read, navigate, and mark your account notifications as read.',
+    section: 'Users',
+    isAvailable: () => true,
+  },
+  {
     id: 'toggleMute',
     label: 'Mute or unmute microphone',
     shortcut: 'M / 8 / Shift+8',

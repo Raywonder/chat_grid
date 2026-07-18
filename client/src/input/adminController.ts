@@ -74,6 +74,8 @@ export function createAdminController(deps: AdminControllerDeps): {
   handleAdminUsersList: (message: Extract<IncomingMessage, { type: 'admin_users_list' }>) => void;
   handleAdminPlatformOverview: (message: Extract<IncomingMessage, { type: 'admin_platform_overview' }>) => void;
   handleAdminNotificationsList: (message: Extract<IncomingMessage, { type: 'admin_notifications_list' }>) => void;
+  openNotifications: () => void;
+  handleNotificationsModeInput: (code: string, key: string) => void;
   handleAdminAmbienceCatalog: (message: Extract<IncomingMessage, { type: 'admin_ambience_catalog' }>) => void;
   handleAdminActionResult: (message: Extract<IncomingMessage, { type: 'admin_action_result' }>) => void;
   handleAdminMenuModeInput: (code: string, key: string) => void;
@@ -108,6 +110,9 @@ export function createAdminController(deps: AdminControllerDeps): {
   let adminAmbienceLocationIndex = 0;
   let adminAmbienceSoundIndex = 0;
   let adminPendingAmbience: { locationId: string; soundId: string } | null = null;
+  let notifications: AdminNotificationSummary[] = [];
+  let notificationIndex = 0;
+  let notificationScope: 'own' | 'admin' = 'own';
 
   function setServerAdminMenuActions(actions: Array<{ id: string; label: string; tooltip?: string }> | null | undefined): void {
     serverAdminMenuActions = (actions || [])
@@ -218,6 +223,10 @@ export function createAdminController(deps: AdminControllerDeps): {
   }
 
   function handleAdminNotificationsList(message: Extract<IncomingMessage, { type: 'admin_notifications_list' }>): void {
+    notifications = [...message.notifications];
+    notificationScope = message.scope === 'admin' ? 'admin' : 'own';
+    notificationIndex = Math.max(0, Math.min(notificationIndex, Math.max(0, notifications.length - 1)));
+    if (deps.state.mode !== 'adminMenu') deps.state.mode = 'notifications';
     const scopeLabel = message.scope === 'admin' ? 'Admin notifications' : 'My notifications';
     const summary =
       message.notifications.length > 0
@@ -226,8 +235,57 @@ export function createAdminController(deps: AdminControllerDeps): {
             .map((entry) => `${entry.read ? 'read' : 'unread'} ${entry.title}: ${entry.message}`)
             .join('; ')
         : 'No notifications.';
-    deps.updateStatus(`${scopeLabel}. ${message.unreadCount} unread. ${summary}`);
+    const selected = notifications[notificationIndex];
+    deps.updateStatus(`${scopeLabel}. ${message.unreadCount} unread. ${selected ? `${selected.read ? 'read' : 'unread'} ${selected.title}: ${selected.message}` : summary}`);
     deps.sfxUiBlip();
+  }
+
+  function openNotifications(): void {
+    notificationScope = 'own';
+    notificationIndex = 0;
+    deps.state.mode = 'notifications';
+    deps.signalingSend({ type: 'admin_notifications_list', scope: 'own' });
+    deps.updateStatus('Loading notifications...');
+  }
+
+  function handleNotificationsModeInput(code: string, key: string): void {
+    if (code === 'Escape') {
+      deps.state.mode = 'normal';
+      deps.updateStatus('Closed notifications.');
+      deps.sfxUiCancel();
+      return;
+    }
+    if (notifications.length === 0) {
+      if (code === 'Enter' || code === 'Space') {
+        deps.signalingSend({ type: 'admin_notifications_list', scope: notificationScope });
+        deps.updateStatus('Refreshing notifications...');
+      }
+      return;
+    }
+    const delta = code === 'ArrowDown' || key === 'j' ? 1 : code === 'ArrowUp' || key === 'k' ? -1 : 0;
+    if (delta) {
+      notificationIndex = (notificationIndex + delta + notifications.length) % notifications.length;
+      const selected = notifications[notificationIndex];
+      deps.updateStatus(`${selected.read ? 'read' : 'unread'} ${selected.title}: ${selected.message}`);
+      deps.sfxUiBlip();
+      return;
+    }
+    if (code === 'Space') {
+      const selected = notifications[notificationIndex];
+      if (selected) deps.updateStatus(`${selected.title}. ${selected.message}`);
+      deps.sfxUiBlip();
+      return;
+    }
+    if (code === 'Enter') {
+      const selected = notifications[notificationIndex];
+      deps.signalingSend({ type: 'admin_notification_mark_read', scope: notificationScope, notificationId: selected?.id });
+      deps.updateStatus(selected ? 'Marking notification read...' : 'Marking notifications read...');
+      return;
+    }
+    if (code === 'KeyA' && key.toLowerCase() === 'a') {
+      deps.signalingSend({ type: 'admin_notification_mark_read', scope: notificationScope });
+      deps.updateStatus('Marking all visible notifications read...');
+    }
   }
 
   function ambienceLocationLabel(entry: AdminAmbienceLocation): string {
@@ -258,6 +316,11 @@ export function createAdminController(deps: AdminControllerDeps): {
       adminPendingAmbience = null;
       deps.updateStatus(message.message);
       message.ok ? deps.sfxUiBlip() : deps.sfxUiCancel();
+      return;
+    }
+    if (message.action === 'notifications_mark_read') {
+      deps.signalingSend({ type: 'admin_notifications_list', scope: notificationScope });
+      deps.updateStatus(message.message);
       return;
     }
     if (message.action === 'role_update_permissions') {
@@ -777,6 +840,8 @@ export function createAdminController(deps: AdminControllerDeps): {
     handleAdminUsersList,
     handleAdminPlatformOverview,
     handleAdminNotificationsList,
+    openNotifications,
+    handleNotificationsModeInput,
     handleAdminAmbienceCatalog,
     handleAdminActionResult,
     handleAdminMenuModeInput,

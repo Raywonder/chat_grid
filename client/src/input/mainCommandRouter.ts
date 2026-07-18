@@ -50,6 +50,7 @@ export type MainModeCommand =
   | 'openChat'
   | 'openDirectMessage'
   | 'openAdminMenu'
+  | 'openNotifications'
   | 'chatPrev'
   | 'chatNext'
   | 'chatFirst'
@@ -67,7 +68,7 @@ export function resolveMainModeCommand(code: string, shiftKey: boolean, ctrlKey 
   if (ctrlKey && shiftKey && (code === 'ArrowDown' || code === 'KeyD')) return 'radioRemoteVolumeDown';
   if (ctrlKey && code === 'KeyM') return 'openDirectMessage';
   if (code === 'KeyG') return 'listLocations';
-  if (code === 'KeyN') return shiftKey ? null : 'editNickname';
+  if (code === 'KeyN') return shiftKey ? 'openNotifications' : 'editNickname';
   if (code === 'KeyM') return shiftKey ? 'toggleOutputMode' : 'toggleMute';
   if (code === 'Digit1') return shiftKey ? 'toggleLoopback' : 'toggleVoiceLayer';
   if (code === 'Digit2') return 'toggleItemLayer';
