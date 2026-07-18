@@ -28,6 +28,7 @@ VITE_BASE_PATH="$BASE_PATH" npm run build
 
 mkdir -p "$PUBLISH_DIR"
 rsync -a --delete \
+  --no-group \
   --exclude '/downloads/' \
   --exclude '/updates/' \
   --exclude '/voice/' \
@@ -35,10 +36,10 @@ rsync -a --delete \
   --exclude '/assets/index-*.css' \
   dist/ "$PUBLISH_DIR/"
 mkdir -p "$PUBLISH_DIR/assets"
-rsync -a dist/assets/index-*.js dist/assets/index-*.css "$PUBLISH_DIR/assets/"
+rsync -a --no-group dist/assets/index-*.js dist/assets/index-*.css "$PUBLISH_DIR/assets/"
 
 if [[ -d "$PHP_PROXY_DIR" ]]; then
-  rsync -a "$PHP_PROXY_DIR/" "$PUBLISH_DIR/"
+  rsync -a --no-group "$PHP_PROXY_DIR/" "$PUBLISH_DIR/"
 fi
 
 if [[ -f "$SERVER_ENV_FILE" ]]; then
