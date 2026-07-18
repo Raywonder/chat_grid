@@ -29,6 +29,7 @@ export type MainModeCommand =
   | 'radioRemoteVolumeUp'
   | 'radioRemoteVolumeDown'
   | 'castToDevice'
+  | 'openWorldPhone'
   | 'openUserActionMenu'
   | 'allowNearbyUser'
   | 'interactItem'
@@ -92,6 +93,7 @@ export function resolveMainModeCommand(code: string, shiftKey: boolean, ctrlKey 
   if (code === 'Enter') return shiftKey ? 'interactItem' : 'useItem';
   if (code === 'Space') return shiftKey ? 'radioRemoteStationPrevious' : 'useItem';
   if (code === 'KeyK') return shiftKey ? 'castToDevice' : null;
+  if (code === 'KeyP') return shiftKey ? 'openWorldPhone' : 'pingServer';
   if (code === 'KeyJ') return shiftKey ? 'describeSurface' : 'pickupSurfaceItem';
   if (code === 'KeyR') return shiftKey ? 'openUserActionMenu' : null;
   if (code === 'KeyH') return shiftKey ? 'allowNearbyUser' : 'openChat';

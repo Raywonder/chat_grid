@@ -41,7 +41,7 @@ __all__ = [
 
 # Add-menu variants that create an existing item type with useful preset
 # parameters.  These are intentionally not persisted as new runtime types.
-ITEM_ADD_VARIANT_TYPES: frozenset[str] = frozenset({"radio_remote"})
+ITEM_ADD_VARIANT_TYPES: frozenset[str] = frozenset({"radio_remote", "world_phone"})
 
 ItemType: TypeAlias = str
 ITEM_TYPE_SEQUENCE: tuple[ItemType, ...] = ITEM_TYPE_ORDER

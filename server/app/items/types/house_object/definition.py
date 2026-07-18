@@ -43,6 +43,11 @@ EDITABLE_PROPERTIES: tuple[str, ...] = (
     "emitEffectValue",
     "useSound",
     "emitSound",
+    "phoneExtension",
+    "phoneDeviceSide",
+    "phoneAudioMode",
+    "phoneContacts",
+    "phonePbxRoutes",
 )
 CAPABILITIES: tuple[str, ...] = ("editable", "carryable", "deletable", "usable")
 USE_SOUND: str | None = None
@@ -173,6 +178,11 @@ DEFAULT_PARAMS: dict = {
     "emitEffectValue": 50,
     "useSound": "",
     "emitSound": "",
+    "phoneExtension": "",
+    "phoneDeviceSide": "",
+    "phoneAudioMode": "ear_left",
+    "phoneContacts": [],
+    "phonePbxRoutes": [],
 }
 PARAM_KEYS: tuple[str, ...] = (
     "objectKind",
@@ -222,6 +232,11 @@ PARAM_KEYS: tuple[str, ...] = (
     "emitEffectValue",
     "useSound",
     "emitSound",
+    "phoneExtension",
+    "phoneDeviceSide",
+    "phoneAudioMode",
+    "phoneContacts",
+    "phonePbxRoutes",
 )
 
 EFFECT_OPTIONS: tuple[str, ...] = (
@@ -335,6 +350,39 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "valueType": "text",
         "tooltip": "Short spoken description.",
         "maxLength": 240,
+    },
+    "phoneExtension": {
+        "valueType": "text",
+        "label": "World phone extension",
+        "tooltip": "Server-assigned world-only extension. Do not enter SIP credentials here.",
+        "maxLength": 24,
+        "visibleWhen": {"objectKind": "phone"},
+    },
+    "phoneDeviceSide": {
+        "valueType": "list",
+        "label": "Phone placement",
+        "tooltip": "Where the phone appears for spatial audio: left ear, right ear, or in front as a speaker.",
+        "options": ["left", "right", "front"],
+        "visibleWhen": {"objectKind": "phone"},
+    },
+    "phoneAudioMode": {
+        "valueType": "list",
+        "label": "Phone audio mode",
+        "tooltip": "Choose binaural ear audio, nearby speaker audio, or local-only listening.",
+        "options": ["ear_left", "ear_right", "speaker", "local_only"],
+        "visibleWhen": {"objectKind": "phone"},
+    },
+    "phoneContacts": {
+        "valueType": "text",
+        "label": "Phone contacts",
+        "tooltip": "Saved display-only contacts; call authorization still comes from the server.",
+        "visibleWhen": {"objectKind": "phone"},
+    },
+    "phonePbxRoutes": {
+        "valueType": "text",
+        "label": "Phone PBX routes",
+        "tooltip": "Configured server-side PBX route labels. Credentials never belong in item data.",
+        "visibleWhen": {"objectKind": "phone"},
     },
     "streamUrl": {
         "valueType": "text",

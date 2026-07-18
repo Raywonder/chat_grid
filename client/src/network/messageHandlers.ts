@@ -97,6 +97,7 @@ type MessageHandlerDeps = {
   narrateRemoteMovement: (nickname: string, fromX: number, fromY: number, toX: number, toY: number) => void;
   handleItemActionResultStatus: (message: Extract<IncomingMessage, { type: 'item_action_result' }>) => boolean;
   handleMediaCastState: (message: Extract<IncomingMessage, { type: 'media_cast_state' }>) => void;
+  handleWorldPhoneState?: (message: Extract<IncomingMessage, { type: 'world_phone_state' }>) => void;
   handleInteractiveItemLaunch: (item: WorldItem) => boolean;
   handleGameLaunchInvite: (message: Extract<IncomingMessage, { type: 'item_game_launch' }>) => boolean;
   handleDoorTransitionArrival: (x: number, y: number) => void;
@@ -534,6 +535,9 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
 
       case 'media_cast_state':
         deps.handleMediaCastState(message);
+        break;
+      case 'world_phone_state':
+        deps.handleWorldPhoneState?.(message);
         break;
 
       case 'item_use_sound': {

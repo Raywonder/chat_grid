@@ -352,6 +352,19 @@ export const mediaCastStateSchema = z.object({
   artist: z.string(),
 });
 
+export const worldPhoneStateSchema = z.object({
+  type: z.literal('world_phone_state'),
+  itemId: z.string(),
+  ownerId: z.string(),
+  ownerNickname: z.string(),
+  extension: z.string(),
+  deviceSide: z.enum(['left', 'right', 'front']),
+  audioMode: z.enum(['ear_left', 'ear_right', 'speaker', 'local_only']),
+  status: z.enum(['idle', 'ringing', 'connected', 'ended', 'failed']),
+  target: z.string().optional(),
+  message: z.string().optional(),
+});
+
 export const itemTransferTargetsSchema = z.object({
   type: z.literal('item_transfer_targets'),
   itemId: z.string(),
@@ -575,6 +588,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   itemActionResultSchema,
   worldConfigUpdateSchema,
   mediaCastStateSchema,
+  worldPhoneStateSchema,
   itemTransferTargetsSchema,
   itemUseSoundSchema,
   agentVoiceSchema,
@@ -689,6 +703,13 @@ export type OutgoingMessage =
       stationName: string;
       title: string;
       artist: string;
+    }
+  | {
+      type: 'world_phone';
+      itemId: string;
+      action: 'dial' | 'answer' | 'hangup' | 'contacts' | 'set_audio_mode';
+      target?: string;
+      audioMode?: 'ear_left' | 'ear_right' | 'speaker' | 'local_only';
     }
   | {
       type: 'item_remote_control';

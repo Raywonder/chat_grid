@@ -26,6 +26,8 @@ from .definition import (
 
 CHANNEL_OPTIONS: tuple[str, ...] = ("stereo", "mono", "left", "right")
 TV_CHANNEL_MODE_OPTIONS: tuple[str, ...] = ("live", "on_demand", "live_and_on_demand")
+PHONE_SIDE_OPTIONS: tuple[str, ...] = ("left", "right", "front")
+PHONE_AUDIO_MODE_OPTIONS: tuple[str, ...] = ("ear_left", "ear_right", "speaker", "local_only")
 
 
 def _normalize_preset_stream_reference(value: str, *, field_name: str) -> str:
@@ -356,6 +358,27 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
         max_length=240,
         field_name="description",
     )
+    next_params["phoneExtension"] = enforce_max_length(
+        str(next_params.get("phoneExtension", item.params.get("phoneExtension", "")) or "").strip(),
+        max_length=24,
+        field_name="phoneExtension",
+    )
+    next_params["phoneDeviceSide"] = _option(
+        next_params.get("phoneDeviceSide", item.params.get("phoneDeviceSide", "front")),
+        "front",
+        PHONE_SIDE_OPTIONS,
+        "phoneDeviceSide",
+    )
+    next_params["phoneAudioMode"] = _option(
+        next_params.get("phoneAudioMode", item.params.get("phoneAudioMode", "ear_left")),
+        "ear_left",
+        PHONE_AUDIO_MODE_OPTIONS,
+        "phoneAudioMode",
+    )
+    contacts = next_params.get("phoneContacts", item.params.get("phoneContacts", []))
+    next_params["phoneContacts"] = contacts[:100] if isinstance(contacts, list) else []
+    routes = next_params.get("phonePbxRoutes", item.params.get("phonePbxRoutes", []))
+    next_params["phonePbxRoutes"] = routes[:4] if isinstance(routes, list) else []
     object_kind = str(next_params.get("objectKind", "mug")).strip().lower()
     presets = _normalize_station_presets(item.params.get("stationPresets", []))
     if not presets:

@@ -78,6 +78,13 @@ def use_item(
     owner_text = f" Owner: {owner}." if owner else ""
     key_for = str(item.params.get("keyFor", "") or "").strip()
     object_kind = str(item.params.get("objectKind", "")).strip().lower()
+    if object_kind == "phone":
+        extension = str(item.params.get("phoneExtension") or "unassigned").strip()
+        mode = str(item.params.get("phoneAudioMode") or "ear_left").replace("_", " ")
+        return ItemUseResult(
+            self_message=f"{item.title}, extension {extension}. Phone audio is {mode}.",
+            others_message="",
+        )
     if item.params.get("journalFolder"):
         journals = item.params.get("journalIndex")
         letters = item.params.get("letterIndex")

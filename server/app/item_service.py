@@ -50,7 +50,7 @@ class ItemService:
         # The add menu exposes this as a first-class choice, but it remains a
         # house_object at runtime so all existing remote, carrying, transfer,
         # and item-management behavior stays shared and compatible.
-        runtime_item_type = "house_object" if item_type == "radio_remote" else item_type
+        runtime_item_type = "house_object" if item_type in {"radio_remote", "world_phone"} else item_type
         item_def = get_item_definition(runtime_item_type)
         now = self.now_ms()
         actor_id = client.user_id or client.id
@@ -67,6 +67,20 @@ class ItemService:
                     "replacementHint": "A programmable universal radio remote for any compatible location.",
                     "remoteControlLinkedRadios": True,
                     "remoteControlLinkedTvs": False,
+                }
+            )
+        if item_type == "world_phone":
+            title = "World phone"
+            params.update(
+                {
+                    "objectKind": "phone",
+                    "placement": "carried",
+                    "description": "An owned in-world Flex phone with a private ear or nearby speaker mode.",
+                    "phoneExtension": f"9{uuid.uuid4().int % 10000:04d}",
+                    "phoneDeviceSide": ["left", "right", "front"][uuid.uuid4().int % 3],
+                    "phoneAudioMode": "ear_left",
+                    "phonePbxRoutes": ["world"],
+                    "giftable": True,
                 }
             )
         return WorldItem(

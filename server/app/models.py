@@ -313,6 +313,16 @@ class MediaCastPacket(BasePacket):
     artist: str = Field(default="", max_length=160)
 
 
+class WorldPhonePacket(BasePacket):
+    """Control an owned in-world phone without exposing PBX credentials."""
+
+    type: Literal["world_phone"]
+    itemId: str
+    action: Literal["dial", "answer", "hangup", "contacts", "set_audio_mode"]
+    target: str = Field(default="", max_length=80)
+    audioMode: Literal["ear_left", "ear_right", "speaker", "local_only"] = "ear_left"
+
+
 class ItemInteractPacket(BasePacket):
     type: Literal["item_interact"]
     itemId: str
@@ -371,6 +381,21 @@ class MediaCastStatePacket(BasePacket):
     stationName: str = ""
     title: str = ""
     artist: str = ""
+
+
+class WorldPhoneStatePacket(BasePacket):
+    """Authoritative state for an in-world phone call/device."""
+
+    type: Literal["world_phone_state"]
+    itemId: str
+    ownerId: str
+    ownerNickname: str
+    extension: str
+    deviceSide: Literal["left", "right", "front"]
+    audioMode: Literal["ear_left", "ear_right", "speaker", "local_only"]
+    status: Literal["idle", "ringing", "connected", "ended", "failed"]
+    target: str = ""
+    message: str = ""
 
 
 class SpeakPacket(BasePacket):
@@ -432,6 +457,7 @@ ClientPacket = (
     | ItemSecondaryUsePacket
     | ItemRemoteControlPacket
     | MediaCastPacket
+    | WorldPhonePacket
     | ItemInteractPacket
     | ItemPianoNotePacket
     | ItemPianoRecordingPacket

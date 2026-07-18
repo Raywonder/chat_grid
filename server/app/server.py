@@ -139,6 +139,8 @@ from .models import (
     LocationChangedPacket,
     MediaCastPacket,
     MediaCastStatePacket,
+    WorldPhonePacket,
+    WorldPhoneStatePacket,
     NicknameResultPacket,
     PingPacket,
     PongPacket,
@@ -682,6 +684,7 @@ class SignalingServer:
         # Active casts are room state, not one-shot chat events. Keep them long
         # enough to replay to a client that joins after the cast began.
         self._active_media_casts: dict[str, dict[str, MediaCastStatePacket]] = {}
+        self._world_phone_calls: dict[str, WorldPhoneStatePacket] = {}
 
     @staticmethod
     def _resolve_server_version(release_version: str) -> str:
@@ -7014,8 +7017,19 @@ class SignalingServer:
                 "globalProperties": get_item_global_properties("house_object"),
             }
         )
+        item_types.append(
+            {
+                "type": "world_phone",
+                "label": "World phone",
+                "tooltip": "Add a carryable, giftable in-world phone with a server-assigned extension.",
+                "capabilities": ["editable", "carryable", "deletable", "usable"],
+                "editableProperties": list(ITEM_TYPE_EDITABLE_PROPERTIES["house_object"]),
+                "propertyMetadata": ITEM_TYPE_PROPERTY_METADATA["house_object"],
+                "globalProperties": get_item_global_properties("house_object"),
+            }
+        )
         return {
-            "itemTypeOrder": [*ITEM_TYPE_SEQUENCE, "radio_remote"],
+            "itemTypeOrder": [*ITEM_TYPE_SEQUENCE, "radio_remote", "world_phone"],
             "itemTypes": item_types,
             "commandMetadata": {
                 "mainModeActions": list(MAIN_MODE_SERVER_COMMAND_DEFINITIONS)
@@ -8846,6 +8860,123 @@ class SignalingServer:
 
         return True
 
+    async def _handle_world_phone(
+        self, client: ClientConnection, packet: WorldPhonePacket
+    ) -> None:
+        """Handle an owned world phone using server-authoritative call state.
+
+        Internal world calls use the existing authenticated WebRTC peer path. A
+        real-number dial is deliberately fail-closed until a configured FlexPBX
+        bridge is present; the browser never receives SIP credentials.
+        """
+
+        phone = self.items.get(packet.itemId)
+        if not phone or str(phone.params.get("objectKind", "")).strip().lower() != "phone":
+            await self._send(client.websocket, BroadcastChatMessagePacket(
+                type="chat_message", message="That is not an in-world phone.", system=True
+            ))
+            return
+        if phone.createdBy != client.user_id and phone.carrierId != client.id:
+            await self._send(client.websocket, BroadcastChatMessagePacket(
+                type="chat_message", message="This phone belongs to another user.", system=True
+            ))
+            return
+
+        extension = str(phone.params.get("phoneExtension") or "").strip()
+        side = str(phone.params.get("phoneDeviceSide") or "front").strip().lower()
+        if side not in {"left", "right", "front"}:
+            side = "front"
+        audio_mode = packet.audioMode if packet.action == "set_audio_mode" else str(
+            phone.params.get("phoneAudioMode") or "ear_left"
+        )
+        if packet.action == "set_audio_mode":
+            phone.params = {**phone.params, "phoneAudioMode": audio_mode}
+            phone.updatedAt = self.item_service.now_ms()
+            phone.updatedBy = client.user_id or client.id
+            phone.updatedByName = client.nickname
+            phone.version += 1
+            self._request_state_save()
+            await self._broadcast_item(phone)
+
+        def state(status: str, *, target: str = "", message: str = "") -> WorldPhoneStatePacket:
+            return WorldPhoneStatePacket(
+                type="world_phone_state",
+                itemId=phone.id,
+                ownerId=client.id,
+                ownerNickname=client.nickname,
+                extension=extension,
+                deviceSide=side,
+                audioMode=audio_mode,
+                status=status,  # type: ignore[arg-type]
+                target=target,
+                message=message,
+            )
+
+        if packet.action == "set_audio_mode":
+            await self._send(client.websocket, state("idle", message=f"Phone audio mode set to {audio_mode.replace('_', ' ')}."))
+            return
+        if packet.action == "hangup":
+            active = self._world_phone_calls.pop(client.id, None)
+            if active:
+                await self._broadcast_phone_state(active, "ended", "Call ended.")
+            else:
+                await self._send(client.websocket, state("ended", message="No active call."))
+            return
+        if packet.action == "contacts":
+            contacts = phone.params.get("phoneContacts")
+            labels = [str(entry.get("label") or entry.get("number") or "contact") for entry in contacts if isinstance(entry, dict)] if isinstance(contacts, list) else []
+            message = "Contacts: " + (", ".join(labels) if labels else "none saved.")
+            await self._send(client.websocket, state("idle", message=message))
+            return
+        if packet.action == "answer":
+            incoming = next((call for call in self._world_phone_calls.values() if call.target == client.id and call.status == "ringing"), None)
+            if not incoming:
+                await self._send(client.websocket, state("failed", message="No incoming world call."))
+                return
+            connected = incoming.model_copy(update={"status": "connected", "message": "World call connected."})
+            self._world_phone_calls[incoming.ownerId] = connected
+            await self._broadcast_phone_state(connected, "connected", "World call connected.")
+            return
+        if packet.action == "dial":
+            target = packet.target.strip()
+            if not target:
+                await self._send(client.websocket, state("failed", message="Enter an extension or number."))
+                return
+            target_client = next(
+                (
+                    candidate
+                    for candidate in self.clients.values()
+                    if candidate.id != client.id
+                    and (
+                        (candidate.username or "").casefold() == target.casefold()
+                        or candidate.nickname.casefold() == target.casefold()
+                    )
+                ),
+                None,
+            )
+            if target_client is None and target.startswith("9"):
+                if not os.getenv("CHGRID_FLEXPBX_BRIDGE_URL", "").strip():
+                    await self._send(client.websocket, state("failed", target=target, message="External dialing is not configured on this world yet."))
+                    return
+                await self._send(client.websocket, state("failed", target=target, message="FlexPBX bridge is configured but external dialing still needs its server adapter."))
+                return
+            if target_client is None:
+                target_client = next((candidate for candidate in self.clients.values() if any(str(item.params.get("phoneExtension") or "") == target for item in self.items.values() if item.createdBy == candidate.user_id)), None)
+            if target_client is None:
+                await self._send(client.websocket, state("failed", target=target, message="That world phone is not online."))
+                return
+            ringing = state("ringing", target=target_client.id, message=f"Calling {target_client.nickname}.")
+            self._world_phone_calls[client.id] = ringing
+            await self._send(client.websocket, ringing)
+            await self._send(target_client.websocket, ringing.model_copy(update={"ownerId": client.id, "ownerNickname": client.nickname, "message": f"Incoming world call from {client.nickname}."}))
+            return
+
+    async def _broadcast_phone_state(self, call: WorldPhoneStatePacket, status: str, message: str) -> None:
+        updated = call.model_copy(update={"status": status, "message": message})
+        for candidate in self.clients.values():
+            if candidate.id in {updated.ownerId, updated.target}:
+                await self._send(candidate.websocket, updated)
+
     async def _handle_message(self, client: ClientConnection, raw_message: str) -> None:
         """Decode, validate, and route one inbound client packet."""
 
@@ -8898,6 +9029,10 @@ class SignalingServer:
             PACKET_LOGGER.info(
                 "ignoring pre-ready packet id=%s type=%s", client.id, packet.type
             )
+            return
+
+        if isinstance(packet, WorldPhonePacket):
+            await self._handle_world_phone(client, packet)
             return
 
         if await self._handle_admin_packet(client, packet):

@@ -251,6 +251,11 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
     isAvailable: (context) => context.hasCarriedRadioRemote,
   },
   {
+    id: 'openWorldPhone',
+    label: 'Open world phone',
+    tooltip: 'Open the carried in-world phone dialer and contacts.',
+  },
+  {
     id: 'openUserActionMenu',
     label: 'User action menu',
     shortcut: 'Shift+R',

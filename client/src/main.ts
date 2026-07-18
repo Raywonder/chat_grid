@@ -3605,6 +3605,11 @@ const onAppMessage = createOnMessageHandler({
       ? `${message.casterNickname} is casting ${message.title || 'media'} to ${target.title} as ${message.stationCode}.`
       : `${message.casterNickname} stopped casting from ${target.title}.`);
   },
+  handleWorldPhoneState: (message) => {
+    updateStatus(message.message || `World phone ${message.status}.`);
+    if (message.status === 'connected') audio.sfxUiConfirm();
+    if (message.status === 'failed' || message.status === 'ended') audio.sfxUiCancel();
+  },
   handleInteractiveItemLaunch: openInteractiveItem,
   handleGameLaunchInvite: openGameLaunchInvite,
   handleDoorTransitionArrival,
@@ -4089,6 +4094,30 @@ async function castToNearestDevice(): Promise<void> {
   audio.sfxUiConfirm();
 }
 
+/** Opens the carried in-world phone without exposing PBX credentials to the client. */
+function openWorldPhoneCommand(): void {
+  const phone = state.carriedItemId ? state.items.get(state.carriedItemId) : undefined;
+  if (!phone || String(phone.params.objectKind ?? '').trim().toLowerCase() !== 'phone') {
+    updateStatus('Carry your world phone first.');
+    audio.sfxUiCancel();
+    return;
+  }
+  const action = (window.prompt('World phone: enter a number or user to dial, A to answer, H to hang up, C for contacts, or M for audio mode.') || '').trim();
+  if (!action) return;
+  const upper = action.toUpperCase();
+  if (upper === 'A' || upper === 'H' || upper === 'C') {
+    signaling.send({ type: 'world_phone', itemId: phone.id, action: upper === 'A' ? 'answer' : upper === 'H' ? 'hangup' : 'contacts' });
+    return;
+  }
+  if (upper === 'M') {
+    const mode = (window.prompt('Audio mode: left, right, speaker, or local') || '').trim().toLowerCase();
+    const audioMode = mode === 'right' ? 'ear_right' : mode === 'speaker' ? 'speaker' : mode === 'local' ? 'local_only' : 'ear_left';
+    signaling.send({ type: 'world_phone', itemId: phone.id, action: 'set_audio_mode', audioMode });
+    return;
+  }
+  signaling.send({ type: 'world_phone', itemId: phone.id, action: 'dial', target: action });
+}
+
 function speakUsersCommand(): void {
   const location = currentLocationName || currentLocationOption()?.name || currentLocationId || 'the grid';
   const allUsers = [state.player.nickname, ...Array.from(state.peers.values()).map((peer) => peer.nickname)];
@@ -4518,6 +4547,7 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   radioRemoteVolumeUp: () => radioRemoteControlCommand('volume_up'),
   radioRemoteVolumeDown: () => radioRemoteControlCommand('volume_down'),
   castToDevice: () => void castToNearestDevice(),
+  openWorldPhone: openWorldPhoneCommand,
   openUserActionMenu: openUserActionMenuCommand,
   allowNearbyUser: allowNearbyUserCommand,
   interactItem: interactItemCommand,
