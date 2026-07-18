@@ -2257,6 +2257,7 @@ function getCarriedMediaRemote(): { item: WorldItem; kind: 'radio' | 'tv' } | nu
     const focused = carried.find((item) => item.id === state.focusedItemId);
     if (isTvRemoteItem(focused)) return { item: focused, kind: 'tv' };
     if (isRadioRemoteItem(focused)) return { item: focused, kind: 'radio' };
+    if (focused) return null;
   }
   const tv = carried.find((item) => isTvRemoteItem(item));
   if (tv) return { item: tv, kind: 'tv' };
@@ -4760,7 +4761,20 @@ function handleNormalModeInput(code: string, shiftKey: boolean, ctrlKey: boolean
     }
   }
   if (code === 'Tab') {
-    cycleFocusedItemCommand(shiftKey);
+    if (shiftKey) {
+      cycleFocusedItemCommand(true);
+      state.remoteControlsFocused = Boolean(getCarriedMediaRemote());
+      return;
+    }
+    const remote = getCarriedItems().find((item) => isRadioRemoteItem(item) || isTvRemoteItem(item));
+    if (remote) {
+      state.focusedItemId = remote.id;
+      state.remoteControlsFocused = true;
+      updateStatus(`Focused ${itemLabel(remote)} controls.`);
+      audio.sfxUiBlip();
+      return;
+    }
+    cycleFocusedItemCommand(false);
     return;
   }
   const command = resolveMainModeCommand(code, shiftKey, ctrlKey);
