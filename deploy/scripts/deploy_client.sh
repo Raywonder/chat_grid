@@ -27,7 +27,7 @@ npm install
 VITE_BASE_PATH="$BASE_PATH" npm run build
 
 mkdir -p "$PUBLISH_DIR"
-rsync -a --delete \
+rsync -a --no-times --delete \
   --no-group \
   --exclude '/downloads/' \
   --exclude '/updates/' \
@@ -36,10 +36,10 @@ rsync -a --delete \
   --exclude '/assets/index-*.css' \
   dist/ "$PUBLISH_DIR/"
 mkdir -p "$PUBLISH_DIR/assets"
-rsync -a --no-group dist/assets/index-*.js dist/assets/index-*.css "$PUBLISH_DIR/assets/"
+rsync -a --no-group --no-times dist/assets/index-*.js dist/assets/index-*.css "$PUBLISH_DIR/assets/"
 
 if [[ -d "$PHP_PROXY_DIR" ]]; then
-  rsync -a --no-group "$PHP_PROXY_DIR/" "$PUBLISH_DIR/"
+  rsync -a --no-group --no-times "$PHP_PROXY_DIR/" "$PUBLISH_DIR/"
 fi
 
 if [[ -f "$SERVER_ENV_FILE" ]]; then
