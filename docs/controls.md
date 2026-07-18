@@ -77,9 +77,9 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `Space` / `Shift+Space` with a carried radio remote: Tune connected radios forward/backward
 - `ArrowRight` / `ArrowLeft` with a carried radio remote: Tune connected radios forward/backward
 - `ArrowUp` / `ArrowDown` with a carried radio remote: Raise/lower connected radio volume
-- `,` / `.` with a carried radio remote: Tune connected house radios, or only the current room radio when linked control is off in the remote settings
-- `Ctrl+ArrowLeft` / `Ctrl+ArrowRight` with a carried radio remote: Tune connected house radios, or only the current room radio when linked control is off
-- `Ctrl+Shift+Up` / `Ctrl+Shift+Down` or `Ctrl+Shift+U` / `Ctrl+Shift+D` with a carried radio remote: Raise/lower connected house radio volume, or only the current room radio volume when linked control is off
+- `,` / `.` with a carried radio remote: Tune connected radios/speakers in the current location, or only the current radio when linked control is off in the remote settings
+- `Ctrl+ArrowLeft` / `Ctrl+ArrowRight` with a carried radio remote: Tune connected radios/speakers in the current location, or only the current radio when linked control is off
+- `Ctrl+Shift+Up` / `Ctrl+Shift+Down` or `Ctrl+Shift+U` / `Ctrl+Shift+D` with a carried radio remote: Raise/lower connected radio/speaker volume, or only the current radio volume when linked control is off
 - `5` or `Shift+5`: Cycle TTS announcements between full, alert sounds only, and required only
 - `6` or `Shift+6`: Toggle optional nearby item beacons
 - `E`: Effect select menu

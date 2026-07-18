@@ -2082,7 +2082,7 @@ async def test_radio_remote_sync_all_uses_linked_playing_station_when_nearest_sp
 
     result = _last_packet_of_type(sent_payloads, ItemActionResultPacket)
     assert result.ok is True
-    assert result.message == "Synced 2 house radio speakers to Two."
+    assert result.message == "Synced 2 connected radio speakers to Two."
     assert speaker.params["streamUrl"] == "https://example.com/two.mp3"
     assert speaker.params["stationName"] == "Two"
     assert source.params["stationIndex"] == 1

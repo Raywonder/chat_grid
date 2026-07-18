@@ -2850,15 +2850,6 @@ class SignalingServer:
         return location_id
 
     @staticmethod
-    def _is_remote_synced_house_radio_location(location_id: str) -> bool:
-        """Return whether a house room radio should follow the universal remote."""
-
-        return (
-            location_id.startswith(RAYWONDER_HOUSE_LOCATION_PREFIX)
-            and location_id != "raywonder_house_relaxation_room"
-        )
-
-    @staticmethod
     def _is_radio_remote(item: WorldItem) -> bool:
         """Return whether a house object should act as a universal radio remote."""
 
@@ -3102,10 +3093,10 @@ class SignalingServer:
         if current_marker <= 0 or previous_identity != current_identity:
             item.params["playStartedAt"] = now_ms
 
-    def _nearest_house_radio_for_remote(
+    def _nearest_radio_for_remote(
         self, client: ClientConnection, remote: WorldItem
     ) -> WorldItem | None:
-        """Pick the nearest usable house radio/speaker for this carried remote."""
+        """Pick the nearest usable radio/speaker for this carried remote."""
 
         client_scope = self._carry_scope_for_location(client.location_id)
         remote_scope = self._carry_scope_for_location(remote.locationId)
@@ -3276,14 +3267,26 @@ class SignalingServer:
     def _radio_group_targets_for_remote(
         self, target: WorldItem, *, require_presets: bool
     ) -> list[WorldItem]:
-        """Return connected house radios that should respond with the target."""
+        """Return connected radios/speakers that should respond with the target."""
 
         linked_group = str(target.params.get("linkedMediaGroup") or "").strip()
         targets: list[WorldItem] = []
         for item in self.items.values():
             if (
                 item.type != "radio_station"
-                or not self._is_remote_synced_house_radio_location(item.locationId)
+                or item.carrierId is not None
+            ):
+                continue
+            if (
+                self._is_raywonder_house_location(target.locationId)
+                and item.locationId == "raywonder_house_relaxation_room"
+            ):
+                continue
+            # Raywonder house radios intentionally share one linked set across
+            # rooms. Outside the house, a remote only controls the compatible
+            # radio/speaker set in the current location.
+            if not self._is_raywonder_house_location(target.locationId) and (
+                item.locationId != target.locationId
             ):
                 continue
             if require_presets and not self._radio_presets(item):
@@ -3702,22 +3705,13 @@ class SignalingServer:
                 remote.id,
             )
             return True
-        if not self._is_raywonder_house_location(client.location_id):
-            await self._send_item_result(
-                client,
-                False,
-                "use",
-                "The radio remote is only programmed for the house radios.",
-                remote.id,
-            )
-            return True
-        target = self._nearest_house_radio_for_remote(client, remote)
+        target = self._nearest_radio_for_remote(client, remote)
         if target is None:
             await self._send_item_result(
                 client,
                 False,
                 "use",
-                "No house radio is available from this room.",
+                "No compatible radio or speaker is available from this location.",
                 remote.id,
             )
             return True
@@ -3952,26 +3946,17 @@ class SignalingServer:
     async def _handle_radio_remote_use(
         self, client: ClientConnection, remote: WorldItem, *, sync_all: bool
     ) -> bool:
-        """Handle a universal house radio remote. Returns true when handled."""
+        """Handle a universal radio remote. Returns true when handled."""
 
         if not self._is_radio_remote(remote):
             return False
-        if not self._is_raywonder_house_location(client.location_id):
-            await self._send_item_result(
-                client,
-                False,
-                "secondary_use" if sync_all else "use",
-                "The radio remote is only programmed for the house radios.",
-                remote.id,
-            )
-            return True
-        target = self._nearest_house_radio_for_remote(client, remote)
+        target = self._nearest_radio_for_remote(client, remote)
         if target is None:
             await self._send_item_result(
                 client,
                 False,
                 "secondary_use" if sync_all else "use",
-                "No house radio is available from this room.",
+                "No compatible radio or speaker is available from this location.",
                 remote.id,
             )
             return True
@@ -4019,7 +4004,7 @@ class SignalingServer:
                 client,
                 True,
                 "use",
-                f"Remote tuned {changed} house radio station{'s' if changed != 1 else ''} to {station}.",
+                f"Remote tuned {changed} connected radio station{'s' if changed != 1 else ''} to {station}.",
                 remote.id,
             )
             return True
@@ -4051,7 +4036,7 @@ class SignalingServer:
             client,
             True,
             "secondary_use",
-            f"Synced {changed} house radio speaker{'s' if changed != 1 else ''} to {station}.",
+            f"Synced {changed} connected radio speaker{'s' if changed != 1 else ''} to {station}.",
             remote.id,
         )
         return True

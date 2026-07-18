@@ -63,8 +63,8 @@ class ItemService:
                 {
                     "objectKind": "remote",
                     "placement": "table",
-                    "description": "A universal radio remote for nearby and linked radios.",
-                    "replacementHint": "A programmable universal radio remote.",
+                    "description": "A universal radio remote for nearby and linked radios or speakers.",
+                    "replacementHint": "A programmable universal radio remote for any compatible location.",
                     "remoteControlLinkedRadios": True,
                     "remoteControlLinkedTvs": False,
                 }

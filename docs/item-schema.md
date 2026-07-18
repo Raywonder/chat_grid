@@ -112,7 +112,7 @@ and rejects missing, non-numeric, or unusably large dimensions.
 - `playbackUrl`: server-managed resolved playback URL for supported station pages.
 - `enabled`: boolean on/off flag.
   - UI behavior: in property menu, `Enter` toggles on/off directly.
-- `stationIndex`: preset station knob index. Left/right in properties adjusts it; `Shift+Enter` on a preset radio tunes to the next station. A carried radio remote can tune connected house radios with comma/period variants and adjust connected radio volume with Ctrl+Shift+Up/Down or Ctrl+Shift+U/D.
+- `stationIndex`: preset station knob index. Left/right in properties adjusts it; `Shift+Enter` on a preset radio tunes to the next station. A carried radio remote can tune compatible radios/speakers in the current location with comma/period variants and adjust connected radio volume with Ctrl+Shift+Up/Down or Ctrl+Shift+U/D.
 - `stationPresets`: server-managed preset station list for bundled radios.
 - `mediaVolume`: integer, range `0-1000`, default `50`. Values above `100` boost quiet sources or individual speaker components.
 - `mediaChannel`: one of `stereo | mono | left | right`, default `stereo`.
@@ -167,7 +167,7 @@ and rejects missing, non-numeric, or unusably large dimensions.
 ```
 
 - `objectKind`: everyday object kind. Includes `remote`, `speaker`, `radio`, and `tv`; TVs can be mounted with `placement="wall"`.
-- `remoteControlLinkedRadios`: boolean, default `true`, visible for `objectKind="remote"`. When true, the radio remote controls the connected house radio group. When false, it controls only the nearest/current room radio.
+- `remoteControlLinkedRadios`: boolean, default `true`, visible for `objectKind="remote"`. When true, the radio remote controls compatible connected radios/speakers in the current location, with explicit Raywonder house groups allowed to span rooms. When false, it controls only the nearest/current-location radio.
 - Mounted TV objects are the in-world receiver model for the future second-admin-AAAStreamer TV provider. The actual stream source still needs the approved folder and encoder wiring before live TV presets are seeded.
 - Active TVs coordinate radios in the same linked media group: ordinary preset/music radios switch off, while radio speaker components without their own presets can sync to the TV stream and playhead.
 

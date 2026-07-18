@@ -329,6 +329,94 @@ async def test_house_radio_remote_tunes_nearest_room_radio(
 
 
 @pytest.mark.asyncio
+async def test_radio_remote_controls_radios_and_speakers_in_non_house_location(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(
+            websocket=ws,
+            id="u1",
+            nickname="tester",
+            location_id="public_music_room",
+            x=5,
+            y=5,
+        ),
+        permissions={"item.use"},
+    )
+    server.clients[ws] = client
+    presets = [
+        {"title": "One", "streamUrl": "https://example.com/one.mp3"},
+        {"title": "Two", "streamUrl": "https://example.com/two.mp3"},
+    ]
+
+    radio = server.item_service.default_item(client, "radio_station")
+    radio.id = "public-radio"
+    radio.title = "Public room radio"
+    radio.locationId = client.location_id
+    radio.x = 5
+    radio.y = 6
+    radio.params["linkedMediaGroup"] = "public-music-room"
+    radio.params["stationPresets"] = presets
+    radio.params["stationIndex"] = 0
+    server.item_service.add_item(radio)
+
+    speaker = server.item_service.default_item(client, "radio_station")
+    speaker.id = "public-speaker"
+    speaker.title = "Public room speaker"
+    speaker.locationId = client.location_id
+    speaker.x = 6
+    speaker.y = 5
+    speaker.params["linkedMediaGroup"] = "public-music-room"
+    speaker.params["speakerRole"] = "mid"
+    speaker.params["stationPresets"] = presets
+    speaker.params["stationIndex"] = 0
+    server.item_service.add_item(speaker)
+
+    remote = server.item_service.default_item(client, "house_object")
+    remote.id = "public-radio-remote"
+    remote.title = "Universal radio remote"
+    remote.locationId = client.location_id
+    remote.carrierId = client.id
+    remote.params["objectKind"] = "remote"
+    remote.params["description"] = "A programmable radio remote."
+    server.item_service.add_item(remote)
+
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast_item(item: object) -> None:
+        return None
+
+    async def fake_resolve(item: object) -> None:
+        return None
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+    monkeypatch.setattr(server, "_resolve_radio_playback_before_broadcast", fake_resolve)
+
+    await server._handle_message(
+        client,
+        json.dumps(
+            {
+                "type": "item_remote_control",
+                "itemId": remote.id,
+                "action": "station_next",
+            }
+        ),
+    )
+
+    result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert result.ok is True
+    assert result.message == "Remote tuned 2 connected radios to Two."
+    assert radio.params["stationIndex"] == 1
+    assert speaker.params["stationIndex"] == 1
+
+
+@pytest.mark.asyncio
 async def test_house_radio_remote_syncs_all_house_radios_to_target_station(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

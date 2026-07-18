@@ -120,7 +120,9 @@ linked components without presets are speakers, not additional radios; they
 follow that room radio's stream, station, playhead, and enabled state. Living
 room, studio, kitchen, bedroom, and entry-hall house radios follow the
 universal radio remote's station changes as one house station set when the
-remote's `remoteControlLinkedRadios` setting is on. Remote station changes
+remote's `remoteControlLinkedRadios` setting is on. The same remote also works
+in any public or non-house location containing compatible radio/speaker items,
+where linked components in that location follow the station change. Remote station changes
 preserve each radio's own power state: turning one radio off only turns that
 radio off, and turning it back on resumes the current synced station. Remote
 volume changes are applied as relative per-speaker steps, so a linked sub, low,
