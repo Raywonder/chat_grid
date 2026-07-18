@@ -235,6 +235,14 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
     isAvailable: (context) => context.hasCarriedRadioRemote,
   },
   {
+    id: 'castToDevice',
+    label: 'Cast remote to device',
+    shortcut: 'Shift+K',
+    tooltip: 'Choose a nearby TV or radio and cast the local device stream through the carried universal remote.',
+    section: 'Media',
+    isAvailable: (context) => context.hasCarriedRadioRemote,
+  },
+  {
     id: 'openUserActionMenu',
     label: 'User action menu',
     shortcut: 'Shift+R',

@@ -3999,6 +3999,7 @@ function radioRemoteControlCommand(action: 'station_next' | 'station_previous' |
 let activeCastStream: MediaStream | null = null;
 const activeCastTargetByCaster = new Map<string, { itemId: string; mediaKind: 'audio' | 'video' }>();
 const remoteCastMedia = new Map<string, HTMLMediaElement>();
+let localCastMedia: HTMLMediaElement | null = null;
 
 function handleRemoteCastStream(casterId: string, stream: MediaStream): void {
   const target = activeCastTargetByCaster.get(casterId);
@@ -4018,6 +4019,25 @@ function handleRemoteCastStream(casterId: string, stream: MediaStream): void {
   void element.play().catch(() => updateStatus('Cast received. Press the cast media control to start playback if the browser blocked autoplay.'));
 }
 
+function setLocalCastPlayback(stream: MediaStream | null): void {
+  localCastMedia?.remove();
+  localCastMedia = null;
+  if (!stream) return;
+  const hasVideo = stream.getVideoTracks().length > 0;
+  const element = document.createElement(hasVideo ? 'video' : 'audio');
+  element.autoplay = true;
+  element.controls = hasVideo;
+  element.muted = false;
+  element.srcObject = stream;
+  element.setAttribute('aria-label', 'Local cast playback');
+  Object.assign(element.style, hasVideo
+    ? { position: 'fixed', left: '1rem', bottom: '1rem', width: 'min(24rem, calc(100vw - 2rem))', zIndex: '18' }
+    : { display: 'none' });
+  document.body.append(element);
+  localCastMedia = element;
+  void element.play().catch(() => updateStatus('Local cast is ready. Press the local cast playback control to start it.'));
+}
+
 /** Starts a user-approved local display/tab cast and publishes its receiver metadata. */
 async function castToNearestDevice(): Promise<void> {
   const candidates = Array.from(state.items.values()).filter((item) => {
@@ -4025,7 +4045,7 @@ async function castToNearestDevice(): Promise<void> {
     const kind = String(item.params.objectKind ?? '').trim().toLowerCase();
     return item.type === 'radio_station' || kind === 'tv';
   });
-  const target = candidates.sort((a, b) => Math.hypot(a.x - state.player.x, a.y - state.player.y) - Math.hypot(b.x - state.player.x, state.player.y - b.y))[0];
+  const target = candidates.sort((a, b) => Math.hypot(a.x - state.player.x, a.y - state.player.y) - Math.hypot(b.x - state.player.x, b.y - state.player.y))[0];
   if (!target) {
     updateStatus('There is no TV or radio receiver nearby.');
     audio.sfxUiCancel();
@@ -4034,8 +4054,11 @@ async function castToNearestDevice(): Promise<void> {
   activeCastStream?.getTracks().forEach((track) => track.stop());
   try {
   activeCastStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    setLocalCastPlayback(activeCastStream);
     await peerManager.replaceCastStream(activeCastStream);
   } catch {
+    setLocalCastPlayback(null);
+    activeCastStream = null;
     updateStatus('Casting was cancelled or the device permission was unavailable.');
     audio.sfxUiCancel();
     return;
@@ -4060,6 +4083,9 @@ async function castToNearestDevice(): Promise<void> {
   });
   activeCastStream.getTracks().forEach((track) => track.addEventListener('ended', () => {
     signaling.send({ type: 'media_cast', targetItemId: target.id, active: false, mediaKind: target.type === 'radio_station' ? 'audio' : 'video', deviceName, stationCode, stationName: deviceName, title: '', artist: '' });
+    void peerManager.replaceCastStream(null);
+    setLocalCastPlayback(null);
+    activeCastStream = null;
   }, { once: true }));
   updateStatus(`Casting to ${target.title} as ${stationCode}.`);
   audio.sfxUiConfirm();
@@ -4481,6 +4507,7 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   radioRemoteStationPrevious: () => radioRemoteControlCommand('station_previous'),
   radioRemoteVolumeUp: () => radioRemoteControlCommand('volume_up'),
   radioRemoteVolumeDown: () => radioRemoteControlCommand('volume_down'),
+  castToDevice: () => void castToNearestDevice(),
   openUserActionMenu: openUserActionMenuCommand,
   interactItem: interactItemCommand,
   pickupSurfaceItem: pickupSurfaceItemCommand,

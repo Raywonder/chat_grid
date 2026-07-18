@@ -28,6 +28,7 @@ export type MainModeCommand =
   | 'radioRemoteStationPrevious'
   | 'radioRemoteVolumeUp'
   | 'radioRemoteVolumeDown'
+  | 'castToDevice'
   | 'openUserActionMenu'
   | 'interactItem'
   | 'pickupSurfaceItem'
@@ -88,6 +89,7 @@ export function resolveMainModeCommand(code: string, shiftKey: boolean, ctrlKey 
   if (code === 'Tab') return 'cycleFocusedItem';
   if (code === 'Enter') return shiftKey ? 'interactItem' : 'useItem';
   if (code === 'Space') return shiftKey ? 'radioRemoteStationPrevious' : 'useItem';
+  if (code === 'KeyK') return shiftKey ? 'castToDevice' : null;
   if (code === 'KeyJ') return shiftKey ? 'describeSurface' : 'pickupSurfaceItem';
   if (code === 'KeyR') return shiftKey ? 'openUserActionMenu' : null;
   if (code === 'KeyU') return shiftKey ? null : 'speakUsers';
