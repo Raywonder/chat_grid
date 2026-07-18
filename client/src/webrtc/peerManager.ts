@@ -5,14 +5,17 @@ export type PeerRuntime = SpatialPeerRuntime & {
   id: string;
   pc: RTCPeerConnection;
   remoteStream?: MediaStream;
+  castStream?: MediaStream;
 };
 
 type SendSignal = (targetId: string, payload: { sdp?: RTCSessionDescriptionInit; ice?: RTCIceCandidateInit }) => void;
 
 type StatusHandler = (message: string) => void;
+type CastStreamHandler = (peerId: string, stream: MediaStream) => void;
 
 export class PeerManager {
   private readonly peers = new Map<string, PeerRuntime>();
+  private readonly castSenders = new Map<string, Set<RTCRtpSender>>();
   private outputDeviceId = '';
 
   constructor(
@@ -20,6 +23,8 @@ export class PeerManager {
     private readonly sendSignal: SendSignal,
     private readonly getLocalStream: () => MediaStream | null,
     private readonly status: StatusHandler,
+    private readonly getCastStream: () => MediaStream | null = () => null,
+    private readonly onRemoteCastStream: CastStreamHandler = () => undefined,
   ) {}
 
   getPeer(id: string): PeerRuntime | undefined {
@@ -54,6 +59,12 @@ export class PeerManager {
       // Ensure initial offers still negotiate audio receive even before mic setup finishes.
       pc.addTransceiver('audio', { direction: 'sendrecv' });
     }
+    const castStream = this.getCastStream();
+    if (castStream) {
+      const senders = new Set<RTCRtpSender>();
+      castStream.getTracks().forEach((track) => senders.add(pc.addTrack(track, castStream)));
+      this.castSenders.set(targetId, senders);
+    }
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
@@ -62,7 +73,13 @@ export class PeerManager {
     };
 
     pc.ontrack = async (event) => {
-      peer.remoteStream = event.streams[0];
+      const stream = event.streams[0];
+      if (stream && peer.remoteStream && stream.id !== peer.remoteStream.id) {
+        peer.castStream = stream;
+        this.onRemoteCastStream(peer.id, stream);
+        return;
+      }
+      peer.remoteStream = stream;
       if (this.audio.isVoiceLayerEnabled()) {
         await this.audio.attachRemoteStream(peer, event.streams[0], this.outputDeviceId);
       } else {
@@ -78,6 +95,27 @@ export class PeerManager {
     }
 
     return peer;
+  }
+
+  /** Adds or replaces the user-approved cast tracks on every existing peer. */
+  async replaceCastStream(stream: MediaStream | null): Promise<void> {
+    for (const peer of this.peers.values()) {
+      const senders = this.castSenders.get(peer.id) ?? new Set<RTCRtpSender>();
+      if (!stream) {
+        senders.forEach((sender) => void sender.replaceTrack(null));
+        this.castSenders.delete(peer.id);
+        continue;
+      }
+      for (const track of stream.getTracks()) {
+        const sender = [...senders].find((candidate) => candidate.track?.kind === track.kind);
+        if (sender) await sender.replaceTrack(track);
+        else {
+          senders.add(peer.pc.addTrack(track, stream));
+          this.castSenders.set(peer.id, senders);
+          await this.renegotiatePeer(peer);
+        }
+      }
+    }
   }
 
   async handleSignal(data: {
@@ -153,6 +191,7 @@ export class PeerManager {
     peer.pc.close();
     this.audio.cleanupPeerAudio(peer);
     this.peers.delete(id);
+    this.castSenders.delete(id);
   }
 
   cleanupAll(): void {

@@ -237,6 +237,8 @@ class MainFrame(wx.Frame):
         file_menu.Append(wx.ID_PREFERENCES, f"&Desktop settings...\t{settings_shortcut}")
         self.audio_settings_id = wx.NewIdRef()
         file_menu.Append(self.audio_settings_id, "&Audio setup...\tCtrl+Shift+A")
+        self.cast_device_id = wx.NewIdRef()
+        file_menu.Append(self.cast_device_id, "Cast to &device...\tCtrl+Shift+C")
         file_menu.AppendSeparator()
         file_menu.Append(wx.ID_ABOUT, "&Credits and version\tCtrl+Shift+C")
         file_menu.Append(wx.ID_EXIT, "E&xit\tAlt+F4")
@@ -247,6 +249,7 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, lambda _event: self._focus_world(), id=self.focus_world_id)
         self.Bind(wx.EVT_MENU, self._show_settings, id=wx.ID_PREFERENCES)
         self.Bind(wx.EVT_MENU, self._show_audio_settings, id=self.audio_settings_id)
+        self.Bind(wx.EVT_MENU, lambda _event: self.web.RunScript("document.getElementById('castButton')?.click();"), id=self.cast_device_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.exit_application(), id=wx.ID_EXIT)
         self.Bind(wx.EVT_MENU, self._show_about, id=wx.ID_ABOUT)
 

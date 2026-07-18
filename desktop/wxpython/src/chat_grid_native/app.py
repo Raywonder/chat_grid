@@ -185,6 +185,8 @@ class MainFrame(wx.Frame):
         file_menu.AppendSeparator()
         settings_shortcut = "Cmd+," if sys.platform == "darwin" else "Ctrl+,"
         file_menu.Append(wx.ID_PREFERENCES, f"&Settings...\t{settings_shortcut}")
+        cast_id = wx.NewIdRef()
+        file_menu.Append(cast_id, "Cast to &device...\tCtrl+Shift+C")
         file_menu.Append(tray_id, "&Minimize to system tray\tCtrl+M")
         file_menu.AppendSeparator()
         file_menu.Append(wx.ID_EXIT, "E&xit Chat Grid\tAlt+F4")
@@ -199,6 +201,7 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, lambda _event: self._restart_webview(), id=restart_world_id)
         self.Bind(wx.EVT_MENU, lambda _event: self._focus_world(), id=focus_world_id)
         self.Bind(wx.EVT_MENU, self._show_settings, id=wx.ID_PREFERENCES)
+        self.Bind(wx.EVT_MENU, lambda _event: self.web.RunScript("document.getElementById('castButton')?.click();"), id=cast_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.Hide(), id=tray_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.request_exit(), id=wx.ID_EXIT)
         self.Bind(wx.EVT_MENU, lambda _event: self._check_updates_background(interactive=True), id=update_id)

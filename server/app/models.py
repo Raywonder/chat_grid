@@ -299,6 +299,20 @@ class ItemRemoteControlPacket(BasePacket):
     ]
 
 
+class MediaCastPacket(BasePacket):
+    """Start or stop a user-owned WebRTC cast to an in-world receiver."""
+
+    type: Literal["media_cast"]
+    targetItemId: str
+    active: bool
+    mediaKind: Literal["audio", "video"] = "audio"
+    deviceName: str = Field(default="", max_length=80)
+    stationCode: str = Field(default="", max_length=24)
+    stationName: str = Field(default="", max_length=120)
+    title: str = Field(default="", max_length=240)
+    artist: str = Field(default="", max_length=160)
+
+
 class ItemInteractPacket(BasePacket):
     type: Literal["item_interact"]
     itemId: str
@@ -332,6 +346,31 @@ class ItemUpdatePacket(BasePacket):
     itemId: str
     title: str | None = Field(default=None, max_length=80)
     params: dict | None = None
+
+
+class WorldConfigUpdatePacket(BasePacket):
+    """Broadcast an authoritative room-bound change to listeners already inside it."""
+
+    type: Literal["world_config_update"]
+    locationId: str
+    width: int = Field(ge=1, le=41)
+    height: int = Field(ge=1, le=41)
+
+
+class MediaCastStatePacket(BasePacket):
+    """Room-scoped metadata describing the currently active cast stream."""
+
+    type: Literal["media_cast_state"]
+    casterId: str
+    casterNickname: str
+    targetItemId: str
+    active: bool
+    mediaKind: Literal["audio", "video"] = "audio"
+    deviceName: str = ""
+    stationCode: str = ""
+    stationName: str = ""
+    title: str = ""
+    artist: str = ""
 
 
 class SpeakPacket(BasePacket):
@@ -392,10 +431,12 @@ ClientPacket = (
     | ItemUsePacket
     | ItemSecondaryUsePacket
     | ItemRemoteControlPacket
+    | MediaCastPacket
     | ItemInteractPacket
     | ItemPianoNotePacket
     | ItemPianoRecordingPacket
     | ItemUpdatePacket
+    | WorldConfigUpdatePacket
     | SpeakPacket
 )
 

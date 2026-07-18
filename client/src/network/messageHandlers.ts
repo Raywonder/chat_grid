@@ -8,6 +8,7 @@ type MessageHandlerDeps = {
   getWorldGridSize: () => number;
   getCurrentLocationId: () => string;
   setWorldGridSize: (size: number) => void;
+  setWorldGridDimensions: (width: number, height: number) => void;
   setMovementTickMs: (value: number) => void;
   setWorldLocations: (
     locations: Array<{
@@ -64,6 +65,7 @@ type MessageHandlerDeps = {
   dom: {
     connectButton: HTMLElement;
     disconnectButton: HTMLElement;
+    castButton: HTMLElement;
     focusGridButton: HTMLElement;
     canvas: HTMLCanvasElement;
     instructions: HTMLElement;
@@ -95,6 +97,7 @@ type MessageHandlerDeps = {
   narrateLocationArrival: (locationName: string, x: number, y: number) => void;
   narrateRemoteMovement: (nickname: string, fromX: number, fromY: number, toX: number, toY: number) => void;
   handleItemActionResultStatus: (message: Extract<IncomingMessage, { type: 'item_action_result' }>) => boolean;
+  handleMediaCastState: (message: Extract<IncomingMessage, { type: 'media_cast_state' }>) => void;
   handleInteractiveItemLaunch: (item: WorldItem) => boolean;
   handleGameLaunchInvite: (message: Extract<IncomingMessage, { type: 'item_game_launch' }>) => boolean;
   handleDoorTransitionArrival: (x: number, y: number) => void;
@@ -186,6 +189,10 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         if (message.worldConfig?.gridSize && Number.isInteger(message.worldConfig.gridSize) && message.worldConfig.gridSize > 0) {
           deps.setWorldGridSize(message.worldConfig.gridSize);
         }
+        deps.setWorldGridDimensions(
+          message.worldConfig?.gridWidth ?? message.worldConfig?.gridSize ?? deps.getWorldGridSize(),
+          message.worldConfig?.gridHeight ?? message.worldConfig?.gridSize ?? deps.getWorldGridSize(),
+        );
         if (message.worldConfig?.movementTickMs && Number.isInteger(message.worldConfig.movementTickMs) && message.worldConfig.movementTickMs > 0) {
           deps.setMovementTickMs(message.worldConfig.movementTickMs);
         }
@@ -207,6 +214,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.state.player.handHeldById = message.player.handHeldById ?? null;
         deps.dom.connectButton.classList.add('hidden');
         deps.dom.disconnectButton.classList.remove('hidden');
+        deps.dom.castButton.classList.remove('hidden');
         deps.dom.focusGridButton.classList.remove('hidden');
         deps.dom.canvas.classList.remove('hidden');
         deps.dom.instructions.classList.remove('hidden');
@@ -232,6 +240,13 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         await deps.refreshAudioSubscriptions(true);
         await deps.applyAudioLayerState();
         deps.gameLoop();
+        break;
+
+      case 'world_config_update':
+        if (message.locationId === deps.getCurrentLocationId()) {
+          deps.setWorldGridDimensions(message.width, message.height);
+          deps.updateStatus(`This room is now ${message.width} by ${message.height} Grid squares.`);
+        }
         break;
 
       case 'location_changed': {
@@ -518,6 +533,10 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         }
         break;
       }
+
+      case 'media_cast_state':
+        deps.handleMediaCastState(message);
+        break;
 
       case 'item_use_sound': {
         const soundUrl = deps.resolveIncomingSoundUrl(message.sound);

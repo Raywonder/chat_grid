@@ -26,6 +26,7 @@
         <button id="settingsButton" type="button">Audio setup</button>
         <button id="disconnectButton" class="hidden" type="button">Disconnect</button>
         <button id="focusGridButton" class="hidden" type="button" aria-controls="gameCanvas">Chat Grid</button>
+        <button id="castButton" class="hidden" type="button">Cast to device</button>
         <button id="midiButton" class="hidden" type="button" hidden>Enable MIDI</button>
       </div>
       <div id="deviceSummary">
@@ -130,6 +131,10 @@
           <label class="checkbox-row" for="movementDirectionsToggle">
             <input id="movementDirectionsToggle" type="checkbox" />
             Speak movement directions and nearby-user movement
+          </label>
+          <label class="checkbox-row" for="castLocalOnlyToggle">
+            <input id="castLocalOnlyToggle" type="checkbox" />
+            Keep my cast local only (do not play it in the world)
           </label>
           <fieldset>
             <legend>ntfy notifications</legend>

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from dataclasses import replace
 from collections import deque
 from contextlib import suppress
 from datetime import datetime, timezone
@@ -136,6 +137,8 @@ from .models import (
     ItemUsePacket,
     ItemUseSoundPacket,
     LocationChangedPacket,
+    MediaCastPacket,
+    MediaCastStatePacket,
     NicknameResultPacket,
     PingPacket,
     PongPacket,
@@ -151,6 +154,7 @@ from .models import (
     UserLeftPacket,
     WelcomeReadyPacket,
     WelcomePacket,
+    WorldConfigUpdatePacket,
     WorldItem,
 )
 from .network_security import normalize_origin, open_validated_public_url
@@ -667,6 +671,7 @@ class SignalingServer:
         self._community_autofix_task: asyncio.Task[None] | None = None
         self._house_keeper_task: asyncio.Task[None] | None = None
         self._community_locations: dict[str, WorldLocation] = {}
+        self._location_dimension_overrides: dict[str, tuple[int, int]] = {}
         self._clock_top_of_hour_markers: dict[str, str] = {}
         self._clock_alarm_markers: dict[str, str] = {}
         self._started_at_monotonic = time.monotonic()
@@ -757,7 +762,11 @@ class SignalingServer:
         """Resolve a built-in or generated world location."""
 
         location_id = self._normalize_world_location_id(value)
-        return self._community_locations.get(location_id) or get_location(location_id)
+        location = self._community_locations.get(location_id) or get_location(location_id)
+        dimensions = self._location_dimension_overrides.get(location_id)
+        if dimensions:
+            return replace(location, width=dimensions[0], height=dimensions[1])
+        return location
 
     def _world_locations_for_client(self) -> list[dict[str, str | int]]:
         """Return only configured public travel destinations for client menus.
@@ -833,6 +842,8 @@ class SignalingServer:
             spawn_y=20,
             ambience_key=ambience_key_by_type.get(item.type, "front_entry"),
             ambience_name=ambience_name_by_type.get(item.type, "Room tone"),
+            width=max(1, min(41, int(item.params.get("widthSquares", 41) or 41))),
+            height=max(1, min(41, int(item.params.get("depthSquares", 41) or 41))),
         )
 
     def _return_door_id_for_location(self, location_id: str) -> str:
@@ -1255,6 +1266,42 @@ class SignalingServer:
             )
             if balcony is not None:
                 changed.append(balcony)
+            built_in_rooms = (
+                ("living-room", "Living room", "raywonder_house_living_room", 30, 26),
+                ("studio-room", "Studio", "raywonder_house_studio", 34, 30),
+                ("kitchen-room", "Kitchen", "raywonder_house_kitchen", 26, 24),
+                ("bedroom-room", "Bedroom", "raywonder_house_bedroom", 28, 26),
+                ("relaxation-room", "Relaxation room", "raywonder_house_relaxation_room", 30, 26),
+            )
+            for role, room_title, target_id, width, height in built_in_rooms:
+                marker_id = self._generated_companion_item_id(location_id, role)
+                if marker_id in self.items:
+                    continue
+                marker = self._upsert_generated_room_marker(
+                    item_id=marker_id,
+                    title=room_title,
+                    location_id=location_id,
+                    x=20,
+                    y=20,
+                    target_location_id=target_id,
+                    params={
+                        "placeName": f"Raywonder {room_title}",
+                        "ownerName": place_item.params.get("ownerName", ""),
+                        "roomLayout": (
+                            room_title.casefold().replace(" ", "_")
+                            if room_title.casefold().replace(" ", "_")
+                            in {"living_room"}
+                            else "custom"
+                        ),
+                        "widthSquares": width,
+                        "depthSquares": height,
+                        "description": f"The editable {room_title.casefold()} room.",
+                        "zoneNotes": "room entrance, furniture, clear walking space",
+                    },
+                    now_ms=now_ms,
+                )
+                if marker is not None:
+                    changed.append(marker)
         fixtures: tuple[tuple[str, str, int, int, dict[str, object]], ...] = (
             (
                 "front-window",
@@ -1356,6 +1403,15 @@ class SignalingServer:
                 if existing_location != location:
                     self._community_locations[target_location_id] = location
                     notes.append(f"{location.name} location")
+            if item.type == "room":
+                location = self._get_world_location(target_location_id)
+                dimensions = (
+                    max(1, min(self.grid_size, int(item.params.get("widthSquares", location.width) or location.width))),
+                    max(1, min(self.grid_size, int(item.params.get("depthSquares", location.height) or location.height))),
+                )
+                if self._location_dimension_overrides.get(target_location_id) != dimensions:
+                    self._location_dimension_overrides[target_location_id] = dimensions
+                    notes.append(f"{location.name} dimensions")
             if target_location_id in self._community_locations:
                 return_door = self._ensure_return_door_for_place(
                     item, target_location_id, now_ms
@@ -2907,7 +2963,7 @@ class SignalingServer:
         candidates = [
             (keeper.x + dx, keeper.y + dy)
             for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
-            if self._is_in_bounds(keeper.x + dx, keeper.y + dy)
+            if self._is_in_bounds(keeper.x + dx, keeper.y + dy, keeper.locationId)
         ]
         if not candidates:
             return False
@@ -5196,10 +5252,11 @@ class SignalingServer:
             if current_task is asyncio.current_task():
                 self.piano_playback_tasks_by_item.pop(item.id, None)
 
-    def _is_in_bounds(self, x: int, y: int) -> bool:
+    def _is_in_bounds(self, x: int, y: int, location_id: str | None = None) -> bool:
         """Check whether a coordinate is inside server-authoritative world bounds."""
 
-        return 0 <= x < self.grid_size and 0 <= y < self.grid_size
+        location = self._get_world_location(location_id or DEFAULT_LOCATION_ID)
+        return 0 <= x < min(self.grid_size, location.width) and 0 <= y < min(self.grid_size, location.height)
 
     def _movement_window_index(self, now_ms: int) -> int:
         """Return current movement rate-limit window index for a server timestamp."""
@@ -5561,7 +5618,7 @@ class SignalingServer:
     ) -> str | None:
         """Return a user-facing validation error for linked drop, if any."""
 
-        if not self._is_in_bounds(x, y):
+        if not self._is_in_bounds(x, y, client.location_id):
             return "Drop position is out of bounds."
         for item in items:
             if item.carrierId != client.id:
@@ -5572,7 +5629,7 @@ class SignalingServer:
                 return f"Not authorized to drop {item.title}."
             next_x = x + (item.x - root.x)
             next_y = y + (item.y - root.y)
-            if not self._is_in_bounds(next_x, next_y):
+            if not self._is_in_bounds(next_x, next_y, client.location_id):
                 return f"Dropping there would put {item.title} out of bounds."
         return None
 
@@ -5598,9 +5655,10 @@ class SignalingServer:
                 item.locationId = client.location_id
             item.x = item.x + delta_x
             item.y = item.y + delta_y
-            if not self._is_in_bounds(item.x, item.y):
-                item.x = min(max(item.x, 0), self.grid_size - 1)
-                item.y = min(max(item.y, 0), self.grid_size - 1)
+            if not self._is_in_bounds(item.x, item.y, client.location_id):
+                location = self._get_world_location(client.location_id)
+                item.x = min(max(item.x, 0), min(self.grid_size, location.width) - 1)
+                item.y = min(max(item.y, 0), min(self.grid_size, location.height) - 1)
             item.updatedAt = now_ms
             item.updatedBy = actor_id
             item.updatedByName = actor_name
@@ -6601,6 +6659,8 @@ class SignalingServer:
             ],
             worldConfig={
                 "gridSize": self.grid_size,
+                "gridWidth": min(self.grid_size, location.width),
+                "gridHeight": min(self.grid_size, location.height),
                 "movementTickMs": self.movement_tick_ms,
                 "movementMaxStepsPerTick": self.movement_max_steps_per_tick,
                 "locationId": client.location_id,
@@ -6641,7 +6701,7 @@ class SignalingServer:
         if (
             isinstance(saved_x, int)
             and isinstance(saved_y, int)
-            and self._is_in_bounds(saved_x, saved_y)
+            and self._is_in_bounds(saved_x, saved_y, client.location_id)
         ):
             client.x = saved_x
             client.y = saved_y
@@ -8821,7 +8881,7 @@ class SignalingServer:
             return
 
         if isinstance(packet, UpdatePositionPacket):
-            if not self._is_in_bounds(packet.x, packet.y):
+            if not self._is_in_bounds(packet.x, packet.y, client.location_id):
                 PACKET_LOGGER.warning(
                     "out-of-bounds position ignored id=%s x=%d y=%d grid_size=%d",
                     client.id,
@@ -8914,7 +8974,7 @@ class SignalingServer:
             return
 
         if isinstance(packet, TeleportCompletePacket):
-            if not self._is_in_bounds(packet.x, packet.y):
+            if not self._is_in_bounds(packet.x, packet.y, client.location_id):
                 PACKET_LOGGER.warning(
                     "out-of-bounds teleport ignored id=%s x=%d y=%d grid_size=%d",
                     client.id,
@@ -10124,6 +10184,38 @@ class SignalingServer:
             )
             return
 
+        if isinstance(packet, MediaCastPacket):
+            target = self.items.get(packet.targetItemId)
+            target_kind = str(target.params.get("objectKind", "")).strip().lower() if target else ""
+            valid_target = target is not None and target.locationId == client.location_id and (
+                target.type == "radio_station" or target_kind == "tv"
+            )
+            if not valid_target:
+                await self._send_item_result(client, False, "use", "That cast receiver is not available here.", packet.targetItemId)
+                return
+            state_packet = MediaCastStatePacket(
+                type="media_cast_state",
+                casterId=client.id,
+                casterNickname=client.nickname,
+                targetItemId=packet.targetItemId,
+                active=packet.active,
+                mediaKind=packet.mediaKind,
+                deviceName=packet.deviceName.strip(),
+                stationCode=packet.stationCode.strip(),
+                stationName=packet.stationName.strip(),
+                title=packet.title.strip(),
+                artist=packet.artist.strip(),
+            )
+            await self._broadcast_location(client.location_id, state_packet)
+            await self._send_item_result(
+                client,
+                True,
+                "use",
+                f"Cast {'started' if packet.active else 'stopped'} on {target.title}.",
+                target.id,
+            )
+            return
+
         if isinstance(packet, ItemRemoteControlPacket):
             if not self._client_has_permission(client, "item.use"):
                 await self._send_item_result(
@@ -10508,6 +10600,26 @@ class SignalingServer:
                     )
                     return
                 update_item.params = next_params
+                if update_item.type == "room":
+                    target_location_id = self._normalize_world_location_id(
+                        update_item.params.get("targetLocation")
+                    )
+                    room_location = self._get_world_location(target_location_id)
+                    width = int(update_item.params.get("widthSquares", room_location.width))
+                    height = int(update_item.params.get("depthSquares", room_location.height))
+                    self._location_dimension_overrides[target_location_id] = (
+                        max(1, min(self.grid_size, width)),
+                        max(1, min(self.grid_size, height)),
+                    )
+                    await self._broadcast_location(
+                        target_location_id,
+                        WorldConfigUpdatePacket(
+                            type="world_config_update",
+                            locationId=target_location_id,
+                            width=min(self.grid_size, width),
+                            height=min(self.grid_size, height),
+                        ),
+                    )
                 auto_linked = self._auto_link_radio_component_to_nearby_group(
                     update_item
                 )

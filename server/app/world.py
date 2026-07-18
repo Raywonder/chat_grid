@@ -20,6 +20,8 @@ class WorldLocation:
     spawn_y: int
     ambience_key: str
     ambience_name: str
+    width: int = 41
+    height: int = 41
 
     def as_dict(self) -> dict[str, str | int]:
         """Return the public metadata advertised to clients."""
@@ -33,6 +35,8 @@ class WorldLocation:
             "spawnY": self.spawn_y,
             "ambienceKey": self.ambience_key,
             "ambienceName": self.ambience_name,
+            "width": self.width,
+            "height": self.height,
         }
 
 
@@ -178,6 +182,8 @@ WORLD_LOCATIONS: tuple[WorldLocation, ...] = (
         spawn_y=18,
         ambience_key="bedroom_quiet",
         ambience_name="Bedroom quiet",
+        width=28,
+        height=26,
     ),
     WorldLocation(
         id="raywonder_house_relaxation_room",

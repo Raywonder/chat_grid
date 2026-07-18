@@ -131,6 +131,7 @@ type Dom = {
   logoutButton: HTMLButtonElement;
   disconnectButton: HTMLButtonElement;
   focusGridButton: HTMLButtonElement;
+  castButton: HTMLButtonElement;
   midiButton: HTMLButtonElement;
   settingsButton: HTMLButtonElement;
   closeSettingsButton: HTMLButtonElement;
@@ -142,6 +143,7 @@ type Dom = {
   radioAnnouncementModeSelect: HTMLSelectElement;
   itemBeaconsToggle: HTMLInputElement;
   movementDirectionsToggle: HTMLInputElement;
+  castLocalOnlyToggle: HTMLInputElement;
   ntfyNotificationsToggle: HTMLInputElement;
   ntfyNotificationsStatus: HTMLParagraphElement;
   ntfySubscriptionLink: HTMLAnchorElement;
@@ -180,6 +182,7 @@ const dom: Dom = {
   logoutButton: requiredById('logoutButton'),
   disconnectButton: requiredById('disconnectButton'),
   focusGridButton: requiredById('focusGridButton'),
+  castButton: requiredById('castButton'),
   midiButton: requiredById('midiButton'),
   settingsButton: requiredById('settingsButton'),
   closeSettingsButton: requiredById('closeSettingsButton'),
@@ -191,6 +194,7 @@ const dom: Dom = {
   radioAnnouncementModeSelect: requiredById('radioAnnouncementModeSelect'),
   itemBeaconsToggle: requiredById('itemBeaconsToggle'),
   movementDirectionsToggle: requiredById('movementDirectionsToggle'),
+  castLocalOnlyToggle: requiredById('castLocalOnlyToggle'),
   ntfyNotificationsToggle: requiredById('ntfyNotificationsToggle'),
   ntfyNotificationsStatus: requiredById('ntfyNotificationsStatus'),
   ntfySubscriptionLink: requiredById('ntfySubscriptionLink'),
@@ -473,6 +477,8 @@ const audio = new AudioEngine();
 const settings = new SettingsStore();
 const initialAuthUsername = settings.loadAuthUsername();
 let worldGridSize = GRID_SIZE;
+let worldGridWidth = GRID_SIZE;
+let worldGridHeight = GRID_SIZE;
 let movementTickMs = MOVE_COOLDOWN_MS;
 let lastWallCollisionDirection: string | null = null;
 let statusTimeout: number | null = null;
@@ -775,6 +781,8 @@ const peerManager = new PeerManager(
   },
   () => mediaSession.getOutboundStream(),
   updateStatus,
+  () => activeCastStream,
+  handleRemoteCastStream,
 );
 const mediaSession = new MediaSession({
   state,
@@ -3043,7 +3051,7 @@ function updateTeleport(): void {
 }
 
 function isNearCarefulNavigationZone(x: number, y: number): boolean {
-  if (x <= 0 || y <= 0 || x >= worldGridSize - 1 || y >= worldGridSize - 1) return true;
+  if (x <= 0 || y <= 0 || x >= worldGridWidth - 1 || y >= worldGridHeight - 1) return true;
   for (const item of state.items.values()) {
     if (item.locationId && item.locationId !== currentLocationId) continue;
     if (Math.hypot(item.x - x, item.y - y) <= 1.5) return true;
@@ -3141,7 +3149,7 @@ function handleMovement(): void {
   const nextX = state.player.x + dx;
   const nextY = state.player.y + dy;
   const attemptedDirection = `${dx},${dy}`;
-  if (nextX < 0 || nextY < 0 || nextX >= worldGridSize || nextY >= worldGridSize) {
+  if (nextX < 0 || nextY < 0 || nextX >= worldGridWidth || nextY >= worldGridHeight) {
     state.player.lastMoveTime = now;
     if (lastWallCollisionDirection !== attemptedDirection) {
       void audio.playSample(WALL_SOUND_URL, 1);
@@ -3518,6 +3526,10 @@ const onAppMessage = createOnMessageHandler({
   setWorldGridSize: (size) => {
     worldGridSize = size;
   },
+  setWorldGridDimensions: (width, height) => {
+    worldGridWidth = Math.max(1, Math.min(worldGridSize, width));
+    worldGridHeight = Math.max(1, Math.min(worldGridSize, height));
+  },
   setMovementTickMs: (value) => {
     movementTickMs = Math.max(1, value);
   },
@@ -3570,6 +3582,31 @@ const onAppMessage = createOnMessageHandler({
   narrateLocationArrival,
   narrateRemoteMovement,
   handleItemActionResultStatus: (message) => itemBehaviorRegistry.onActionResultStatus(message),
+  handleMediaCastState: (message) => {
+    if (message.active) {
+      activeCastTargetByCaster.set(message.casterId, { itemId: message.targetItemId, mediaKind: message.mediaKind });
+    } else {
+      activeCastTargetByCaster.delete(message.casterId);
+      remoteCastMedia.get(message.casterId)?.remove();
+      remoteCastMedia.delete(message.casterId);
+    }
+    const target = state.items.get(message.targetItemId);
+    if (!target) return;
+    target.params = {
+      ...target.params,
+      castActive: message.active,
+      castDeviceName: message.deviceName,
+      castStationCode: message.stationCode,
+      castStationName: message.stationName,
+      castNowPlaying: message.title,
+      castArtist: message.artist,
+      castMediaKind: message.mediaKind,
+      castCasterId: message.casterId,
+    };
+    updateStatus(message.active
+      ? `${message.casterNickname} is casting ${message.title || 'media'} to ${target.title} as ${message.stationCode}.`
+      : `${message.casterNickname} stopped casting from ${target.title}.`);
+  },
   handleInteractiveItemLaunch: openInteractiveItem,
   handleGameLaunchInvite: openGameLaunchInvite,
   handleDoorTransitionArrival,
@@ -3957,6 +3994,75 @@ function radioRemoteControlCommand(action: 'station_next' | 'station_previous' |
     audio.sfxDeviceKeypad();
   }
   signaling.send({ type: 'item_remote_control', itemId: remote.item.id, action });
+}
+
+let activeCastStream: MediaStream | null = null;
+const activeCastTargetByCaster = new Map<string, { itemId: string; mediaKind: 'audio' | 'video' }>();
+const remoteCastMedia = new Map<string, HTMLMediaElement>();
+
+function handleRemoteCastStream(casterId: string, stream: MediaStream): void {
+  const target = activeCastTargetByCaster.get(casterId);
+  if (!target) return;
+  remoteCastMedia.get(casterId)?.remove();
+  const element = document.createElement(target.mediaKind === 'video' ? 'video' : 'audio');
+  element.autoplay = true;
+  element.controls = target.mediaKind === 'video';
+  element.muted = false;
+  element.srcObject = stream;
+  element.setAttribute('aria-label', `Cast from ${casterId}`);
+  Object.assign(element.style, target.mediaKind === 'video'
+    ? { position: 'fixed', right: '1rem', bottom: '1rem', width: 'min(32rem, calc(100vw - 2rem))', zIndex: '19' }
+    : { display: 'none' });
+  document.body.append(element);
+  remoteCastMedia.set(casterId, element);
+  void element.play().catch(() => updateStatus('Cast received. Press the cast media control to start playback if the browser blocked autoplay.'));
+}
+
+/** Starts a user-approved local display/tab cast and publishes its receiver metadata. */
+async function castToNearestDevice(): Promise<void> {
+  const candidates = Array.from(state.items.values()).filter((item) => {
+    if (item.locationId && item.locationId !== currentLocationId) return false;
+    const kind = String(item.params.objectKind ?? '').trim().toLowerCase();
+    return item.type === 'radio_station' || kind === 'tv';
+  });
+  const target = candidates.sort((a, b) => Math.hypot(a.x - state.player.x, a.y - state.player.y) - Math.hypot(b.x - state.player.x, state.player.y - b.y))[0];
+  if (!target) {
+    updateStatus('There is no TV or radio receiver nearby.');
+    audio.sfxUiCancel();
+    return;
+  }
+  activeCastStream?.getTracks().forEach((track) => track.stop());
+  try {
+  activeCastStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    await peerManager.replaceCastStream(activeCastStream);
+  } catch {
+    updateStatus('Casting was cancelled or the device permission was unavailable.');
+    audio.sfxUiCancel();
+    return;
+  }
+  const deviceName = String(activeCastStream.getVideoTracks()[0]?.label || activeCastStream.getAudioTracks()[0]?.label || 'Local device').slice(0, 80);
+  const stationCode = `CAST-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  if (dom.castLocalOnlyToggle.checked) {
+    await peerManager.replaceCastStream(null);
+    updateStatus(`Playing the cast locally from ${deviceName}; it is not being sent into the world.`);
+    return;
+  }
+  signaling.send({
+    type: 'media_cast',
+    targetItemId: target.id,
+    active: true,
+    mediaKind: target.type === 'radio_station' ? 'audio' : 'video',
+    deviceName,
+    stationCode,
+    stationName: deviceName,
+    title: 'Local device cast',
+    artist: state.player.nickname,
+  });
+  activeCastStream.getTracks().forEach((track) => track.addEventListener('ended', () => {
+    signaling.send({ type: 'media_cast', targetItemId: target.id, active: false, mediaKind: target.type === 'radio_station' ? 'audio' : 'video', deviceName, stationCode, stationName: deviceName, title: '', artist: '' });
+  }, { once: true }));
+  updateStatus(`Casting to ${target.title} as ${stationCode}.`);
+  audio.sfxUiConfirm();
 }
 
 function speakUsersCommand(): void {
@@ -5206,6 +5312,10 @@ dom.readGuideButton.addEventListener('click', () => {
     return;
   }
   openJoinGuideReader();
+});
+
+dom.castButton.addEventListener('click', () => {
+  void castToNearestDevice();
 });
 
 document.addEventListener('keydown', handleJoinGuideReaderKey);

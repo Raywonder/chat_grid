@@ -61,6 +61,8 @@ export const welcomeMessageSchema = z.object({
   worldConfig: z
     .object({
       gridSize: z.number().int().positive(),
+      gridWidth: z.number().int().positive().optional(),
+      gridHeight: z.number().int().positive().optional(),
       movementTickMs: z.number().int().positive().optional(),
       movementMaxStepsPerTick: z.number().int().positive().optional(),
       locationId: z.string().optional(),
@@ -329,6 +331,27 @@ export const itemActionResultSchema = z.object({
   itemId: z.string().optional(),
 });
 
+export const worldConfigUpdateSchema = z.object({
+  type: z.literal('world_config_update'),
+  locationId: z.string(),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+});
+
+export const mediaCastStateSchema = z.object({
+  type: z.literal('media_cast_state'),
+  casterId: z.string(),
+  casterNickname: z.string(),
+  targetItemId: z.string(),
+  active: z.boolean(),
+  mediaKind: z.enum(['audio', 'video']),
+  deviceName: z.string(),
+  stationCode: z.string(),
+  stationName: z.string(),
+  title: z.string(),
+  artist: z.string(),
+});
+
 export const itemTransferTargetsSchema = z.object({
   type: z.literal('item_transfer_targets'),
   itemId: z.string(),
@@ -550,6 +573,8 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   itemUpsertSchema,
   itemRemoveSchema,
   itemActionResultSchema,
+  worldConfigUpdateSchema,
+  mediaCastStateSchema,
   itemTransferTargetsSchema,
   itemUseSoundSchema,
   agentVoiceSchema,
@@ -654,6 +679,17 @@ export type OutgoingMessage =
   | { type: 'item_transfer'; itemId: string; targetUserId: string }
   | { type: 'item_use'; itemId: string; credential?: string }
   | { type: 'item_secondary_use'; itemId: string }
+  | {
+      type: 'media_cast';
+      targetItemId: string;
+      active: boolean;
+      mediaKind: 'audio' | 'video';
+      deviceName: string;
+      stationCode: string;
+      stationName: string;
+      title: string;
+      artist: string;
+    }
   | {
       type: 'item_remote_control';
       itemId: string;
