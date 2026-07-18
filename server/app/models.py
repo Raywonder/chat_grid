@@ -294,8 +294,12 @@ class ItemRemoteControlPacket(BasePacket):
     action: Literal[
         "station_next",
         "station_previous",
+        "station_first",
+        "station_last",
         "volume_up",
         "volume_down",
+        "power_toggle",
+        "info",
     ]
 
 

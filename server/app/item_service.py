@@ -11,7 +11,7 @@ from pathlib import Path
 from .client import ClientConnection
 from .item_catalog import get_item_definition
 from .models import PersistedWorldItem, WorldItem
-from .seed_items import ensure_builtin_items
+from .seed_items import RADIO_STATION_PRESETS, ensure_builtin_items
 
 LOGGER = logging.getLogger("chgrid.server")
 
@@ -44,7 +44,13 @@ class ItemService:
 
         return int(time.time() * 1000)
 
-    def default_item(self, client: ClientConnection, item_type: str) -> WorldItem:
+    def default_item(
+        self,
+        client: ClientConnection,
+        item_type: str,
+        *,
+        include_default_radio_presets: bool = False,
+    ) -> WorldItem:
         """Create a new server-authoritative item at the caller's position."""
 
         # The add menu exposes this as a first-class choice, but it remains a
@@ -67,6 +73,24 @@ class ItemService:
                     "replacementHint": "A programmable universal radio remote for any compatible location.",
                     "remoteControlLinkedRadios": True,
                     "remoteControlLinkedTvs": False,
+                }
+            )
+        if include_default_radio_presets and (
+            item_type == "radio_station" or (
+                runtime_item_type == "house_object"
+                and str(params.get("objectKind", "")).strip().lower()
+                in {"radio", "speaker"}
+            )
+        ):
+            presets = deepcopy(list(RADIO_STATION_PRESETS))
+            first_preset = presets[0] if presets else {}
+            params.update(
+                {
+                    "stationPresets": presets,
+                    "stationIndex": 0,
+                    "streamUrl": str(first_preset.get("streamUrl", "")),
+                    "stationName": str(first_preset.get("title", "")),
+                    "stationSwitchSound": str(first_preset.get("switchSound", "")),
                 }
             )
         if item_type == "world_phone":

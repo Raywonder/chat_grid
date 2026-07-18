@@ -714,7 +714,7 @@ export type OutgoingMessage =
   | {
       type: 'item_remote_control';
       itemId: string;
-      action: 'station_next' | 'station_previous' | 'volume_up' | 'volume_down';
+      action: 'station_next' | 'station_previous' | 'station_first' | 'station_last' | 'volume_up' | 'volume_down' | 'power_toggle' | 'info';
     }
   | {
       type: 'item_interact';

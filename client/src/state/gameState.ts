@@ -118,6 +118,7 @@ export type GameState = {
   peers: Map<string, PeerState>;
   items: Map<string, WorldItem>;
   carriedItemId: string | null;
+  remoteControlsFocused: boolean;
 };
 
 export function createInitialState(): GameState {
@@ -162,6 +163,7 @@ export function createInitialState(): GameState {
     peers: new Map(),
     items: new Map(),
     carriedItemId: null,
+    remoteControlsFocused: true,
   };
 }
 

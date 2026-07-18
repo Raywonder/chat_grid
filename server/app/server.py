@@ -3693,7 +3693,16 @@ class SignalingServer:
         self,
         client: ClientConnection,
         remote: WorldItem,
-        action: Literal["station_next", "station_previous", "volume_up", "volume_down"],
+        action: Literal[
+            "station_next",
+            "station_previous",
+            "station_first",
+            "station_last",
+            "volume_up",
+            "volume_down",
+            "power_toggle",
+            "info",
+        ],
     ) -> bool:
         """Handle explicit keyboard remote-control actions for a carried radio remote."""
 
@@ -3719,7 +3728,52 @@ class SignalingServer:
             )
             return True
 
-        if action in {"station_next", "station_previous"}:
+        targets = self._radio_targets_for_remote(
+            remote, target, require_presets=False
+        )
+        if action == "info":
+            station_name = str(target.params.get("stationName") or target.title).strip()
+            now_playing = str(target.params.get("nowPlaying") or "").strip()
+            enabled = target.params.get("enabled") is not False
+            volume = int(target.params.get("mediaVolume", 50) or 0)
+            playing = f", playing {now_playing}" if now_playing else ""
+            await self._send_item_result(
+                client,
+                True,
+                "use",
+                f"{target.title}: {'on' if enabled else 'off'}, {station_name}, volume {volume}{playing}.",
+                remote.id,
+            )
+            return True
+
+        if action == "power_toggle":
+            next_enabled = target.params.get("enabled") is False
+            changed = 0
+            for item in targets:
+                presets = self._radio_presets(item)
+                if not presets:
+                    continue
+                try:
+                    await self._apply_radio_station_state(
+                        item,
+                        self._radio_station_index(item, len(presets)),
+                        presets[self._radio_station_index(item, len(presets))],
+                        client,
+                        enabled=next_enabled,
+                    )
+                except ValueError:
+                    continue
+                changed += 1
+            await self._send_item_result(
+                client,
+                changed > 0,
+                "use",
+                f"Remote switched {changed} connected radio{'s' if changed != 1 else ''} {'on' if next_enabled else 'off'}.",
+                remote.id,
+            )
+            return True
+
+        if action in {"station_next", "station_previous", "station_first", "station_last"}:
             source = (
                 self._radio_station_source_for_target(target)
                 if self._remote_controls_linked_radios(remote)
@@ -3735,8 +3789,14 @@ class SignalingServer:
                     remote.id,
                 )
                 return True
-            step = 1 if action == "station_next" else -1
-            next_index = self._radio_station_index(source, len(presets)) + step
+            current_index = self._radio_station_index(source, len(presets))
+            if action == "station_first":
+                next_index = 0
+            elif action == "station_last":
+                next_index = len(presets) - 1
+            else:
+                step = 1 if action == "station_next" else -1
+                next_index = current_index + step
             station = presets[next_index % len(presets)]["title"]
             station_state = presets[next_index % len(presets)]
             group_play_started_at = self.item_service.now_ms()
@@ -8942,6 +9002,7 @@ class SignalingServer:
             if not target:
                 await self._send(client.websocket, state("failed", message="Enter an extension or number."))
                 return
+            normalized_extension = "".join(character for character in target if character.isdigit())
             target_client = next(
                 (
                     candidate
@@ -8960,8 +9021,29 @@ class SignalingServer:
                     return
                 await self._send(client.websocket, state("failed", target=target, message="FlexPBX bridge is configured but external dialing still needs its server adapter."))
                 return
-            if target_client is None:
-                target_client = next((candidate for candidate in self.clients.values() if any(str(item.params.get("phoneExtension") or "") == target for item in self.items.values() if item.createdBy == candidate.user_id)), None)
+            if target_client is None and normalized_extension:
+                # World extensions are user-owned, server-assigned numbers. Match
+                # the exact digits across all of that user's phones so a caller
+                # may dial a known extension without first saving a contact.
+                target_client = next(
+                    (
+                        candidate
+                        for candidate in self.clients.values()
+                        if any(
+                            "".join(
+                                character
+                                for character in str(item.params.get("phoneExtension") or "")
+                                if character.isdigit()
+                            )
+                            == normalized_extension
+                            and item.createdBy in {candidate.user_id, candidate.id}
+                            for item in self.items.values()
+                            if str(item.params.get("objectKind") or "").strip().lower()
+                            == "phone"
+                        )
+                    ),
+                    None,
+                )
             if target_client is None:
                 await self._send(client.websocket, state("failed", target=target, message="That world phone is not online."))
                 return
@@ -9401,7 +9483,9 @@ class SignalingServer:
             if not is_known_item_type(packet.itemType):
                 await self._send_item_result(client, False, "add", "Unknown item type.")
                 return
-            item = self.item_service.default_item(client, packet.itemType)
+            item = self.item_service.default_item(
+                client, packet.itemType, include_default_radio_presets=True
+            )
             self._apply_item_creation_verification(client, item)
             self.item_service.add_item(item)
             await self._broadcast_item(item)

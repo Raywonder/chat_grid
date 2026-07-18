@@ -2265,6 +2265,11 @@ function getCarriedMediaRemote(): { item: WorldItem; kind: 'radio' | 'tv' } | nu
   return null;
 }
 
+/** Returns true while the held remote's controls, rather than movement, own the arrows. */
+function remoteControlsAreFocused(): boolean {
+  return state.remoteControlsFocused && Boolean(getCarriedMediaRemote());
+}
+
 /** Returns whether a carried item can occupy a furniture surface slot. */
 function isSurfacePlaceableItem(item: WorldItem): boolean {
   return item.type === 'house_object' || item.type === 'radio_station';
@@ -3100,7 +3105,7 @@ function handleMovement(): void {
   if (state.mode !== 'normal') return;
   if (activeTeleport) return;
   if (
-    getCarriedMediaRemote() &&
+    remoteControlsAreFocused() &&
     (state.keysPressed.ArrowUp || state.keysPressed.ArrowDown || state.keysPressed.ArrowLeft || state.keysPressed.ArrowRight)
   ) {
     return;
@@ -3999,6 +4004,19 @@ function radioRemoteControlCommand(action: 'station_next' | 'station_previous' |
   signaling.send({ type: 'item_remote_control', itemId: remote.item.id, action });
 }
 
+function radioRemoteButtonCommand(
+  action: 'station_first' | 'station_last' | 'power_toggle' | 'info',
+): void {
+  const remote = getCarriedMediaRemote();
+  if (!remote || remote.kind !== 'radio' || !state.remoteControlsFocused) {
+    updateStatus('Press Tab to focus the held remote controls first.');
+    audio.sfxUiCancel();
+    return;
+  }
+  signaling.send({ type: 'item_remote_control', itemId: remote.item.id, action });
+  audio.sfxDeviceKeypad();
+}
+
 let activeCastStream: MediaStream | null = null;
 const activeCastTargetByCaster = new Map<string, { itemId: string; mediaKind: 'audio' | 'video' }>();
 const remoteCastMedia = new Map<string, HTMLMediaElement>();
@@ -4502,6 +4520,12 @@ function runDynamicUserAction(target: PeerState): void {
 }
 
 function escapeCommand(): void {
+  if (remoteControlsAreFocused()) {
+    state.remoteControlsFocused = false;
+    updateStatus('Remote controls released. Arrow keys move again; press Tab to refocus the remote.');
+    audio.sfxUiCancel();
+    return;
+  }
   if (IS_NATIVE_CLIENT) {
     pendingEscapeDisconnect = false;
     updateStatus('Escape does not disconnect the desktop client. Use File, Sign out or Exit.');
@@ -4544,8 +4568,12 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   secondaryUseItem: secondaryUseItemCommand,
   radioRemoteStationNext: () => radioRemoteControlCommand('station_next'),
   radioRemoteStationPrevious: () => radioRemoteControlCommand('station_previous'),
+  radioRemoteStationFirst: () => radioRemoteButtonCommand('station_first'),
+  radioRemoteStationLast: () => radioRemoteButtonCommand('station_last'),
   radioRemoteVolumeUp: () => radioRemoteControlCommand('volume_up'),
   radioRemoteVolumeDown: () => radioRemoteControlCommand('volume_down'),
+  radioRemotePowerToggle: () => radioRemoteButtonCommand('power_toggle'),
+  radioRemoteInfo: () => radioRemoteButtonCommand('info'),
   castToDevice: () => void castToNearestDevice(),
   openWorldPhone: openWorldPhoneCommand,
   openUserActionMenu: openUserActionMenuCommand,
@@ -4665,7 +4693,41 @@ function handleNormalModeInput(code: string, shiftKey: boolean, ctrlKey: boolean
   }
   if (getCarriedMediaRemote()) {
     if (code === 'Tab') {
-      cycleFocusedItemCommand(shiftKey);
+      if (shiftKey) {
+        cycleFocusedItemCommand(true);
+        state.remoteControlsFocused = Boolean(getCarriedMediaRemote());
+      } else {
+        const remote = getCarriedItems().find((item) => isRadioRemoteItem(item) || isTvRemoteItem(item));
+        if (remote) {
+          state.focusedItemId = remote.id;
+          state.remoteControlsFocused = true;
+          updateStatus(`Focused ${itemLabel(remote)} controls.`);
+          audio.sfxUiBlip();
+        }
+      }
+      return;
+    }
+    if (code === 'Escape') {
+      escapeCommand();
+      return;
+    }
+    if (!state.remoteControlsFocused) {
+      return;
+    }
+    if (code === 'Home') {
+      radioRemoteButtonCommand('station_first');
+      return;
+    }
+    if (code === 'End') {
+      radioRemoteButtonCommand('station_last');
+      return;
+    }
+    if (code === 'KeyO') {
+      radioRemoteButtonCommand('power_toggle');
+      return;
+    }
+    if (code === 'KeyI') {
+      radioRemoteButtonCommand('info');
       return;
     }
     if (code === 'Space') {

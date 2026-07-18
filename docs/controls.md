@@ -14,7 +14,7 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `Read guide` button before joining: read startup instructions from the app status reader with `ArrowUp` / `ArrowDown`, `Home` / `End`, `Enter` / `Space` to repeat, and `Escape` to close
 - `C`: Speak coordinates
 - `Y`: Speak the room or location you are currently in
-- `Escape`: Press once for disconnect prompt, press again to disconnect
+- `Escape`: With a held remote, release remote-control focus so arrow keys move again; otherwise press once for disconnect prompt, press again to disconnect
 
 ### Users, Nickname, Chat
 - `L`: Locate nearest user
@@ -52,7 +52,7 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `Shift+D`: Pick up/drop the selected item with attached or linked parts. Furniture already includes its supported contents with normal `D`.
 - `J`: Take the last focused grabbable item from a table, shelf, counter, or other surface. Fixed, wall-mounted, ceiling-mounted, window-mounted, and fixture items cannot be grabbed.
 - `Shift+J`: Announce what is on the focused table, shelf, counter, or other surface. With no surface focused, announce loose items on the floor at the current square.
-- `Tab` / `Shift+Tab`: Cycle focus through carried items first, then usable items on your square. The server currently allows up to 4 carried items at once.
+- `Tab` / `Shift+Tab`: Refocus held remote controls with `Tab`; `Shift+Tab` switches to another held item and focuses its controls. Without a held remote, cycle carried and nearby usable items. The server currently allows up to 4 carried items at once.
 - `Z`: Item management menu (delete/transfer when permitted)
 - `Space` in item management menu: Read tooltip/help for the selected action
 - `Enter` or `Space`: Use the focused/current item, doorway, portal, chair, couch, or bed; beds support sitting, then lying down, then getting up when used again. When several items are available, selection starts on the item you last focused or used
@@ -80,6 +80,10 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `,` / `.` with a carried radio remote: Tune connected radios/speakers in the current location, or only the current radio when linked control is off in the remote settings
 - `Ctrl+ArrowLeft` / `Ctrl+ArrowRight` with a carried radio remote: Tune connected radios/speakers in the current location, or only the current radio when linked control is off
 - `Ctrl+Shift+Up` / `Ctrl+Shift+Down` or `Ctrl+Shift+U` / `Ctrl+Shift+D` with a carried radio remote: Raise/lower connected radio/speaker volume, or only the current radio volume when linked control is off
+- `Home` / `End` with a carried radio remote: Tune the first/last station preset
+- `O` with a carried radio remote: Toggle connected radios on or off
+- `I` with a carried radio remote: Read station, power, volume, and now-playing information
+- New radios added from the item menu start with the Town Square station presets, including Tony Gebhard Radio
 - `5` or `Shift+5`: Cycle TTS announcements between full, alert sounds only, and required only
 - `6` or `Shift+6`: Toggle optional nearby item beacons
 - `E`: Effect select menu
