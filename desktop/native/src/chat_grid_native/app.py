@@ -249,7 +249,7 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, lambda _event: self._focus_world(), id=self.focus_world_id)
         self.Bind(wx.EVT_MENU, self._show_settings, id=wx.ID_PREFERENCES)
         self.Bind(wx.EVT_MENU, self._show_audio_settings, id=self.audio_settings_id)
-        self.Bind(wx.EVT_MENU, lambda _event: self.web.RunScript("document.getElementById('castButton')?.click();"), id=self.cast_device_id)
+        self.Bind(wx.EVT_MENU, lambda _event: self.web.RunScript("window.dispatchEvent(new Event('chatgrid-cast-to-device'));"), id=self.cast_device_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.exit_application(), id=wx.ID_EXIT)
         self.Bind(wx.EVT_MENU, self._show_about, id=wx.ID_ABOUT)
 

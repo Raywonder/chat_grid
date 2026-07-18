@@ -131,7 +131,7 @@ function createApplicationMenu() {
         { label: 'Reload', accelerator: 'Ctrl+R', click: () => mainWindow?.reload() },
         { label: 'Focus Grid', accelerator: 'Ctrl+G', click: () => mainWindow?.webContents.send('chat-grid-focus') },
         { label: 'Chat Grid URL...', accelerator: 'Ctrl+Shift+U', click: promptForChatGridUrl },
-        { label: 'Cast to device...', accelerator: 'Ctrl+Shift+C', click: () => mainWindow?.webContents.executeJavaScript("document.getElementById('castButton')?.click();") },
+        { label: 'Cast to device...', accelerator: 'Ctrl+Shift+C', click: () => mainWindow?.webContents.executeJavaScript("window.dispatchEvent(new Event('chatgrid-cast-to-device'));") },
         { type: 'separator' },
         { label: 'Open Current Page in Browser', click: () => mainWindow && shell.openExternal(mainWindow.webContents.getURL()) },
         { type: 'separator' },

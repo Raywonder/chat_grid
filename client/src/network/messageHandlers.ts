@@ -65,7 +65,6 @@ type MessageHandlerDeps = {
   dom: {
     connectButton: HTMLElement;
     disconnectButton: HTMLElement;
-    castButton: HTMLElement;
     focusGridButton: HTMLElement;
     canvas: HTMLCanvasElement;
     instructions: HTMLElement;
@@ -214,7 +213,6 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.state.player.handHeldById = message.player.handHeldById ?? null;
         deps.dom.connectButton.classList.add('hidden');
         deps.dom.disconnectButton.classList.remove('hidden');
-        deps.dom.castButton.classList.remove('hidden');
         deps.dom.focusGridButton.classList.remove('hidden');
         deps.dom.canvas.classList.remove('hidden');
         deps.dom.instructions.classList.remove('hidden');

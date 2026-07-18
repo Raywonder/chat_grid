@@ -201,7 +201,7 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, lambda _event: self._restart_webview(), id=restart_world_id)
         self.Bind(wx.EVT_MENU, lambda _event: self._focus_world(), id=focus_world_id)
         self.Bind(wx.EVT_MENU, self._show_settings, id=wx.ID_PREFERENCES)
-        self.Bind(wx.EVT_MENU, lambda _event: self.web.RunScript("document.getElementById('castButton')?.click();"), id=cast_id)
+        self.Bind(wx.EVT_MENU, lambda _event: self.web.RunScript("window.dispatchEvent(new Event('chatgrid-cast-to-device'));"), id=cast_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.Hide(), id=tray_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.request_exit(), id=wx.ID_EXIT)
         self.Bind(wx.EVT_MENU, lambda _event: self._check_updates_background(interactive=True), id=update_id)

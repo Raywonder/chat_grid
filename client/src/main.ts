@@ -131,7 +131,6 @@ type Dom = {
   logoutButton: HTMLButtonElement;
   disconnectButton: HTMLButtonElement;
   focusGridButton: HTMLButtonElement;
-  castButton: HTMLButtonElement;
   midiButton: HTMLButtonElement;
   settingsButton: HTMLButtonElement;
   closeSettingsButton: HTMLButtonElement;
@@ -182,7 +181,6 @@ const dom: Dom = {
   logoutButton: requiredById('logoutButton'),
   disconnectButton: requiredById('disconnectButton'),
   focusGridButton: requiredById('focusGridButton'),
-  castButton: requiredById('castButton'),
   midiButton: requiredById('midiButton'),
   settingsButton: requiredById('settingsButton'),
   closeSettingsButton: requiredById('closeSettingsButton'),
@@ -5341,7 +5339,7 @@ dom.readGuideButton.addEventListener('click', () => {
   openJoinGuideReader();
 });
 
-dom.castButton.addEventListener('click', () => {
+window.addEventListener('chatgrid-cast-to-device', () => {
   void castToNearestDevice();
 });
 
