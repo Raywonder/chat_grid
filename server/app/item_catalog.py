@@ -39,6 +39,10 @@ __all__ = [
     "is_known_item_type",
 ]
 
+# Add-menu variants that create an existing item type with useful preset
+# parameters.  These are intentionally not persisted as new runtime types.
+ITEM_ADD_VARIANT_TYPES: frozenset[str] = frozenset({"radio_remote"})
+
 ItemType: TypeAlias = str
 ITEM_TYPE_SEQUENCE: tuple[ItemType, ...] = ITEM_TYPE_ORDER
 ITEM_TYPE_LABELS: dict[ItemType, str] = {
@@ -220,7 +224,7 @@ def get_item_definition(item_type: ItemType) -> ItemDefinition:
 def is_known_item_type(item_type: str) -> bool:
     """Return whether a string item type id exists in discovered plugins."""
 
-    return item_type in ITEM_DEFINITIONS
+    return item_type in ITEM_DEFINITIONS or item_type in ITEM_ADD_VARIANT_TYPES
 
 
 def get_item_use_cooldown_ms(item_type: ItemType) -> int:

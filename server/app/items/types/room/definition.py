@@ -9,6 +9,10 @@ EDITABLE_PROPERTIES: tuple[str, ...] = (
     "placeName",
     "ownerName",
     "roomLayout",
+    "spaceKind",
+    "widthSquares",
+    "depthSquares",
+    "squareFeet",
     "doorState",
     "targetLocation",
     "description",
@@ -26,6 +30,10 @@ DEFAULT_PARAMS: dict = {
     "placeName": "Room",
     "ownerName": "",
     "roomLayout": "single_room_studio",
+    "spaceKind": "indoor",
+    "widthSquares": 12,
+    "depthSquares": 10,
+    "squareFeet": 120,
     "doorState": "unlocked",
     "targetLocation": "",
     "description": "A configurable room.",
@@ -36,6 +44,10 @@ PARAM_KEYS: tuple[str, ...] = (
     "placeName",
     "ownerName",
     "roomLayout",
+    "spaceKind",
+    "widthSquares",
+    "depthSquares",
+    "squareFeet",
     "doorState",
     "targetLocation",
     "description",
@@ -53,6 +65,7 @@ ROOM_LAYOUT_OPTIONS: tuple[str, ...] = (
     "utility",
     "custom",
 )
+SPACE_KIND_OPTIONS: tuple[str, ...] = ("indoor", "outdoor")
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
     "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this room.", "maxLength": 80},
@@ -62,6 +75,30 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "valueType": "list",
         "tooltip": "Room layout model. Single-room studio keeps all zones inside one room.",
         "options": list(ROOM_LAYOUT_OPTIONS),
+    },
+    "spaceKind": {
+        "valueType": "list",
+        "label": "Indoor or outdoor",
+        "tooltip": "Choose whether this added space is indoors or outdoors.",
+        "options": list(SPACE_KIND_OPTIONS),
+    },
+    "widthSquares": {
+        "valueType": "number",
+        "label": "Width in Grid squares",
+        "tooltip": "Custom horizontal size for this space in Grid squares.",
+        "range": {"min": 1, "max": 41, "step": 1},
+    },
+    "depthSquares": {
+        "valueType": "number",
+        "label": "Depth in Grid squares",
+        "tooltip": "Custom vertical size for this space in Grid squares.",
+        "range": {"min": 1, "max": 41, "step": 1},
+    },
+    "squareFeet": {
+        "valueType": "number",
+        "label": "Approximate square feet",
+        "tooltip": "Optional real-world floor area for the space. Zero means not specified.",
+        "range": {"min": 0, "max": 100000, "step": 1},
     },
     "doorState": {
         "valueType": "list",

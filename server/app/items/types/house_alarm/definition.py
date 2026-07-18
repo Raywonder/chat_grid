@@ -203,7 +203,7 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
     "notificationMode": {
         "valueType": "list",
         "label": "Notification mode",
-        "tooltip": "Current notification hook mode. External modes are configuration fields until ntfy/WA plugins are wired.",
+        "tooltip": "Choose in-grid entry approval for normal house access. External modes are optional and require their destination settings.",
         "options": list(NOTIFICATION_MODE_OPTIONS),
     },
     "ntfyTopic": {

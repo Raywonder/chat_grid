@@ -36,6 +36,10 @@
           "description": "Speak your coordinates"
         },
         {
+          "keys": "Y",
+          "description": "Speak your current room or location"
+        },
+        {
           "keys": "N",
           "description": "Change nickname"
         },
@@ -62,7 +66,7 @@
         },
         {
           "keys": "U",
-          "description": "Speak connected users"
+          "description": "Speak your current location and connected users"
         },
         {
           "keys": "Slash / H",
@@ -206,7 +210,7 @@
       "items": [
         {
           "keys": "Raywonder house",
-          "description": "The houses location includes a Raywonder front door, entry hall, living room, private studio with a boombox, kitchen, and locked private doors. Knock at the studio door, and someone inside can use /allow name to let you in"
+          "description": "At a guarded house front door, use the alarm keypad and press Enter with no code to request entry. A resident inside can use /allow name or /deny name. A configured guest keypad code admits a visitor automatically after a short delay. The private studio door also supports knock and /allow name."
         },
         {
           "keys": "TappedIn tools",

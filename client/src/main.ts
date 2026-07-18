@@ -72,7 +72,7 @@ import { createAuthController } from './session/authController';
 import { startClientUpdateWatcher, type ClientVersionMetadata } from './session/clientUpdateWatcher';
 import { runConnectFlow, runDisconnectFlow, type ConnectFlowDeps } from './session/connectionFlow';
 import { MediaSession } from './session/mediaSession';
-import { type AnnouncementMode, type AudioAnnouncementSettings, type AudioLayerState } from './types/audio';
+import { type AnnouncementMode, type AudioAnnouncementSettings, type AudioLayerState, type RadioAnnouncementMode } from './types/audio';
 import { setupUiHandlers as setupDomUiHandlers } from './ui/domBindings';
 import { PeerManager } from './webrtc/peerManager';
 
@@ -139,6 +139,7 @@ type Dom = {
   audioInputSelect: HTMLSelectElement;
   audioOutputSelect: HTMLSelectElement;
   announcementModeSelect: HTMLSelectElement;
+  radioAnnouncementModeSelect: HTMLSelectElement;
   itemBeaconsToggle: HTMLInputElement;
   movementDirectionsToggle: HTMLInputElement;
   ntfyNotificationsToggle: HTMLInputElement;
@@ -187,6 +188,7 @@ const dom: Dom = {
   audioInputSelect: requiredById('audioInputSelect'),
   audioOutputSelect: requiredById('audioOutputSelect'),
   announcementModeSelect: requiredById('announcementModeSelect'),
+  radioAnnouncementModeSelect: requiredById('radioAnnouncementModeSelect'),
   itemBeaconsToggle: requiredById('itemBeaconsToggle'),
   movementDirectionsToggle: requiredById('movementDirectionsToggle'),
   ntfyNotificationsToggle: requiredById('ntfyNotificationsToggle'),
@@ -500,7 +502,12 @@ let focusedConversationPeerName: string | null = null;
 function conversationKey(peerName: string): string {
   return peerName.trim().toLocaleLowerCase();
 }
-const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig);
+const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig, {
+  onStationFailure: (itemId) => {
+    updateStatus('Scanning stations.');
+    signaling.send({ type: 'item_secondary_use', itemId });
+  },
+});
 const tvScreenRuntime = new TvScreenRuntime();
 const itemEmitRuntime = new ItemEmitRuntime(audio, resolveIncomingSoundUrl, getItemSpatialConfig);
 const billboardRuntime = new BillboardRuntime(audio, getItemSpatialConfig, (message) => {
@@ -951,7 +958,13 @@ async function syncLocationAmbience(forceRestart = false): Promise<void> {
 /** Re-primes world audio when a browser/tab/audio-context pause has recovered. */
 function resumeWorldAudioAfterFocus(forceRestart = true): void {
   if (!state.running) return;
-  void audio.ensureContext().then(() => syncLocationAmbience(forceRestart)).catch(() => undefined);
+  void audio.ensureContext().then(async () => {
+    // Reattach remote voice after browser sleep, tab restore, or a delayed
+    // microphone permission grant. Room ambience alone is not proof that the
+    // live voice graph has resumed.
+    await peerManager.resumeRemoteAudio();
+    await syncLocationAmbience(forceRestart);
+  }).catch(() => undefined);
 }
 
 window.addEventListener('focus', resumeWorldAudioAfterFocus);
@@ -1096,6 +1109,7 @@ const authController = createAuthController({
   setConnectionStatus,
   updateStatus,
   pushChatMessage,
+  shouldAnnounceRadioAction: () => shouldAnnounceRadioStatus(),
   onServerAdminMenuActions: (actions) => {
     adminController.setServerAdminMenuActions(actions);
   },
@@ -1329,8 +1343,27 @@ function persistAudioAnnouncementSettings(): void {
 /** Syncs Audio setup controls from persisted TTS/beacon preferences. */
 function syncAnnouncementSettingsControls(): void {
   dom.announcementModeSelect.value = audioAnnouncementSettings.mode;
+  dom.radioAnnouncementModeSelect.value = audioAnnouncementSettings.radioAnnouncementMode;
   dom.itemBeaconsToggle.checked = audioAnnouncementSettings.itemBeacons;
   dom.movementDirectionsToggle.checked = audioAnnouncementSettings.movementDirections;
+}
+
+function shouldAnnounceRadioStatus(): boolean {
+  return audioAnnouncementSettings.radioAnnouncementMode === 'full';
+}
+
+function setRadioAnnouncementMode(value: string): void {
+  const mode: RadioAnnouncementMode = value === 'sounds_only' || value === 'off' ? value : 'full';
+  audioAnnouncementSettings = { ...audioAnnouncementSettings, radioAnnouncementMode: mode };
+  persistAudioAnnouncementSettings();
+  syncAnnouncementSettingsControls();
+  const labels: Record<RadioAnnouncementMode, string> = {
+    full: 'radio station readouts on',
+    sounds_only: 'radio station sounds only',
+    off: 'radio station readouts off',
+  };
+  updateStatus(`Radio announcements ${labels[mode]}.`);
+  audio.sfxUiConfirm();
 }
 
 /** Returns whether a bool-like item param is explicitly enabled. */
@@ -2398,7 +2431,7 @@ function useItem(item: WorldItem): void {
     audio.sfxDeviceKeypad();
     return;
   }
-  updateStatus(`You use ${itemLabel(item)}.`);
+  if (item.type !== 'radio_station' || shouldAnnounceRadioStatus()) updateStatus(`You use ${itemLabel(item)}.`);
   if (item.type === 'radio_station') {
     audio.sfxRadioPower();
   } else if (item.type === 'house_object') {
@@ -2522,7 +2555,7 @@ function handleAlarmKeypadModeInput(code: string, key: string): void {
 /** Sends an item secondary-use request for the selected item. */
 function secondaryUseItem(item: WorldItem): void {
   focusItemForAction(item);
-  updateStatus(`You try ${itemLabel(item)} another way.`);
+  if (item.type !== 'radio_station' || shouldAnnounceRadioStatus()) updateStatus(`You try ${itemLabel(item)} another way.`);
   if (item.type === 'radio_station') {
     audio.sfxRadioTunerStep();
   } else if (item.type === 'house_object') {
@@ -3790,6 +3823,12 @@ function speakCoordinatesCommand(): void {
   audio.sfxUiBlip();
 }
 
+function speakLocationCommand(): void {
+  const location = currentLocationName || currentLocationOption()?.name || currentLocationId || 'the grid';
+  updateStatus(`You are in ${location}.`);
+  audio.sfxUiBlip();
+}
+
 function formatLocationOption(location: WorldLocationOption): string {
   const here = location.id === currentLocationId ? ', current location' : '';
   return `${location.name}${here}. ${location.description}`;
@@ -3909,7 +3948,9 @@ function radioRemoteControlCommand(action: 'station_next' | 'station_previous' |
     volume_up: 'volume up',
     volume_down: 'volume down',
   } as const;
-  updateStatus(`${remote.kind === 'tv' ? 'TV' : 'Radio'} remote ${labelByAction[action]}.`);
+  if (remote.kind !== 'tv' || shouldAnnounceRadioStatus()) {
+    updateStatus(`${remote.kind === 'tv' ? 'TV' : 'Radio'} remote ${labelByAction[action]}.`);
+  }
   if (action === 'station_next' || action === 'station_previous') {
     audio.sfxDevicePresetButton();
   } else {
@@ -3919,9 +3960,10 @@ function radioRemoteControlCommand(action: 'station_next' | 'station_previous' |
 }
 
 function speakUsersCommand(): void {
+  const location = currentLocationName || currentLocationOption()?.name || currentLocationId || 'the grid';
   const allUsers = [state.player.nickname, ...Array.from(state.peers.values()).map((peer) => peer.nickname)];
-  const label = allUsers.length === 1 ? 'user' : 'users';
-  updateStatus(`${allUsers.length} ${label}: ${allUsers.join(', ')}`);
+  const label = allUsers.length === 1 ? 'user is' : 'users are';
+  updateStatus(`You are in ${location}. ${allUsers.length} connected ${label}: ${allUsers.join(', ')}`);
   audio.sfxUiBlip();
 }
 
@@ -4323,6 +4365,7 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   effectValueUp: () => adjustEffectValueCommand(5),
   effectValueDown: () => adjustEffectValueCommand(-5),
   speakCoordinates: speakCoordinatesCommand,
+  speakLocation: speakLocationCommand,
   openMicGainEdit: openMicGainEditCommand,
   calibrateMicrophone: calibrateMicrophoneCommand,
   cycleFocusedItem: () => cycleFocusedItemCommand(false),
@@ -5199,6 +5242,7 @@ setupDomUiHandlers({
   updateDeviceSummary,
   setOutputDevice: (id) => peerManager.setOutputDevice(id),
   setAnnouncementMode,
+  setRadioAnnouncementMode,
   setItemBeacons,
   setMovementDirections,
 });

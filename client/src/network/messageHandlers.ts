@@ -103,8 +103,9 @@ type MessageHandlerDeps = {
   handleItemBehaviorPeerLeft: (senderId: string) => void;
   TELEPORT_SOUND_URL: string;
   TELEPORT_START_SOUND_URL: string;
-  getAudioLayers: () => { world: boolean; item: boolean };
-  pushChatMessage: (message: string) => void;
+  getAudioLayers: () => { world: boolean; voice: boolean; item: boolean };
+  pushChatMessage: (message: string, announce?: boolean) => void;
+  shouldAnnounceRadioAction: () => boolean;
   pushPublicChatMessage: (message: string) => void;
   pushDirectChatMessage: (message: string, peerId: string, peerName: string) => void;
   classifySystemMessageSound: (message: string) => 'logon' | 'logout' | 'notify' | null;
@@ -307,6 +308,24 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           break;
         }
         const peer = deps.state.peers.get(message.id);
+        if (!peer) {
+          const discoveredPeer = {
+            id: message.id,
+            userId: null,
+            nickname: deps.sanitizeName(message.nickname || 'user...') || 'user...',
+            locationId: message.locationId,
+            x: message.x,
+            y: message.y,
+            posture: message.posture ?? 'standing',
+            seatedItemId: message.seatedItemId ?? null,
+            seatedOffset: message.seatedOffset ?? 0,
+            handHeldById: message.handHeldById ?? null,
+          };
+          deps.state.peers.set(message.id, discoveredPeer);
+          if (deps.isPeerNegotiationReady()) {
+            await deps.peerManager.createOrGetPeer(message.id, true, discoveredPeer);
+          }
+        }
         const prevX = peer?.x ?? message.x;
         const prevY = peer?.y ?? message.y;
         if (peer) {
@@ -471,10 +490,11 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         const text = message.message.trim();
         if (message.ok) {
           if (message.action === 'use' || message.action === 'secondary_use') {
-            if (text) {
-              deps.pushChatMessage(text);
-            }
             const item = message.itemId ? deps.getItemById(message.itemId) : null;
+            const announce = item?.type !== 'radio_station' || deps.shouldAnnounceRadioAction();
+            if (text) {
+              deps.pushChatMessage(text, announce);
+            }
             if (message.action === 'use' && item && deps.handleInteractiveItemLaunch(item)) {
               break;
             }
@@ -504,6 +524,20 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         if (!soundUrl) break;
         if (deps.getAudioLayers().item) {
           deps.playIncomingItemUseSound(soundUrl, message.x, message.y, message.range);
+        }
+        break;
+      }
+
+      case 'agent_voice': {
+        // Agent speech belongs to the voice layer.  It used to be gated by
+        // the item-sound layer, so muting item cues also made Claudia silent.
+        // Keep item enabled as a compatibility fallback for older settings,
+        // but voice alone must be enough to hear agent speech.
+        if (deps.getAudioLayers().voice || deps.getAudioLayers().item) {
+          const audioUrl = deps.resolveIncomingSoundUrl(message.audioUrl);
+          if (audioUrl) {
+            deps.playIncomingItemUseSound(audioUrl, message.x, message.y, message.range);
+          }
         }
         break;
       }

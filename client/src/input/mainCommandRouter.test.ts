@@ -27,4 +27,8 @@ describe('conversation shortcuts', () => {
     expect(resolveMainModeCommand('Enter', true, false)).toBe('interactItem');
     expect(resolveMainModeCommand('KeyR', true, false)).toBe('openUserActionMenu');
   });
+
+  it('assigns Y to the current location', () => {
+    expect(resolveMainModeCommand('KeyY', false, false)).toBe('speakLocation');
+  });
 });

@@ -10,6 +10,7 @@ type UiDom = {
   audioInputSelect: HTMLSelectElement;
   audioOutputSelect: HTMLSelectElement;
   announcementModeSelect: HTMLSelectElement;
+  radioAnnouncementModeSelect: HTMLSelectElement;
   itemBeaconsToggle: HTMLInputElement;
   movementDirectionsToggle: HTMLInputElement;
   settingsModal: HTMLDivElement;
@@ -35,6 +36,7 @@ type UiBindingsDeps = {
   updateDeviceSummary: () => void;
   setOutputDevice: (id: string) => Promise<void>;
   setAnnouncementMode: (mode: string) => void;
+  setRadioAnnouncementMode: (mode: string) => void;
   setItemBeacons: (enabled: boolean) => void;
   setMovementDirections: (enabled: boolean) => void;
 };
@@ -83,6 +85,11 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
   deps.dom.announcementModeSelect.addEventListener('change', (event) => {
     const target = event.target as HTMLSelectElement;
     deps.setAnnouncementMode(target.value);
+  });
+
+  deps.dom.radioAnnouncementModeSelect.addEventListener('change', (event) => {
+    const target = event.target as HTMLSelectElement;
+    deps.setRadioAnnouncementMode(target.value);
   });
 
   deps.dom.itemBeaconsToggle.addEventListener('change', (event) => {

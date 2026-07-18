@@ -115,7 +115,10 @@ The Raywonder rooms use this same media path for room music. `Studio boombox`
 is a normal radio item inside `raywonder_house_studio`, and `Music under the
 studio door` is a quiet entry-hall radio source with lower volume/filtering so
 someone outside the studio can hear music playing without being inside the room.
-Living room, studio, kitchen, bedroom, and entry-hall house radios follow the
+Each room has one preset-bearing radio as its real station source. Any same-room
+linked components without presets are speakers, not additional radios; they
+follow that room radio's stream, station, playhead, and enabled state. Living
+room, studio, kitchen, bedroom, and entry-hall house radios follow the
 universal radio remote's station changes as one house station set when the
 remote's `remoteControlLinkedRadios` setting is on. Remote station changes
 preserve each radio's own power state: turning one radio off only turns that

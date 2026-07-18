@@ -350,6 +350,16 @@ export const itemUseSoundSchema = z.object({
   range: z.number().int().positive().optional(),
 });
 
+export const agentVoiceSchema = z.object({
+  type: z.literal('agent_voice'),
+  senderId: z.string(),
+  senderNickname: z.string(),
+  audioUrl: z.string(),
+  x: z.number().int(),
+  y: z.number().int(),
+  range: z.number().int().positive().optional(),
+});
+
 export const itemGameLaunchSchema = z.object({
   type: z.literal('item_game_launch'),
   itemId: z.string(),
@@ -542,6 +552,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   itemActionResultSchema,
   itemTransferTargetsSchema,
   itemUseSoundSchema,
+  agentVoiceSchema,
   itemGameLaunchSchema,
   itemClockAnnounceSchema,
   itemPianoNoteSchema,

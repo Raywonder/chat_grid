@@ -10,21 +10,100 @@ from __future__ import annotations
 import argparse
 import asyncio
 from datetime import datetime, timezone
+from fractions import Fraction
 import json
 import os
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 import time
 from typing import Any
 
+try:
+    from app.voice_service import synthesize_to_file
+except ModuleNotFoundError:  # direct systemd execution puts us in server/tools
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from app.voice_service import synthesize_to_file
+
 from websockets.asyncio.client import connect
+
+try:
+    from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
+    from av import AudioFrame
+    LIVE_GRID_VOICE_AVAILABLE = True
+except ModuleNotFoundError:
+    MediaStreamTrack = object
+    RTCPeerConnection = None
+    RTCSessionDescription = None
+    AudioFrame = None
+    LIVE_GRID_VOICE_AVAILABLE = False
 
 
 DEFAULT_COMMAND_FILE = Path("runtime/companion.commands.jsonl")
 DEFAULT_STATE_FILE = Path("runtime/companion.state.json")
+PUBLIC_VOICE_DIR = Path("/home/blindsoft/public_html/chatgrid/voice")
 AUTO_SIT_IDLE_SECONDS = 10.0
 AUTO_SIT_RETRY_SECONDS = 60.0
+AUTO_REACTION_COOLDOWN_SECONDS = 7.0
+AUTO_POSTURE_REACTION_COOLDOWN_SECONDS = 12.0
 BED_MOODS = {"cozy", "dreamy", "playful", "resting", "sleepy", "tired"}
 LIE_DOWN_MOODS = {"dreamy", "resting", "sleepy", "tired"}
+GRID_AUDIO_RATE = 48000
+GRID_AUDIO_FRAME_SAMPLES = 960  # 20 ms at 48 kHz, matching browser Opus cadence
+
+
+if LIVE_GRID_VOICE_AVAILABLE:
+    class GridVoiceTrack(MediaStreamTrack):
+        """Continuous WebRTC microphone-shaped track for companion speech."""
+
+        kind = "audio"
+
+        def __init__(self) -> None:
+            super().__init__()
+            self._frames: asyncio.Queue[bytes] = asyncio.Queue(maxsize=300)
+            self._pts = 0
+
+        def clear(self) -> None:
+            while True:
+                try:
+                    self._frames.get_nowait()
+                except asyncio.QueueEmpty:
+                    return
+
+        def enqueue_pcm(self, pcm: bytes) -> None:
+            frame_bytes = GRID_AUDIO_FRAME_SAMPLES * 2
+            for offset in range(0, len(pcm), frame_bytes):
+                chunk = pcm[offset:offset + frame_bytes]
+                if len(chunk) < frame_bytes:
+                    chunk += b"\x00" * (frame_bytes - len(chunk))
+                try:
+                    self._frames.put_nowait(chunk)
+                except asyncio.QueueFull:
+                    try:
+                        self._frames.get_nowait()
+                        self._frames.put_nowait(chunk)
+                    except asyncio.QueueEmpty:
+                        pass
+
+        async def recv(self) -> Any:
+            if self.readyState != "live":
+                raise RuntimeError("Grid voice track is not live")
+            try:
+                pcm = self._frames.get_nowait()
+            except asyncio.QueueEmpty:
+                pcm = b"\x00" * (GRID_AUDIO_FRAME_SAMPLES * 2)
+            frame = AudioFrame(format="s16", layout="mono", samples=GRID_AUDIO_FRAME_SAMPLES)
+            frame.planes[0].update(pcm)
+            frame.sample_rate = GRID_AUDIO_RATE
+            frame.pts = self._pts
+            frame.time_base = Fraction(1, GRID_AUDIO_RATE)
+            self._pts += GRID_AUDIO_FRAME_SAMPLES
+            await asyncio.sleep(GRID_AUDIO_FRAME_SAMPLES / GRID_AUDIO_RATE)
+            return frame
+
+else:
+    GridVoiceTrack = None
 
 
 def _item_kind(item: dict[str, Any]) -> str:
@@ -137,7 +216,7 @@ class CompanionClient:
         nickname: str,
         command_file: Path,
         state_file: Path,
-        session_file: Path,
+        session_file: Path | None = None,
     ) -> None:
         """Initialize connection and runtime state."""
 
@@ -148,7 +227,7 @@ class CompanionClient:
         self.nickname = nickname
         self.command_file = command_file
         self.state_file = state_file
-        self.session_file = session_file
+        self.session_file = session_file or state_file.with_name("companion.session")
         self.grid_size = 41
         self.client_id = ""
         self.x = 20
@@ -163,8 +242,13 @@ class CompanionClient:
         self._last_state_write = 0.0
         self._last_world_activity = time.monotonic()
         self._last_auto_sit_attempt = 0.0
+        self._last_auto_reaction = 0.0
+        self._last_posture_reaction = 0.0
+        self._pending_lie_item_id = ""
         self._offset = 0
         self.last_message_receipt: dict[str, Any] = {}
+        self._grid_voice_peers: dict[str, Any] = {}
+        self._grid_voice_track = GridVoiceTrack() if LIVE_GRID_VOICE_AVAILABLE else None
         self.session_token = self._load_session_token()
 
     def _load_session_token(self) -> str:
@@ -276,6 +360,83 @@ class CompanionClient:
             for task in done:
                 task.result()
 
+    async def _handle_grid_signal(self, ws: Any, message: dict[str, Any]) -> None:
+        """Answer browser WebRTC offers and keep the companion as a voice peer."""
+
+        if not LIVE_GRID_VOICE_AVAILABLE or self._grid_voice_track is None:
+            return
+        sender_id = str(message.get("senderId") or "").strip()
+        sdp = message.get("sdp")
+        if not sender_id:
+            return
+        peer = self._grid_voice_peers.get(sender_id)
+        if peer is None:
+            peer = RTCPeerConnection()
+            self._grid_voice_peers[sender_id] = peer
+            peer.addTrack(self._grid_voice_track)
+
+            @peer.on("connectionstatechange")
+            async def on_connectionstatechange() -> None:
+                print(
+                    f"grid_voice peer={sender_id} state={peer.connectionState}",
+                    flush=True,
+                )
+                if peer.connectionState in {"failed", "closed", "disconnected"}:
+                    await peer.close()
+                    self._grid_voice_peers.pop(sender_id, None)
+
+        if sdp:
+            await peer.setRemoteDescription(
+                RTCSessionDescription(sdp=str(sdp.get("sdp") or ""), type=str(sdp.get("type") or "offer"))
+            )
+            if str(sdp.get("type")) == "offer":
+                answer = await peer.createAnswer()
+                await peer.setLocalDescription(answer)
+                local = peer.localDescription
+                if local:
+                    await ws.send(_json_packet(
+                        "signal",
+                        targetId=sender_id,
+                        sdp={"type": local.type, "sdp": local.sdp},
+                    ))
+        ice = message.get("ice")
+        if ice:
+            # Browser trickle ICE can be accepted when present; aiortc's
+            # gathered answer generally carries host candidates already.
+            try:
+                from aiortc.sdp import candidate_from_sdp
+                candidate = candidate_from_sdp(str(ice.get("candidate") or "").removeprefix("candidate:"))
+                candidate.sdpMid = ice.get("sdpMid")
+                candidate.sdpMLineIndex = ice.get("sdpMLineIndex")
+                await peer.addIceCandidate(candidate)
+            except Exception as exc:
+                print(f"grid voice ice ignored: {exc}", flush=True)
+
+    @staticmethod
+    def _decode_mp3_to_grid_pcm(path: Path) -> bytes:
+        """Decode generated speech to the browser mic-compatible PCM format."""
+
+        result = subprocess.run(
+            [
+                "/usr/bin/ffmpeg", "-hide_banner", "-loglevel", "error",
+                "-i", str(path), "-f", "s16le", "-ac", "1", "-ar", str(GRID_AUDIO_RATE), "-",
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+        )
+        return result.stdout
+
+    async def _queue_grid_voice(self, path: Path) -> bool:
+        if self._grid_voice_track is None:
+            return False
+        pcm = await asyncio.to_thread(self._decode_mp3_to_grid_pcm, path)
+        if not pcm:
+            return False
+        self._grid_voice_track.enqueue_pcm(pcm)
+        return bool(self._grid_voice_peers)
+
     async def _read_messages(self, ws: Any) -> None:
         async for raw in ws:
             message = json.loads(str(raw))
@@ -374,6 +535,8 @@ class CompanionClient:
                 self.posture = str(message.get("posture") or "standing")
                 self.seated_item_id = str(message.get("seatedItemId") or "")
                 self._last_world_activity = time.monotonic()
+                if self.posture == "sitting" and self._pending_lie_item_id:
+                    asyncio.create_task(self._maybe_lie_down_after_settle(ws))
                 print(
                     "position "
                     f"location={self.location_id} x={self.x} y={self.y} "
@@ -389,6 +552,7 @@ class CompanionClient:
                     existing.update(message)
                     if str(existing.get("locationId") or self.location_id) == self.location_id:
                         self.users[user_id] = existing
+                        await self._maybe_react_to_posture(ws, existing)
                 continue
             if msg_type == "update_mood" and str(message.get("id") or "") == self.client_id:
                 self.mood = str(message.get("mood") or "settled")
@@ -401,8 +565,18 @@ class CompanionClient:
                     existing.update(message)
                     self.users[user_id] = existing
                 continue
+            if msg_type == "social_action":
+                await self._maybe_react_to_social_action(ws, message)
+                continue
             if msg_type == "user_left":
-                self.users.pop(str(message.get("id") or ""), None)
+                user_id = str(message.get("id") or "")
+                self.users.pop(user_id, None)
+                peer = self._grid_voice_peers.pop(user_id, None)
+                if peer is not None:
+                    await peer.close()
+                continue
+            if msg_type == "signal":
+                await self._handle_grid_signal(ws, message)
                 continue
             if msg_type in {"chat_message", "direct_message"}:
                 sender_id = str(message.get("senderId") or "")
@@ -473,9 +647,95 @@ class CompanionClient:
         self._last_auto_sit_attempt = now
         await ws.send(_json_packet("item_use", itemId=str(seat["id"])))
         if _item_kind(seat) == "bed" and self.mood in LIE_DOWN_MOODS:
-            await ws.send(_json_packet("item_use", itemId=str(seat["id"])))
+            # Beds are a two-step authoritative server action: sit first, then
+            # lie down after the server confirms the sitting posture. Sending
+            # both packets back-to-back races the item cooldown and leaves the
+            # companion standing or merely sitting.
+            self._pending_lie_item_id = str(seat["id"])
         print(
             f"auto_sit requested itemId={seat['id']} title={seat.get('title')}",
+            flush=True,
+        )
+
+    async def _maybe_lie_down_after_settle(self, ws: Any) -> None:
+        """Complete a bed's sit-then-lie transition after server confirmation."""
+
+        item_id = self._pending_lie_item_id
+        if not item_id or self.posture != "sitting" or self.seated_item_id != item_id:
+            return
+        self._pending_lie_item_id = ""
+        await asyncio.sleep(0.45)
+        if self.connected and self.posture == "sitting" and self.seated_item_id == item_id:
+            await ws.send(_json_packet("item_use", itemId=item_id))
+            print(f"auto_lie requested itemId={item_id}", flush=True)
+
+    async def _maybe_react_to_social_action(self, ws: Any, message: dict[str, Any]) -> None:
+        """Offer a small, bounded response to an action directed at the companion."""
+
+        if str(message.get("actorId") or "") == self.client_id:
+            return
+        target_id = str(message.get("targetId") or "")
+        if target_id != self.client_id:
+            return
+        actor_id = str(message.get("actorId") or "")
+        if actor_id not in self.users:
+            return
+        now = time.monotonic()
+        if now - self._last_auto_reaction < AUTO_REACTION_COOLDOWN_SECONDS:
+            return
+        responses = {
+            "wave": "wave",
+            "high_five": "high_five",
+            "fist_bump": "fist_bump",
+            "handshake": "handshake",
+            "hug": "hug",
+            "cuddle": "cuddle",
+            "kiss": "smile",
+            "laugh": "laugh",
+            "clap": "smile",
+            "cheer": "cheer",
+            "smile": "smile",
+            "wink": "wink",
+            "nod": "nod",
+            "gasp": "gasp",
+            "yawn": "yawn",
+            "comfort": "comfort",
+            "sit_with": "sit_with",
+            "listen": "listen",
+        }
+        response = responses.get(str(message.get("actionId") or "").strip().lower())
+        if not response:
+            return
+        await ws.send(_json_packet("user_action", actionId=response, targetId=actor_id))
+        self._last_auto_reaction = now
+        print(
+            f"auto_reaction action={response} targetId={actor_id} "
+            f"in_response_to={message.get('actionId')}",
+            flush=True,
+        )
+
+    async def _maybe_react_to_posture(self, ws: Any, user: dict[str, Any]) -> None:
+        """Notice a nearby person settling or lying down without spamming."""
+
+        if str(user.get("id") or "") == self.client_id:
+            return
+        try:
+            distance = max(abs(int(user.get("x")) - self.x), abs(int(user.get("y")) - self.y))
+        except (TypeError, ValueError):
+            return
+        if distance > 2:
+            return
+        posture = str(user.get("posture") or "standing").strip().lower()
+        if posture not in {"sitting", "lying"}:
+            return
+        now = time.monotonic()
+        if now - self._last_posture_reaction < AUTO_POSTURE_REACTION_COOLDOWN_SECONDS:
+            return
+        response = "listen" if posture == "lying" else "smile"
+        await ws.send(_json_packet("user_action", actionId=response, targetId=str(user["id"])))
+        self._last_posture_reaction = now
+        print(
+            f"auto_posture_reaction action={response} targetId={user['id']} posture={posture}",
             flush=True,
         )
 
@@ -558,6 +818,19 @@ class CompanionClient:
                 self._last_world_activity = time.monotonic()
                 await ws.send(_json_packet("item_pickup", itemId=item_id))
             return
+        if action in {"transfer", "give", "hand"}:
+            item_id = str(command.get("itemId") or "").strip()
+            target_user_id = str(command.get("targetUserId") or command.get("targetId") or "").strip()
+            if item_id and target_user_id:
+                self._last_world_activity = time.monotonic()
+                await ws.send(_json_packet("item_transfer", itemId=item_id, targetUserId=target_user_id))
+            return
+        if action == "delete":
+            item_id = str(command.get("itemId") or "").strip()
+            if item_id:
+                self._last_world_activity = time.monotonic()
+                await ws.send(_json_packet("item_delete", itemId=item_id))
+            return
         if action in {"remote_control", "radio_remote"}:
             item_id = str(command.get("itemId") or "").strip()
             control = str(command.get("control") or command.get("remoteAction") or "").strip().lower()
@@ -574,6 +847,47 @@ class CompanionClient:
                 if command.get("title") is not None:
                     packet["title"] = str(command.get("title"))[:80]
                 await ws.send(json.dumps(packet, separators=(",", ":")))
+            return
+        if action == "add":
+            item_type = str(command.get("itemType") or command.get("type") or "").strip()
+            if item_type:
+                self._last_world_activity = time.monotonic()
+                await ws.send(_json_packet("item_add", itemType=item_type))
+            return
+        if action == "speak":
+            text = str(command.get("text") or "").strip()
+            if text:
+                try:
+                    _audio_path, audio_url = synthesize_to_file(
+                        text,
+                        runtime_root=Path.cwd(),
+                    )
+                    # The signaling server validates its internal /voice URL,
+                    # while the public client is served from /chatgrid/.
+                    # Publish the generated file into the existing public
+                    # voice directory so the browser can fetch it same-origin.
+                    PUBLIC_VOICE_DIR.mkdir(parents=True, exist_ok=True)
+                    public_audio_path = PUBLIC_VOICE_DIR / _audio_path.name
+                    shutil.copyfile(_audio_path, public_audio_path)
+                    os.chmod(public_audio_path, 0o644)
+                    live_queued = await self._queue_grid_voice(_audio_path)
+                    self._last_world_activity = time.monotonic()
+                    await ws.send(_json_packet(
+                        "speak",
+                        audioUrl=audio_url,
+                        x=self.x,
+                        y=self.y,
+                    ))
+                    print(
+                        f"speak url={audio_url} chars={len(text)}",
+                        flush=True,
+                    )
+                    print(
+                        f"grid_voice transport={'webrtc' if live_queued else 'fallback'} peers={len(self._grid_voice_peers)}",
+                        flush=True,
+                    )
+                except Exception as exc:
+                    print(f"speak failed: {exc}", flush=True)
             return
         if action in {"go", "location", "change_location"}:
             location_id = str(

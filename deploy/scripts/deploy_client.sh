@@ -30,6 +30,7 @@ mkdir -p "$PUBLISH_DIR"
 rsync -a --delete \
   --exclude '/downloads/' \
   --exclude '/updates/' \
+  --exclude '/voice/' \
   --exclude '/assets/index-*.js' \
   --exclude '/assets/index-*.css' \
   dist/ "$PUBLISH_DIR/"

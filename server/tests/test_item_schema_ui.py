@@ -26,6 +26,7 @@ def test_ui_definitions_are_complete_for_all_item_types() -> None:
         "cabin",
         "ecrypto_bank",
         "ecrypto_wallet",
+        "radio_remote",
     }.issubset(set(item_type_order))
 
     required_global_property_keys = {
@@ -78,7 +79,12 @@ def test_ui_definitions_are_complete_for_all_item_types() -> None:
                 assert options
 
     by_type = {entry["type"]: entry for entry in item_types}
+    assert by_type["radio_remote"]["label"] == "Universal radio remote"
+    assert "objectKind" in by_type["radio_remote"]["editableProperties"]
     assert "single_room_studio" in by_type["room"]["propertyMetadata"]["roomLayout"]["options"]
+    assert by_type["room"]["propertyMetadata"]["spaceKind"]["options"] == ["indoor", "outdoor"]
+    assert by_type["room"]["propertyMetadata"]["widthSquares"]["range"]["max"] == 41
+    assert "squareFeet" in by_type["room"]["editableProperties"]
     assert "ecrypto" in by_type["qr_code"]["propertyMetadata"]["payloadKind"]["options"]
     assert "wallets_transfers" in by_type["ecrypto_bank"]["propertyMetadata"]["serviceScope"]["options"]
     assert "enabled" not in by_type["ecrypto_bank"]["editableProperties"]

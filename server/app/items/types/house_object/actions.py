@@ -78,6 +78,19 @@ def use_item(
     owner_text = f" Owner: {owner}." if owner else ""
     key_for = str(item.params.get("keyFor", "") or "").strip()
     object_kind = str(item.params.get("objectKind", "")).strip().lower()
+    if item.params.get("journalFolder"):
+        journals = item.params.get("journalIndex")
+        letters = item.params.get("letterIndex")
+        journal_count = len(journals) if isinstance(journals, list) else 0
+        letter_count = len(letters) if isinstance(letters, list) else 0
+        return ItemUseResult(
+            self_message=(
+                f"{item.title} holds {journal_count} journal entries and "
+                f"{letter_count} letters. It is Claudia's private writing collection "
+                "kept in the desk drawer."
+            ),
+            others_message="",
+        )
     if object_kind == "tv":
         next_enabled = toggle_bool_param(item.params, "enabled", default=True)
         state_text = "on" if next_enabled else "off"

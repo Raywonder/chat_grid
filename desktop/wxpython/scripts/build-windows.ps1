@@ -9,7 +9,14 @@ if (-not (Test-Path $Python)) {
 }
 & $Python -m pip install --upgrade pip
 & $Python -m pip install -e "$Root[build,test]"
-& $Python -m pytest (Join-Path $Root "tests")
+$PytestBase = "C:\BuildCache\ChatGridPytestTemp"
+if (Test-Path $PytestBase) {
+    Remove-Item -Recurse -Force $PytestBase
+}
+& $Python -m pytest (Join-Path $Root "tests") --basetemp $PytestBase
+if ($LASTEXITCODE -ne 0) {
+    throw "Windows client tests failed with exit code $LASTEXITCODE."
+}
 $Assets = Join-Path $Root "assets\web"
 if (-not (Test-Path $Assets)) {
     $Assets = Join-Path $Root "..\windows\web"

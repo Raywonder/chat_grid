@@ -40,6 +40,7 @@ from app.items.types.house_keeper.actions import (
 )
 from app.items.types.house_keeper.validator import validate_update as validate_house_keeper
 from app.items.types.cabin.validator import validate_update as validate_cabin
+from app.items.types.room.validator import validate_update as validate_room
 import pytest
 
 from app.items.types.house_object.actions import (
@@ -238,6 +239,37 @@ def test_cabin_validation_preserves_custom_community_target_location() -> None:
     assert normalized["targetLocation"] == "pine_cabin_inside"
 
 
+def test_room_validation_supports_indoor_outdoor_and_custom_dimensions() -> None:
+    item = WorldItem(
+        id="room-1", type="room", title="Room", locationId="town", x=1, y=2,
+        createdBy="u1", createdByName="dominique", updatedBy="u1", updatedByName="dominique",
+        createdAt=1, updatedAt=1, version=1,
+        capabilities=["editable", "carryable", "deletable", "usable"], params={
+            "placeName": "Garden patio", "roomLayout": "custom", "targetLocation": "",
+        },
+    )
+
+    normalized = validate_room(item, {
+        "placeName": "Garden patio", "roomLayout": "custom", "spaceKind": "outdoor",
+        "widthSquares": "18", "depthSquares": 14.4, "squareFeet": "252.5",
+    })
+
+    assert normalized["spaceKind"] == "outdoor"
+    assert normalized["widthSquares"] == 18
+    assert normalized["depthSquares"] == 14
+    assert normalized["squareFeet"] == 252.5
+
+
+def test_room_validation_rejects_unusable_dimensions() -> None:
+    item = WorldItem(
+        id="room-2", type="room", title="Room", locationId="town", x=1, y=2,
+        createdBy="u1", createdByName="dominique", updatedBy="u1", updatedByName="dominique",
+        createdAt=1, updatedAt=1, version=1, capabilities=[], params={},
+    )
+    with pytest.raises(ValueError, match="widthSquares"):
+        validate_room(item, {"widthSquares": 0})
+
+
 def test_house_alarm_triggers_for_unknown_visitor() -> None:
     result = use_house_alarm(_house_alarm_item(), "Visitor", lambda _params: "")
 
@@ -247,6 +279,18 @@ def test_house_alarm_triggers_for_unknown_visitor() -> None:
     )
     assert result.updated_params == {"armedState": "triggered"}
     assert "waiting for an owner" in (result.delayed_self_message or "")
+
+
+def test_house_alarm_explains_in_grid_approval_when_external_hook_is_empty() -> None:
+    item = _house_alarm_item()
+    item.params["notificationMode"] = "ntfy_whatsapp"
+    item.params["ntfyTopic"] = ""
+    item.params["waNotifyTarget"] = ""
+
+    result = use_house_alarm(item, "Visitor", lambda _params: "")
+
+    assert "In-grid entry approval is active." in result.self_message
+    assert "External notifications are not fully configured" in result.self_message
 
 
 def test_house_alarm_rejects_legacy_authorized_display_name() -> None:

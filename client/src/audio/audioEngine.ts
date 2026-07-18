@@ -498,6 +498,8 @@ export class AudioEngine {
 
     const audioElement = new Audio();
     audioElement.srcObject = stream;
+    audioElement.autoplay = true;
+    audioElement.playsInline = true;
     audioElement.muted = true;
 
     if (outputDeviceId && this.supportsSinkId(audioElement)) {
@@ -505,8 +507,11 @@ export class AudioEngine {
       await sinkTarget.setSinkId?.(outputDeviceId);
     }
 
-    await audioElement.play().catch(() => undefined);
     document.body.appendChild(audioElement);
+    // Append before starting playback. Some browsers reject a MediaStream
+    // element that is played before it is attached, which leaves the WebAudio
+    // graph negotiated but silent after a wake/reconnect.
+    await audioElement.play().catch(() => undefined);
 
     const sourceNode = this.audioCtx.createMediaStreamSource(stream);
     const gainNode = this.audioCtx.createGain();

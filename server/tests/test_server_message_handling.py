@@ -799,6 +799,140 @@ async def test_guarded_house_denial_knocks_outside_and_inside(
 
 
 @pytest.mark.asyncio
+async def test_guarded_house_request_reaches_deeper_house_rooms(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    guest_ws = _fake_ws()
+    resident_ws = cast(ServerConnection, object())
+    door = server.items["seed-houses-raywonder-front-door"]
+    guest = _activate_client(
+        ClientConnection(
+            websocket=guest_ws,
+            id="guest-1",
+            nickname="Visitor",
+            x=door.x,
+            y=door.y,
+            location_id=door.locationId,
+        ),
+        username="visitor",
+        permissions={"item.use"},
+    )
+    resident = _activate_client(
+        ClientConnection(
+            websocket=resident_ws,
+            id="resident-1",
+            nickname="Dom",
+            x=22,
+            y=18,
+            location_id="raywonder_house_bedroom",
+        ),
+        username="dominique",
+        permissions={"item.use", "chat.send"},
+    )
+    server.clients[guest_ws] = guest
+    server.clients[resident_ws] = resident
+    sent_payloads: dict[ServerConnection, list[object]] = {
+        guest_ws: [],
+        resident_ws: [],
+    }
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        sent_payloads[websocket].append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+
+    await server._handle_message(
+        guest,
+        json.dumps({"type": "item_use", "itemId": door.id}),
+    )
+
+    resident_notice = _last_packet_of_type(
+        sent_payloads[resident_ws], BroadcastChatMessagePacket
+    )
+    assert "Visitor knocks at the front door" in resident_notice.message
+    assert "Use /allow Visitor" in resident_notice.message
+    assert "or /deny Visitor" in resident_notice.message
+
+
+@pytest.mark.asyncio
+async def test_guarded_house_allow_works_from_deeper_house_room(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    guest_ws = _fake_ws()
+    resident_ws = cast(ServerConnection, object())
+    door = server.items["seed-houses-raywonder-front-door"]
+    guest = _activate_client(
+        ClientConnection(
+            websocket=guest_ws,
+            id="guest-1",
+            nickname="Visitor",
+            x=door.x,
+            y=door.y,
+            location_id=door.locationId,
+        ),
+        username="visitor",
+        permissions={"item.use"},
+    )
+    resident = _activate_client(
+        ClientConnection(
+            websocket=resident_ws,
+            id="resident-1",
+            nickname="Dom",
+            x=18,
+            y=21,
+            location_id="raywonder_house_living_room",
+        ),
+        username="dominique",
+        permissions={"item.use", "chat.send"},
+    )
+    server.clients[guest_ws] = guest
+    server.clients[resident_ws] = resident
+    sent_payloads: dict[ServerConnection, list[object]] = {
+        guest_ws: [],
+        resident_ws: [],
+    }
+    completed: list[tuple[str, str]] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        sent_payloads[websocket].append(packet)
+
+    async def fake_complete_house_alarm_entry(
+        *,
+        client: ClientConnection,
+        alarm: WorldItem,
+        access_result: str,
+    ) -> None:
+        completed.append((client.nickname, access_result))
+        client.location_id = str(
+            server.items["seed-houses-raywonder-front-door"].params["targetLocation"]
+        )
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(
+        server, "_complete_house_alarm_entry", fake_complete_house_alarm_entry
+    )
+
+    await server._handle_message(
+        resident,
+        json.dumps({"type": "chat_message", "message": "/allow Visitor"}),
+    )
+    await asyncio.sleep(0)
+
+    resident_notice = _last_packet_of_type(
+        sent_payloads[resident_ws], BroadcastChatMessagePacket
+    )
+    guest_notice = _last_packet_of_type(
+        sent_payloads[guest_ws], BroadcastChatMessagePacket
+    )
+    assert "approve Visitor" in resident_notice.message
+    assert "approved your entry" in guest_notice.message
+    assert completed == [("Visitor", "guest")]
+    assert guest.location_id == "raywonder_house_entry"
+
+
+@pytest.mark.asyncio
 async def test_locked_bedroom_door_unlocks_with_key_on_square(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -3994,6 +4128,92 @@ async def test_radio_component_update_auto_links_blank_group_to_nearby_playing_r
 
 
 @pytest.mark.asyncio
+async def test_primary_radio_update_syncs_same_room_speaker_components(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(
+            websocket=ws,
+            id="u1",
+            nickname="builder",
+            x=10,
+            y=10,
+            location_id="raywonder_house_living_room",
+        ),
+        permissions={"item.edit.any"},
+    )
+    server.clients[ws] = client
+
+    primary = server.item_service.default_item(client, "radio_station")
+    primary.id = "living-room-radio"
+    primary.locationId = client.location_id
+    primary.params.update(
+        {
+            "linkedMediaGroup": "living-room-rig",
+            "speakerRole": "primary",
+            "enabled": False,
+            "stationIndex": 2,
+            "streamUrl": "https://example.com/live.mp3",
+            "stationName": "Living Station",
+            "nowPlaying": "Current Song",
+            "playStartedAt": 0,
+        }
+    )
+    server.item_service.add_item(primary)
+
+    speaker = server.item_service.default_item(client, "radio_station")
+    speaker.id = "living-room-speaker"
+    speaker.locationId = client.location_id
+    speaker.params.update(
+        {
+            "linkedMediaGroup": "living-room-rig",
+            "speakerRole": "high",
+            "syncWithPrimary": True,
+            "enabled": False,
+            "streamUrl": "https://example.com/stale.mp3",
+            "stationName": "Stale Station",
+            "nowPlaying": "Old Song",
+        }
+    )
+    server.item_service.add_item(speaker)
+
+    broadcast_items: list[object] = []
+
+    async def fake_broadcast_item(item: object) -> None:
+        broadcast_items.append(item)
+
+    async def fake_resolve(item: object) -> None:
+        return None
+
+    monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+    monkeypatch.setattr(server, "_resolve_radio_playback_before_broadcast", fake_resolve)
+
+    await server._handle_message(
+        client,
+        json.dumps(
+            {
+                "type": "item_update",
+                "itemId": primary.id,
+                "params": {"enabled": True},
+            }
+        ),
+    )
+
+    assert primary.params["enabled"] is True
+    assert speaker.params["enabled"] is True
+    assert speaker.params["streamUrl"] == primary.params["streamUrl"]
+    assert speaker.params["stationName"] == primary.params["stationName"]
+    assert speaker.params["nowPlaying"] == primary.params["nowPlaying"]
+    assert speaker.params["playStartedAt"] == primary.params["playStartedAt"]
+    assert {getattr(item, "id", "") for item in broadcast_items} == {
+        primary.id,
+        speaker.id,
+    }
+
+
+@pytest.mark.asyncio
 async def test_item_drop_rejects_linked_assembly_out_of_bounds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -4619,6 +4839,45 @@ async def test_item_add_rejects_unknown_type(monkeypatch: pytest.MonkeyPatch) ->
     item_result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
     assert item_result.ok is False
     assert "unknown item type" in item_result.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_item_add_radio_remote_creates_configured_house_object(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(
+            websocket=ws,
+            id="u1",
+            nickname="tester",
+            location_id="raywonder_house_kitchen",
+            x=7,
+            y=8,
+        ),
+        permissions={"item.create"},
+    )
+    server.clients[ws] = client
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    await server._handle_message(
+        client, json.dumps({"type": "item_add", "itemType": "radio_remote"})
+    )
+
+    item_result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert item_result.ok is True
+    created = server.items[item_result.itemId]
+    assert created.type == "house_object"
+    assert created.title == "Universal radio remote"
+    assert created.locationId == "raywonder_house_kitchen"
+    assert created.params["objectKind"] == "remote"
+    assert created.params["remoteControlLinkedRadios"] is True
+    assert created.params["remoteControlLinkedTvs"] is False
 
 
 @pytest.mark.asyncio

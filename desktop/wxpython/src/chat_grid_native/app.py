@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import ctypes
 import os
 from pathlib import Path
 import sys
@@ -89,6 +90,48 @@ class SettingsDialog(wx.Dialog):
         self.settings.auto_update = self.updates.GetValue()
 
 
+class UpdateInstallCountdown(wx.Dialog):
+    """Give the user a visible, cancellable pause before update installation."""
+
+    def __init__(self, parent: wx.Window, version: str, seconds: int = 5) -> None:
+        super().__init__(parent, title="Chat Grid update ready")
+        self.remaining = max(1, seconds)
+        panel = wx.Panel(self)
+        layout = wx.BoxSizer(wx.VERTICAL)
+        self.message = wx.StaticText(panel, label="")
+        self.message.SetName("Update installation countdown")
+        layout.Add(self.message, 0, wx.ALL, 12)
+        cancel = wx.Button(panel, wx.ID_CANCEL, "Cancel update")
+        layout.Add(cancel, 0, wx.ALIGN_RIGHT | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+        panel.SetSizer(layout)
+        outer = wx.BoxSizer(wx.VERTICAL)
+        outer.Add(panel, 1, wx.EXPAND)
+        self.SetSizerAndFit(outer)
+        self.message.SetLabel(f"Chat Grid {version} will close and install the verified update in {self.remaining} seconds.")
+        self.timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._tick, self.timer)
+        self.Bind(wx.EVT_CHAR_HOOK, self._on_key)
+        cancel.SetFocus()
+        self.timer.Start(1000)
+
+    def _tick(self, _event: wx.TimerEvent) -> None:
+        self.remaining -= 1
+        if self.remaining <= 0:
+            self.timer.Stop()
+            self.EndModal(wx.ID_OK)
+            return
+        self.message.SetLabel(
+            f"Chat Grid will close and install the verified update in {self.remaining} seconds."
+        )
+
+    def _on_key(self, event: wx.KeyEvent) -> None:
+        if event.GetKeyCode() == wx.WXK_ESCAPE:
+            self.timer.Stop()
+            self.EndModal(wx.ID_CANCEL)
+            return
+        event.Skip()
+
+
 class MainFrame(wx.Frame):
     """Main native window and resilient WebView host."""
 
@@ -140,7 +183,8 @@ class MainFrame(wx.Frame):
         file_menu.Append(restart_world_id, "&Restart frozen world view\tCtrl+Shift+R", "Replace only the embedded world view")
         file_menu.Append(focus_world_id, "&Focus world\tCtrl+L", "Move keyboard focus into the world")
         file_menu.AppendSeparator()
-        file_menu.Append(wx.ID_PREFERENCES, "&Settings...\tCtrl+,")
+        settings_shortcut = "Cmd+," if sys.platform == "darwin" else "Ctrl+,"
+        file_menu.Append(wx.ID_PREFERENCES, f"&Settings...\t{settings_shortcut}")
         file_menu.Append(tray_id, "&Minimize to system tray\tCtrl+M")
         file_menu.AppendSeparator()
         file_menu.Append(wx.ID_EXIT, "E&xit Chat Grid\tAlt+F4")
@@ -263,6 +307,14 @@ class MainFrame(wx.Frame):
 
     def request_exit(self) -> None:
         """Explicitly quit instead of applying close-to-tray behavior."""
+        self._prepare_exit()
+
+    def _prepare_exit(self) -> None:
+        self._announce("Chat Grid will exit after the countdown.")
+        with UpdateInstallCountdown(self, "exit Chat Grid") as dialog:
+            if dialog.ShowModal() != wx.ID_OK:
+                self._announce("Exit cancelled. Chat Grid will keep running.")
+                return
         self.force_quit = True
         self.Close()
 
@@ -296,9 +348,7 @@ class MainFrame(wx.Frame):
                     wx.CallAfter(self._announce, f"Chat Grid {manifest.version} is available.")
                     return
                 installer = service.download(manifest)
-                service.install_after_exit(installer, manifest)
-                wx.CallAfter(self._announce, f"Chat Grid {manifest.version} is verified and ready to install.")
-                wx.CallAfter(self.Close)
+                wx.CallAfter(self._prepare_update_install, service, installer, manifest)
             except Exception as error:
                 LOGGER.warning("Update check failed: %s", error)
                 if interactive:
@@ -307,6 +357,18 @@ class MainFrame(wx.Frame):
         self.update_thread = threading.Thread(target=worker, name="chat-grid-updater", daemon=True)
         self.update_thread.start()
 
+    def _prepare_update_install(self, service: UpdateService, installer: Path, manifest: object) -> None:
+        """Show the countdown on the UI thread before closing for installation."""
+        version = str(getattr(manifest, "version", "the update"))
+        self._announce(f"Chat Grid {version} is verified and ready to install.")
+        with UpdateInstallCountdown(self, version) as dialog:
+            if dialog.ShowModal() != wx.ID_OK:
+                self._announce("Update cancelled. Chat Grid will keep running.")
+                return
+        service.install_after_exit(installer, manifest)
+        self.force_quit = True
+        self.Close()
+
     def _show_about(self, _event: wx.CommandEvent) -> None:
         wx.MessageBox(
             f"Chat Grid {__version__}\nOfficial accessible Windows client by Raywonder / TappedIn.",
@@ -314,11 +376,31 @@ class MainFrame(wx.Frame):
         )
 
     def _on_char_hook(self, event: wx.KeyEvent) -> None:
-        if event.GetKeyCode() == wx.WXK_ESCAPE and self.IsIconized():
+        key = event.GetKeyCode()
+        unicode_key = event.GetUnicodeKey()
+        if (event.ControlDown() or event.MetaDown()) and (key == ord(",") or unicode_key == ord(",")):
+            self._show_settings(event)
+            return
+        if key == wx.WXK_ALT:
+            self._open_file_menu()
+            return
+        if key == wx.WXK_ESCAPE and self.IsIconized():
             self.Iconize(False)
             self.Raise()
             return
         event.Skip()
+
+    def _open_file_menu(self) -> None:
+        """Open File when WebView2 consumes the standalone Alt key."""
+        if sys.platform == "win32":
+            try:
+                ctypes.windll.user32.SendMessageW(int(self.GetHandle()), 0x0112, 0xF100 | ord("f"), 0)
+                return
+            except (AttributeError, OSError):
+                LOGGER.debug("Native File-menu activation was unavailable", exc_info=True)
+        menu_bar = self.GetMenuBar()
+        if menu_bar is not None:
+            menu_bar.SetFocus()
 
     def _on_close(self, event: wx.CloseEvent) -> None:
         if event.CanVeto() and not self.force_quit:

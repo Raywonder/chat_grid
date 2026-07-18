@@ -1,6 +1,15 @@
 {
   "sections": [
     {
+      "date": "July 17, 2026",
+      "items": [
+        "Restored station playback when media drops out and synchronized each living-room speaker component with the room's single primary radio source.",
+        "Radio playback now uses a short vinyl-static transition before quietly scanning to the next preset when a station fails.",
+        "Screen-reader users hear a simple station scan notice without hearing the failed station announced.",
+        "Radio station readouts can be set to spoken, sounds only, or off in App settings."
+      ]
+    },
+    {
       "date": "July 14, 2026",
       "items": [
         "Added filename-reviewed seamless FX ambience loops to every outdoor area, interior, and house location, plus an accessible Admin menu browser for reassigning any location from the full 74-sound library.",

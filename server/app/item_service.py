@@ -47,14 +47,32 @@ class ItemService:
     def default_item(self, client: ClientConnection, item_type: str) -> WorldItem:
         """Create a new server-authoritative item at the caller's position."""
 
-        item_def = get_item_definition(item_type)
+        # The add menu exposes this as a first-class choice, but it remains a
+        # house_object at runtime so all existing remote, carrying, transfer,
+        # and item-management behavior stays shared and compatible.
+        runtime_item_type = "house_object" if item_type == "radio_remote" else item_type
+        item_def = get_item_definition(runtime_item_type)
         now = self.now_ms()
         actor_id = client.user_id or client.id
         actor_name = client.username or client.nickname or actor_id
+        params = deepcopy(item_def.default_params)
+        title = item_def.default_title
+        if item_type == "radio_remote":
+            title = "Universal radio remote"
+            params.update(
+                {
+                    "objectKind": "remote",
+                    "placement": "table",
+                    "description": "A universal radio remote for nearby and linked radios.",
+                    "replacementHint": "A programmable universal radio remote.",
+                    "remoteControlLinkedRadios": True,
+                    "remoteControlLinkedTvs": False,
+                }
+            )
         return WorldItem(
             id=str(uuid.uuid4()),
-            type=item_type,
-            title=item_def.default_title,
+            type=runtime_item_type,
+            title=title,
             locationId=client.location_id,
             x=client.x,
             y=client.y,
@@ -68,7 +86,7 @@ class ItemService:
             capabilities=list(item_def.capabilities),
             useSound=item_def.use_sound,
             emitSound=item_def.emit_sound,
-            params=deepcopy(item_def.default_params),
+            params=params,
             carrierId=None,
         )
 

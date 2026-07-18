@@ -1,4 +1,4 @@
-import type { AudioAnnouncementSettings, AudioLayerState, AnnouncementMode } from '../types/audio';
+import type { AudioAnnouncementSettings, AudioLayerState, AnnouncementMode, RadioAnnouncementMode } from '../types/audio';
 
 const EFFECT_LEVELS_STORAGE_KEY = 'chatGridEffectLevels';
 const AUDIO_INPUT_STORAGE_KEY = 'chatGridAudioInputDeviceId';
@@ -27,12 +27,17 @@ type AudioDevicePreferences = {
 
 const DEFAULT_AUDIO_ANNOUNCEMENT_SETTINGS: AudioAnnouncementSettings = {
   mode: 'full',
+  radioAnnouncementMode: 'full',
   itemBeacons: true,
   movementDirections: false,
 };
 
 function normalizeAnnouncementMode(raw: unknown): AnnouncementMode {
   return raw === 'sounds_only' || raw === 'required_only' || raw === 'full' ? raw : 'full';
+}
+
+function normalizeRadioAnnouncementMode(raw: unknown): RadioAnnouncementMode {
+  return raw === 'sounds_only' || raw === 'off' || raw === 'full' ? raw : 'full';
 }
 
 /**
@@ -82,6 +87,7 @@ export class SettingsStore {
       const parsed = JSON.parse(raw) as Partial<AudioAnnouncementSettings>;
       return {
         mode: normalizeAnnouncementMode(parsed.mode),
+        radioAnnouncementMode: normalizeRadioAnnouncementMode(parsed.radioAnnouncementMode),
         itemBeacons: parsed.itemBeacons !== false,
         movementDirections: parsed.movementDirections === true,
       };
@@ -95,6 +101,7 @@ export class SettingsStore {
       AUDIO_ANNOUNCEMENT_SETTINGS_STORAGE_KEY,
       JSON.stringify({
         mode: normalizeAnnouncementMode(settings.mode),
+        radioAnnouncementMode: normalizeRadioAnnouncementMode(settings.radioAnnouncementMode),
         itemBeacons: settings.itemBeacons !== false,
         movementDirections: settings.movementDirections === true,
       }),

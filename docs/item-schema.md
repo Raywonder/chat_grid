@@ -68,6 +68,20 @@
 
 ## Type Params
 
+### `room`
+
+Room items can represent an indoor room or an outdoor space. Their editable
+properties include:
+
+- `spaceKind`: `indoor` or `outdoor`.
+- `widthSquares` and `depthSquares`: server-validated dimensions from 1 to 41
+  Grid squares, using the world's X/Y scale.
+- `squareFeet`: optional approximate real-world floor area from 0 to 100,000.
+
+The size values are descriptive metadata for the generated space and are
+spoken when the room is inspected or entered. The server remains authoritative
+and rejects missing, non-numeric, or unusably large dimensions.
+
 ### `radio_station`
 
 ```json

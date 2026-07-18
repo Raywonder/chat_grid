@@ -35,6 +35,9 @@ type SharedRadioSource = {
   refCount: number;
   playStartedAt: number;
   resumeApplied: boolean;
+  failureTimer: number | null;
+  failureSignaled: boolean;
+  signalFailure: () => void;
 };
 
 type ItemRadioOutput = {
@@ -432,6 +435,7 @@ export class RadioStationRuntime {
   constructor(
     private readonly audio: AudioEngine,
     private readonly getSpatialConfig: (item: WorldItem) => RadioSpatialConfig,
+    private readonly callbacks: { onStationFailure?: (itemId: string) => void } = {},
   ) {}
 
   cleanup(itemId: string, fadeMs = 0): void {
@@ -600,13 +604,16 @@ export class RadioStationRuntime {
     const syncWithPrimary = item.params.syncWithPrimary === true && group.length > 0;
     const primary =
       syncWithPrimary && normalizeRadioSpeakerRole(item.params.speakerRole) !== 'primary'
-        ? Array.from(items).find(
-            (candidate) =>
-              candidate.id !== item.id &&
-              isSpatialMediaItem(candidate) &&
-              linkedMediaGroup(candidate) === group &&
-              normalizeRadioSpeakerRole(candidate.params.speakerRole) === 'primary',
-          )
+        ? Array.from(items)
+            .filter(
+              (candidate) =>
+                candidate.id !== item.id &&
+                isSpatialMediaItem(candidate) &&
+                candidate.locationId === item.locationId &&
+                linkedMediaGroup(candidate) === group &&
+                normalizeRadioSpeakerRole(candidate.params.speakerRole) === 'primary',
+            )
+            .sort((left, right) => left.id.localeCompare(right.id))[0] ?? null
         : null;
     return {
       streamUrl: primary ? resolveRadioPlaybackUrl(primary) : resolveRadioPlaybackUrl(item),
@@ -713,6 +720,7 @@ export class RadioStationRuntime {
     if (!shared) return;
     shared.refCount -= 1;
     if (shared.refCount > 0) return;
+    if (shared.failureTimer !== null) window.clearTimeout(shared.failureTimer);
     shared.element.pause();
     if (shared.hls) {
       shared.hls.destroy();
@@ -824,11 +832,35 @@ export class RadioStationRuntime {
       refCount: 1,
       playStartedAt,
       resumeApplied: false,
+      failureTimer: null,
+      failureSignaled: false,
     };
     this.sharedRadioSources.set(streamUrl, shared);
+    const signalFailure = (): void => {
+      if (shared.failureSignaled || shared.refCount <= 0) return;
+      shared.failureSignaled = true;
+      void this.audio.playSample('sounds/radio/vinyl-static.mp3', 0.58, 0);
+      shared.failureTimer = window.setTimeout(() => {
+        shared.failureTimer = null;
+        const itemId = this.findItemIdForStream(streamUrl);
+        if (itemId) this.callbacks.onStationFailure?.(itemId);
+      }, 2800);
+    };
+    element.addEventListener('error', signalFailure);
+    element.addEventListener('stalled', () => {
+      if (shared.element.paused && shared.element.readyState <= STREAM_STALLED_READY_STATE) signalFailure();
+    });
+    shared.signalFailure = signalFailure;
     this.applyResumeOffset(shared, resolveResumeOffsetSeconds(streamUrl, playStartedAt, fallback));
     this.tryStartSharedPlayback(shared);
     return shared;
+  }
+
+  private findItemIdForStream(streamUrl: string): string {
+    for (const [itemId, output] of this.itemRadioOutputs.entries()) {
+      if (output.streamUrl === streamUrl) return itemId;
+    }
+    return '';
   }
 
   private applyResumeOffset(shared: SharedRadioSource, offsetSeconds: number): void {

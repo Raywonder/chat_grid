@@ -155,6 +155,14 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
     isAvailable: () => true,
   },
   {
+    id: 'speakLocation',
+    label: 'Speak current location',
+    shortcut: 'Y',
+    tooltip: 'Announce the room or location you are currently in.',
+    section: 'Navigation',
+    isAvailable: () => true,
+  },
+  {
     id: 'openMicGainEdit',
     label: 'Set microphone gain',
     shortcut: 'V',
@@ -262,7 +270,7 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
     id: 'speakUsers',
     label: 'Speak connected users',
     shortcut: 'U',
-    tooltip: 'Announce connected users including yourself.',
+    tooltip: 'Announce your current room, connected-user count, and connected users.',
     section: 'Users',
     isAvailable: () => true,
   },

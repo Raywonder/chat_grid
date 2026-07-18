@@ -334,6 +334,22 @@ class ItemUpdatePacket(BasePacket):
     params: dict | None = None
 
 
+class SpeakPacket(BasePacket):
+    """Companion-to-server request to broadcast a spatial agent voice clip.
+
+    The companion synthesizes audio via an external TTS provider, stores the
+    resulting MP3 in the shared ``runtime/voice/`` directory, and sends this
+    packet with a same-origin ``audioUrl``.  The server validates the URL
+    and broadcasts an ``AgentVoicePacket`` to clients in the same location.
+    """
+
+    type: Literal["speak"]
+    audioUrl: str = Field(min_length=1, max_length=512)
+    x: int
+    y: int
+    range: int = Field(default=20, ge=1, le=100)
+
+
 ClientPacket = (
     SignalPacket
     | UpdatePositionPacket
@@ -380,6 +396,7 @@ ClientPacket = (
     | ItemPianoNotePacket
     | ItemPianoRecordingPacket
     | ItemUpdatePacket
+    | SpeakPacket
 )
 
 
@@ -794,6 +811,18 @@ class AdminAmbienceCatalogResultPacket(BasePacket):
     type: Literal["admin_ambience_catalog"]
     locations: list[AdminAmbienceLocationSummary]
     sounds: list[AdminAmbienceSoundSummary]
+
+
+class AgentVoicePacket(BasePacket):
+    """Server-to-client spatial agent voice broadcast with a same-origin audio URL."""
+
+    type: Literal["agent_voice"]
+    senderId: str = Field(min_length=1, max_length=128)
+    senderNickname: str = Field(min_length=1, max_length=64)
+    audioUrl: str = Field(min_length=1, max_length=512)
+    x: int
+    y: int
+    range: int = Field(default=20, ge=1, le=100)
 
 
 class AdminActionResultPacket(BasePacket):

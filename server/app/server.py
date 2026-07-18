@@ -101,6 +101,7 @@ from .models import (
     AdminUserSummary,
     AdminUsersListPacket,
     AdminUsersListResultPacket,
+    AgentVoicePacket,
     BroadcastChatMessagePacket,
     BroadcastNicknamePacket,
     BroadcastPositionPacket,
@@ -141,6 +142,7 @@ from .models import (
     RemoteUser,
     SignalPacket,
     SocialActionPacket,
+    SpeakPacket,
     TeleportCompletePacket,
     UpdateNicknamePacket,
     UpdatePositionPacket,
@@ -152,6 +154,7 @@ from .models import (
     WorldItem,
 )
 from .network_security import normalize_origin, open_validated_public_url
+from .voice_service import VOICE_URL_PREFIX, voice_file_path
 from .notification_service import NotificationRecord, NotificationService
 from .ntfy_publisher import NtfyPublisher
 from .ui_metadata import (
@@ -651,6 +654,9 @@ class SignalingServer:
         self._pending_state_save_handle: asyncio.TimerHandle | None = None
         self._pending_state_save_started_at: float | None = None
         self._last_position_persist_ms_by_user: dict[str, int] = {}
+        self._live_presence_path = Path(__file__).resolve().parents[1] / "runtime" / "live_presence.json"
+        self._last_live_presence_write_monotonic = 0.0
+        self._live_presence_task: asyncio.Task[None] | None = None
         self._auth_hash_semaphore = asyncio.Semaphore(AUTH_HASH_MAX_CONCURRENCY)
         self._auth_failures_by_ip: dict[str, deque[float]] = {}
         self._auth_failures_by_identity: dict[str, deque[float]] = {}
@@ -1392,6 +1398,7 @@ class SignalingServer:
 
         if not client.user_id:
             return
+        self._write_live_presence(force=force)
         now_ms = self.item_service.now_ms()
         if not force:
             last_saved_ms = self._last_position_persist_ms_by_user.get(
@@ -1403,6 +1410,48 @@ class SignalingServer:
             client.user_id, client.x, client.y, client.location_id
         )
         self._last_position_persist_ms_by_user[client.user_id] = now_ms
+
+    def _write_live_presence(self, *, force: bool = False) -> None:
+        """Publish a private, local registry of currently connected user presence."""
+
+        now = time.monotonic()
+        if not force and now - self._last_live_presence_write_monotonic < 0.2:
+            return
+        entries = []
+        for client in self.clients.values():
+            if not client.authenticated or not client.user_id:
+                continue
+            entries.append(
+                {
+                    "userId": client.user_id,
+                    "username": client.username or "",
+                    "nickname": client.nickname,
+                    "locationId": client.location_id,
+                    "x": client.x,
+                    "y": client.y,
+                    "posture": client.posture if client.seated_item_id else "standing",
+                    "seatedItemId": client.seated_item_id,
+                    "updatedAt": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+        entries.sort(key=lambda item: (item["username"].casefold(), item["userId"]))
+        self._live_presence_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self._live_presence_path.with_suffix(".json.tmp")
+        temporary.write_text(
+            json.dumps({"updatedAt": datetime.now(timezone.utc).isoformat(), "users": entries}, indent=2)
+            + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, self._live_presence_path)
+        os.chmod(self._live_presence_path, 0o600)
+        self._last_live_presence_write_monotonic = now
+
+    async def _run_live_presence_loop(self) -> None:
+        """Keep the private connected-user registry fresh while the server runs."""
+
+        while True:
+            self._write_live_presence(force=True)
+            await asyncio.sleep(5)
 
     def _clients_in_location(
         self, location_id: str, *, exclude: ServerConnection | None = None
@@ -1556,6 +1605,10 @@ class SignalingServer:
         }
         if path == self.websocket_path:
             return None
+
+        if path.startswith(VOICE_URL_PREFIX):
+            return self._serve_voice_file(path, request)
+
         if path not in auth_paths:
             headers = Headers()
             headers["Content-Type"] = "text/plain; charset=utf-8"
@@ -1614,6 +1667,30 @@ class SignalingServer:
         if not cookie_header:
             return ""
         return self._cookie_value(cookie_header, self.auth_session_cookie_name)
+
+    def _serve_voice_file(
+        self, path: str, _request: HttpRequest
+    ) -> HttpResponse:
+        """Serve one generated voice MP3 from the runtime voice directory."""
+
+        filename = path[len(VOICE_URL_PREFIX) :]
+        resolved = voice_file_path(filename)
+        if resolved is None:
+            headers = Headers()
+            headers["Content-Type"] = "text/plain; charset=utf-8"
+            headers["Cache-Control"] = "no-store"
+            return HttpResponse(404, "Not Found", headers, b"not found")
+        try:
+            audio_bytes = resolved.read_bytes()
+        except OSError:
+            headers = Headers()
+            headers["Content-Type"] = "text/plain; charset=utf-8"
+            headers["Cache-Control"] = "no-store"
+            return HttpResponse(500, "Internal Server Error", headers, b"read error")
+        headers = Headers()
+        headers["Content-Type"] = "audio/mpeg"
+        headers["Cache-Control"] = "public, max-age=3600"
+        return HttpResponse(200, "OK", headers, audio_bytes)
 
     def _build_admin_menu_actions_for_client(
         self, client: ClientConnection | None
@@ -2105,6 +2182,16 @@ class SignalingServer:
         alarm = self._linked_house_alarm(door)
         alarm_name = alarm.title if alarm is not None else "alarm keypad"
         await self._broadcast_guarded_door_knock(client, door)
+        if alarm is not None:
+            await self._notify_house_entry_event(
+                alarm,
+                client,
+                (
+                    f"{client.nickname} knocks at the front door. "
+                    f"Use /allow {client.nickname} to let them in or "
+                    f"/deny {client.nickname} to keep them outside."
+                ),
+            )
         await self._send_item_result(
             client,
             False,
@@ -2123,6 +2210,16 @@ class SignalingServer:
             and str(candidate.params.get("accessAlarmItemId") or "").strip() == alarm.id
         ]
 
+    def _protected_scopes_for_house_alarm(self, alarm: WorldItem) -> set[str]:
+        """Return house-wide interior scopes protected by one alarm panel."""
+
+        scopes: set[str] = set()
+        for door in self._doors_for_house_alarm(alarm):
+            target_location = str(door.params.get("targetLocation") or "").strip()
+            if target_location:
+                scopes.add(self._house_access_scope_for_location(target_location))
+        return scopes
+
     @staticmethod
     def _is_house_alarm_controller(alarm: WorldItem, client: ClientConnection) -> bool:
         """Return whether the signed-in account may approve or deny alarm requests."""
@@ -2138,18 +2235,50 @@ class SignalingServer:
         enrolled = str(alarm.params.get("enrolledUsername") or "").strip().casefold()
         return username == enrolled or username in allowed
 
+    def _controls_alarm_from_current_house(
+        self, alarm: WorldItem, client: ClientConnection
+    ) -> bool:
+        """Return whether a client can answer this alarm from their current room."""
+
+        if not self._is_house_alarm_controller(alarm, client):
+            return False
+        protected_scopes = self._protected_scopes_for_house_alarm(alarm)
+        if not protected_scopes:
+            return False
+        return self._house_access_scope_for_location(client.location_id) in protected_scopes
+
+    def _guarded_entry_matches_for_name(
+        self, client: ClientConnection, requested_name: str
+    ) -> list[tuple[WorldItem, WorldItem, ClientConnection]]:
+        """Find guarded exterior-door visitors a resident may answer by name."""
+
+        matches: list[tuple[WorldItem, WorldItem, ClientConnection]] = []
+        if not requested_name.strip():
+            return matches
+        for alarm in self.items.values():
+            if alarm.type != "house_alarm":
+                continue
+            if not self._controls_alarm_from_current_house(alarm, client):
+                continue
+            for door in self._doors_for_house_alarm(alarm):
+                waiting = self._find_user_by_name_in_location(
+                    requested_name, door.locationId
+                )
+                if waiting is not None:
+                    matches.append((alarm, door, waiting))
+        return matches
+
     async def _notify_house_entry_event(
         self, alarm: WorldItem, client: ClientConnection, message: str
     ) -> None:
         """Alert occupants and configured owner identities about one entry event."""
 
-        protected_scopes: set[str] = set()
-        for door in self._doors_for_house_alarm(alarm):
-            target_location = str(door.params.get("targetLocation") or "").strip()
-            if target_location:
-                protected_scopes.add(self._carry_scope_for_location(target_location))
+        protected_scopes = self._protected_scopes_for_house_alarm(alarm)
         for occupant in self.clients.values():
-            if self._carry_scope_for_location(occupant.location_id) not in protected_scopes:
+            if (
+                self._house_access_scope_for_location(occupant.location_id)
+                not in protected_scopes
+            ):
                 continue
             await self._send(
                 occupant.websocket,
@@ -2307,14 +2436,6 @@ class SignalingServer:
                 x=inside_door.x,
                 y=inside_door.y,
                 range=18,
-            ),
-        )
-        await self._broadcast_location(
-            inside_door.locationId,
-            BroadcastChatMessagePacket(
-                type="chat_message",
-                message=f"{client.nickname} knocks at the front door.",
-                system=True,
             ),
         )
 
@@ -2632,6 +2753,14 @@ class SignalingServer:
 
         if cls._is_raywonder_house_location(location_id):
             return "raywonder_house"
+        return location_id
+
+    @staticmethod
+    def _house_access_scope_for_location(location_id: str) -> str:
+        """Return the house-wide access scope for a room location."""
+
+        if "_house_" in location_id:
+            return f"{location_id.split('_house_', 1)[0]}_house"
         return location_id
 
     @staticmethod
@@ -3420,6 +3549,53 @@ class SignalingServer:
         item.params.update(copied_fields)
         await self._resolve_radio_playback_before_broadcast(item)
         return True
+
+    async def _sync_radio_speakers_from_primary(
+        self, primary: WorldItem, client: ClientConnection
+    ) -> int:
+        """Keep same-room speaker components on the room's one real radio."""
+
+        if primary.type != "radio_station":
+            return 0
+        group = str(primary.params.get("linkedMediaGroup") or "").strip()
+        role = str(primary.params.get("speakerRole") or "primary").strip().lower()
+        if not group or role != "primary":
+            return 0
+        marker = int(primary.params.get("playStartedAt", 0) or 0)
+        copied = {
+            "streamUrl": str(primary.params.get("streamUrl") or "").strip(),
+            "playbackUrl": str(primary.params.get("playbackUrl") or "").strip(),
+            "stationIndex": int(primary.params.get("stationIndex", 0) or 0),
+            "stationName": str(primary.params.get("stationName") or "").strip(),
+            "nowPlaying": str(primary.params.get("nowPlaying") or "").strip(),
+            "stationSwitchSound": "",
+            "enabled": primary.params.get("enabled") is not False,
+            "playStartedAt": marker,
+        }
+        changed = 0
+        for speaker in self.items.values():
+            if (
+                speaker.id == primary.id
+                or speaker.type != "radio_station"
+                or speaker.locationId != primary.locationId
+                or speaker.carrierId is not None
+                or str(speaker.params.get("linkedMediaGroup") or "").strip() != group
+                or self._radio_presets(speaker)
+            ):
+                continue
+            speaker.params = get_item_type_handler(speaker.type).validate_update(
+                speaker, {**speaker.params, **copied, "syncWithPrimary": True}
+            )
+            speaker.params.update(copied)
+            await self._resolve_radio_playback_before_broadcast(speaker)
+            speaker.updatedAt = self.item_service.now_ms()
+            speaker.updatedBy, speaker.updatedByName = self._item_updated_actor(client)
+            speaker.version += 1
+            await self._broadcast_item(speaker)
+            changed += 1
+        if changed:
+            self._request_state_save()
+        return changed
 
     async def _handle_radio_remote_control(
         self,
@@ -4229,9 +4405,11 @@ class SignalingServer:
         ]
         for item in radios:
             stream_url = str(item.params.get("streamUrl", "")).strip()
-            station_name, now_playing, playback_url = await asyncio.to_thread(
-                self._fetch_stream_metadata, stream_url
-            )
+            metadata = await asyncio.to_thread(self._fetch_stream_metadata, stream_url)
+            # Keep compatibility with older test/integration overrides that
+            # returned only station and title before playback URLs were added.
+            station_name, now_playing = metadata[:2]
+            playback_url = metadata[2] if len(metadata) > 2 else ""
             current_station = str(item.params.get("stationName", "")).strip()
             current_playing = str(item.params.get("nowPlaying", "")).strip()
             current_playback_url = str(item.params.get("playbackUrl", "")).strip()
@@ -6222,6 +6400,7 @@ class SignalingServer:
             self._run_clock_top_of_hour_loop()
         )
         self._telepad_drift_task = asyncio.create_task(self._run_telepad_drift_loop())
+        self._live_presence_task = asyncio.create_task(self._run_live_presence_loop())
         try:
             async with serve(
                 self._handle_client,
@@ -6239,6 +6418,11 @@ class SignalingServer:
                 with suppress(asyncio.CancelledError):
                     await self._telepad_drift_task
                 self._telepad_drift_task = None
+            if self._live_presence_task is not None:
+                self._live_presence_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._live_presence_task
+                self._live_presence_task = None
             if self._pending_reboot_task is not None:
                 self._pending_reboot_task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -6330,6 +6514,7 @@ class SignalingServer:
         finally:
             if websocket in self.clients:
                 disconnected = self.clients.pop(websocket)
+                self._write_live_presence(force=True)
                 self.active_piano_keys_by_client.pop(disconnected.id, None)
                 await self._clear_hand_connections(disconnected)
                 self._persist_client_position(disconnected, force=True)
@@ -6481,6 +6666,7 @@ class SignalingServer:
             return
         client.world_ready = True
         self.clients[client.websocket] = client
+        self._write_live_presence(force=True)
         LOGGER.info(
             "client authenticated id=%s user_id=%s username=%s total=%d",
             client.id,
@@ -6727,8 +6913,22 @@ class SignalingServer:
                     "globalProperties": get_item_global_properties(item_type),
                 }
             )
+        # Keep this as a menu variant rather than a new persisted runtime
+        # type.  It creates a fully configured house-object remote anywhere
+        # an admin can add an item, not only in a seeded living room.
+        item_types.append(
+            {
+                "type": "radio_remote",
+                "label": "Universal radio remote",
+                "tooltip": "Add a universal radio remote here. It can tune nearby and linked radios.",
+                "capabilities": ["editable", "carryable", "deletable", "usable"],
+                "editableProperties": list(ITEM_TYPE_EDITABLE_PROPERTIES["house_object"]),
+                "propertyMetadata": ITEM_TYPE_PROPERTY_METADATA["house_object"],
+                "globalProperties": get_item_global_properties("house_object"),
+            }
+        )
         return {
-            "itemTypeOrder": list(ITEM_TYPE_SEQUENCE),
+            "itemTypeOrder": [*ITEM_TYPE_SEQUENCE, "radio_remote"],
             "itemTypes": item_types,
             "commandMetadata": {
                 "mainModeActions": list(MAIN_MODE_SERVER_COMMAND_DEFINITIONS)
@@ -6903,21 +7103,9 @@ class SignalingServer:
             return True
         if command in {"allow", "letin", "let-in"}:
             requested_name = remainder.strip() if separator else ""
-            guarded_matches: list[tuple[WorldItem, WorldItem, ClientConnection]] = []
-            if requested_name:
-                for alarm in self.items.values():
-                    if alarm.type != "house_alarm":
-                        continue
-                    if not self._is_house_alarm_controller(alarm, client):
-                        continue
-                    for door in self._doors_for_house_alarm(alarm):
-                        if str(door.params.get("targetLocation") or "").strip() != client.location_id:
-                            continue
-                        waiting = self._find_user_by_name_in_location(
-                            requested_name, door.locationId
-                        )
-                        if waiting is not None:
-                            guarded_matches.append((alarm, door, waiting))
+            guarded_matches = self._guarded_entry_matches_for_name(
+                client, requested_name
+            )
             if guarded_matches:
                 alarm, door, waiting = guarded_matches[0]
                 self._house_entry_invites[(waiting.id, door.id)] = time.monotonic() + 30.0
@@ -6941,6 +7129,20 @@ class SignalingServer:
                     self._complete_house_alarm_entry(
                         client=waiting, alarm=alarm, access_result="guest"
                     )
+                )
+                return True
+            if requested_name and any(
+                alarm.type == "house_alarm"
+                and self._controls_alarm_from_current_house(alarm, client)
+                for alarm in self.items.values()
+            ):
+                await self._send(
+                    client.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message="That user is not waiting at a guarded door you control.",
+                        system=True,
+                    ),
                 )
                 return True
             if client.location_id != RAYWONDER_STUDIO_LOCATION_ID:
@@ -7006,33 +7208,25 @@ class SignalingServer:
                     ),
                 )
                 return True
-            for alarm in self.items.values():
-                if alarm.type != "house_alarm" or not self._is_house_alarm_controller(
-                    alarm, client
-                ):
-                    continue
-                for door in self._doors_for_house_alarm(alarm):
-                    if str(door.params.get("targetLocation") or "").strip() != client.location_id:
-                        continue
-                    waiting = self._find_user_by_name_in_location(requested_name, door.locationId)
-                    if waiting is None:
-                        continue
-                    self._house_entry_invites.pop((waiting.id, door.id), None)
-                    await self._send(
-                        waiting.websocket,
-                        BroadcastChatMessagePacket(
-                            type="chat_message", message="Entry was denied.", system=True
-                        ),
-                    )
-                    await self._send(
-                        client.websocket,
-                        BroadcastChatMessagePacket(
-                            type="chat_message",
-                            message=f"You deny entry to {waiting.nickname}.",
-                            system=True,
-                        ),
-                    )
-                    return True
+            for _alarm, door, waiting in self._guarded_entry_matches_for_name(
+                client, requested_name
+            ):
+                self._house_entry_invites.pop((waiting.id, door.id), None)
+                await self._send(
+                    waiting.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message", message="Entry was denied.", system=True
+                    ),
+                )
+                await self._send(
+                    client.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message=f"You deny entry to {waiting.nickname}.",
+                        system=True,
+                    ),
+                )
+                return True
             await self._send(
                 client.websocket,
                 BroadcastChatMessagePacket(
@@ -9674,7 +9868,12 @@ class SignalingServer:
                         await self._notify_house_entry_event(
                             use_item,
                             client,
-                            f"{client.nickname} failed or triggered access at {use_item.params.get('houseName') or 'the house'}.",
+                            (
+                                f"{client.nickname} requested access at "
+                                f"{use_item.params.get('houseName') or 'the house'}. "
+                                f"Use /allow {client.nickname} to let them in or "
+                                f"/deny {client.nickname} to keep them outside."
+                            ),
                         )
                 else:
                     use_result = handler.use(
@@ -10322,6 +10521,7 @@ class SignalingServer:
                 self._sync_radio_play_started_at(
                     update_item, previous_params, self.item_service.now_ms()
                 )
+                await self._sync_radio_speakers_from_primary(update_item, client)
                 if (
                     update_item.type == "furniture"
                     and "furnitureKind" in packet.params
@@ -10365,6 +10565,37 @@ class SignalingServer:
             self._request_state_save()
             await self._send_item_result(
                 client, True, "update", f"Updated {update_item.title}.", update_item.id
+            )
+            return
+
+        if isinstance(packet, SpeakPacket):
+            if not self._client_has_permission(client, "chat.send"):
+                return
+            if not isinstance(packet.audioUrl, str) or not packet.audioUrl.startswith(
+                VOICE_URL_PREFIX
+            ):
+                PACKET_LOGGER.info(
+                    "speak rejected bad audioUrl sender=%s", client.id
+                )
+                return
+            filename = packet.audioUrl[len(VOICE_URL_PREFIX) :]
+            resolved = voice_file_path(filename)
+            if resolved is None:
+                PACKET_LOGGER.info(
+                    "speak rejected missing audio file sender=%s", client.id
+                )
+                return
+            await self._broadcast_location(
+                client.location_id,
+                AgentVoicePacket(
+                    type="agent_voice",
+                    senderId=client.id,
+                    senderNickname=client.nickname,
+                    audioUrl=packet.audioUrl,
+                    x=client.x,
+                    y=client.y,
+                    range=packet.range,
+                ),
             )
             return
 

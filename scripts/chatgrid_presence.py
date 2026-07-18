@@ -17,6 +17,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = PROJECT_ROOT / "server" / "runtime"
 STATE_FILE = RUNTIME / "companion.state.json"
 COMMAND_FILE = RUNTIME / "companion.commands.jsonl"
+LIVE_PRESENCE_FILE = RUNTIME / "live_presence.json"
 SERVICE = "chat-grid-companion.service"
 
 
@@ -88,15 +89,67 @@ def print_state(state: dict[str, object], ready: bool) -> None:
     print(json.dumps(receipt, indent=2, sort_keys=True))
 
 
+def find_live_user(target: str) -> dict[str, object] | None:
+    """Find one currently connected user in the private local presence registry."""
+
+    try:
+        payload = json.loads(LIVE_PRESENCE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    needle = target.strip().casefold()
+    users = payload.get("users", []) if isinstance(payload, dict) else []
+    matches = []
+    for user in users:
+        if not isinstance(user, dict):
+            continue
+        names = [str(user.get(key) or "") for key in ("username", "nickname", "userId")]
+        normalized = [name.casefold() for name in names if name]
+        if needle in normalized or any(needle in name for name in normalized):
+            matches.append(user)
+    return matches[0] if len(matches) == 1 else None
+
+
 def main() -> int:
     """Run the requested presence operation."""
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("status", "ensure", "go"), nargs="?", default="ensure")
+    parser.add_argument("action", choices=("status", "ensure", "go", "find", "command"), nargs="?", default="ensure")
     parser.add_argument("location", nargs="?")
+    parser.add_argument("command_json", nargs="?")
     parser.add_argument("--timeout", type=float, default=15.0)
     parser.add_argument("--max-age", type=float, default=120.0)
     args = parser.parse_args()
+
+    if args.action == "command":
+        if not args.location:
+            parser.error("command requires a JSON command payload")
+        try:
+            command = json.loads(args.location)
+        except json.JSONDecodeError as exc:
+            parser.error(f"command JSON is invalid: {exc}")
+        if not isinstance(command, dict) or not str(command.get("action") or "").strip():
+            parser.error("command JSON must be an object with an action")
+        append_command(command)
+        print(json.dumps({"queued": True, "command": command}, indent=2, sort_keys=True))
+        return 0
+
+    if args.action == "find":
+        if not args.location:
+            parser.error("find requires a username or nickname")
+        if not service_active():
+            start_service()
+        target = find_live_user(args.location)
+        if target is None:
+            print(json.dumps({"found": False, "target": args.location}, indent=2, sort_keys=True))
+            return 1
+        state = read_state()
+        if state.get("locationId") != target.get("locationId"):
+            append_command({"action": "change_location", "locationId": target.get("locationId")})
+        result = dict(target)
+        result["found"] = True
+        result["companionLocationBeforeMove"] = state.get("locationId")
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
 
     if args.action == "go":
         if not args.location:

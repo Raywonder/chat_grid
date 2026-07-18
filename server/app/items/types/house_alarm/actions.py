@@ -81,7 +81,17 @@ def _notification_text(item: WorldItem) -> str:
     if "whatsapp" in mode:
         targets.append(f"WhatsApp target {wa_target or 'not configured'}")
     if not targets:
-        return "Notification hook not configured."
+        return (
+            "In-grid entry approval is active. "
+            "External notifications are not configured."
+        )
+    if any(target.endswith("not configured") for target in targets):
+        return (
+            "In-grid entry approval is active. "
+            "External notifications are not fully configured: "
+            + " and ".join(targets)
+            + "."
+        )
     return "Notification hooks staged for " + " and ".join(targets) + "."
 
 

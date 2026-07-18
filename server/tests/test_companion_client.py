@@ -4,7 +4,19 @@ from __future__ import annotations
 
 import json
 
+from pathlib import Path
+
+import pytest
+
 from tools.companion_client import CompanionClient, _choose_auto_seat
+
+
+class FakeWebSocket:
+    def __init__(self) -> None:
+        self.sent: list[dict] = []
+
+    async def send(self, payload: str) -> None:
+        self.sent.append(json.loads(payload))
 
 
 def test_write_state_publishes_current_world_receipt(tmp_path) -> None:
@@ -128,3 +140,58 @@ def test_choose_auto_seat_allows_booth_with_room() -> None:
     }
 
     assert _choose_auto_seat(items={"booth": booth}, users=users, x=20, y=20) is booth
+
+
+@pytest.mark.asyncio
+async def test_companion_reacts_to_directed_social_action() -> None:
+    """A directed action gets one bounded, reciprocal world action."""
+
+    client = CompanionClient(
+        url="ws://example.invalid",
+        origin="https://example.invalid",
+        username="clawdia",
+        password="secret-for-test",
+        nickname="Claudia",
+        command_file=Path("commands.jsonl"),
+        state_file=Path("state.json"),
+    )
+    client.client_id = "clawdia-id"
+    client.users = {"dom-id": {"id": "dom-id", "nickname": "Dominique"}}
+    socket = FakeWebSocket()
+
+    await client._maybe_react_to_social_action(
+        socket,
+        {"actorId": "dom-id", "targetId": "clawdia-id", "actionId": "wave"},
+    )
+
+    assert socket.sent == [
+        {"type": "user_action", "actionId": "wave", "targetId": "dom-id"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_companion_reacts_to_nearby_person_lying_down() -> None:
+    """A nearby person settling into bed gets a quiet listening response."""
+
+    client = CompanionClient(
+        url="ws://example.invalid",
+        origin="https://example.invalid",
+        username="clawdia",
+        password="secret-for-test",
+        nickname="Claudia",
+        command_file=Path("commands.jsonl"),
+        state_file=Path("state.json"),
+    )
+    client.client_id = "clawdia-id"
+    client.x = 20
+    client.y = 20
+    socket = FakeWebSocket()
+
+    await client._maybe_react_to_posture(
+        socket,
+        {"id": "dom-id", "x": 21, "y": 20, "posture": "lying"},
+    )
+
+    assert socket.sent == [
+        {"type": "user_action", "actionId": "listen", "targetId": "dom-id"}
+    ]

@@ -21,6 +21,16 @@ def clean_text(value: object, *, max_length: int, field_name: str) -> str:
     )
 
 
+def format_square_feet(value: object) -> str:
+    """Format optional room-area metadata without trusting persisted types."""
+
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return str(value).strip()
+    return f"{number:g}"
+
+
 def normalize_door_state(value: object) -> str:
     """Normalize friendly public/private door aliases to locked/unlocked."""
 
@@ -104,6 +114,10 @@ def use_place_item(
     welcome = str(item.params.get("welcomeMessage") or "").strip()
     description = str(item.params.get("description") or "").strip()
     zones = str(item.params.get("zoneNotes") or "").strip()
+    space_kind = str(item.params.get("spaceKind") or "").strip().lower()
+    width = item.params.get("widthSquares")
+    depth = item.params.get("depthSquares")
+    square_feet = item.params.get("squareFeet")
     parts = [welcome or f"You enter {place_name}."]
     target_location = str(item.params.get("targetLocation") or "").strip()
     if target_location:
@@ -114,6 +128,12 @@ def use_place_item(
         parts.append(description)
     if zones:
         parts.append(f"Layout: {zones}.")
+    if space_kind in {"indoor", "outdoor"}:
+        parts.append(f"This is an {space_kind} space.")
+    if width and depth:
+        parts.append(f"Size: {width} by {depth} Grid squares.")
+    if square_feet:
+        parts.append(f"Approximately {format_square_feet(square_feet)} square feet.")
     return ItemUseResult(
         self_message=" ".join(parts),
         others_message=f"{nickname} enters {place_name}.",
@@ -130,6 +150,10 @@ def inspect_place_item(
     owner_name = str(item.params.get("ownerName") or "").strip()
     description = str(item.params.get("description") or "").strip()
     zones = str(item.params.get("zoneNotes") or "").strip()
+    space_kind = str(item.params.get("spaceKind") or "").strip().lower()
+    width = item.params.get("widthSquares")
+    depth = item.params.get("depthSquares")
+    square_feet = item.params.get("squareFeet")
     target_location = str(item.params.get("targetLocation") or "").strip()
     parts = [f"{place_name} is a {item.type.replace('_', ' ')}.", f"Door: {door_state}."]
     if target_location:
@@ -140,4 +164,10 @@ def inspect_place_item(
         parts.append(description)
     if zones:
         parts.append(f"Layout: {zones}.")
+    if space_kind in {"indoor", "outdoor"}:
+        parts.append(f"Space type: {space_kind}.")
+    if width and depth:
+        parts.append(f"Size: {width} by {depth} Grid squares.")
+    if square_feet:
+        parts.append(f"Approximately {format_square_feet(square_feet)} square feet.")
     return ItemUseResult(self_message=" ".join(parts), others_message="")
