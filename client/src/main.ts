@@ -407,6 +407,14 @@ function scheduleClientUpdateReload(metadata: ClientVersionMetadata): void {
   if (reloadScheduledForVersionMismatch) return;
   reloadScheduledForVersionMismatch = true;
   const label = [metadata.releaseVersion, metadata.clientRevision].filter((value) => value.length > 0).join(' ');
+  if (STARTED_FROM_VERSION_RELOAD) {
+    const message = label
+      ? `Chat Grid update ${label} is still being published. Staying on this page; refresh again shortly.`
+      : 'A Chat Grid update is still being published. Staying on this page; refresh again shortly.';
+    setConnectionStatus(message);
+    pushChatMessage(message);
+    return;
+  }
   const message = label ? `New Chat Grid update ${label} found. Reloading...` : 'New Chat Grid update found. Reloading...';
   setConnectionStatus(message);
   pushChatMessage(message);
