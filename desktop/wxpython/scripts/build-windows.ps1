@@ -5,14 +5,29 @@ try {
 $Venv = Join-Path $Root ".venv"
 $Python = Join-Path $Venv "Scripts\python.exe"
 if (-not (Test-Path $Python)) {
-    py -3.12 -m venv $Venv
+    $Python312 = $null
+    $Uv = Get-Command uv -ErrorAction SilentlyContinue
+    if ($Uv) {
+        $Python312 = (& $Uv.Source python find 3.12 2>$null | Select-Object -First 1)
+    }
+    if (-not $Python312 -or -not (Test-Path $Python312)) {
+        $Python312 = (& py -V:Astral/CPython3.12.12 -c "import sys; print(sys.executable)" 2>$null | Select-Object -First 1)
+    }
+    if (-not $Python312 -or -not (Test-Path $Python312)) {
+        throw "Python 3.12 was not found through uv or the Python launcher."
+    }
+    & $Python312 -m venv $Venv
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $Python)) {
+        throw "Python 3.12 failed to create the build environment."
+    }
 }
 & $Python -m pip install --upgrade pip
 & $Python -m pip install -e "$Root[build,test]"
-$PytestBase = "C:\BuildCache\ChatGridPytestTemp"
+$PytestBase = Join-Path $Root "build\pytest-temp"
 if (Test-Path $PytestBase) {
     Remove-Item -Recurse -Force $PytestBase
 }
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $PytestBase) | Out-Null
 & $Python -m pytest (Join-Path $Root "tests") --basetemp $PytestBase
 if ($LASTEXITCODE -ne 0) {
     throw "Windows client tests failed with exit code $LASTEXITCODE."

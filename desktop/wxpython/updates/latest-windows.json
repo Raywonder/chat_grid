@@ -1,0 +1,13 @@
+{
+  "version": "0.4.0",
+  "revision": "R503",
+  "releaseNotes": "Includes the current Chat Grid companion voice delivery fix and the accessible native Windows client.",
+  "platforms": {
+    "windows": {
+      "url": "https://blind.software/chatgrid/downloads/ChatGridSetup-0.4.0.exe",
+      "fileName": "ChatGridSetup-0.4.0.exe",
+      "sha256": "ef03a7e4a0166686477cc6f407e3f06d91e4008d3381a3260ca3b2a0bd1539f7",
+      "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
+    }
+  }
+}
