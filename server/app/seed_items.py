@@ -108,6 +108,87 @@ RADIO_STATION_PRESETS: tuple[dict[str, str], ...] = (
     },
 )
 
+# Public live TV channels from the 2.onj.me programme guide.  Keep these as
+# normal station presets so the existing universal TV remote can tune them,
+# and so every TV receives the same server-managed channel set.
+TV_GUIDE_URL = "https://2.onj.me/guide.html"
+TV_CHANNEL_PRESETS: tuple[dict[str, str], ...] = (
+    {"title": "BBC ONE Lon", "streamUrl": "https://2.onj.me/bbc1", "sourceType": "tv", "provider": "2.onj.me"},
+    {"title": "BBC TWO", "streamUrl": "https://2.onj.me/bbc2", "sourceType": "tv", "provider": "2.onj.me"},
+    {"title": "BBC NEWS", "streamUrl": "https://2.onj.me/bbcnews", "sourceType": "tv", "provider": "2.onj.me"},
+    {"title": "ITV1", "streamUrl": "https://2.onj.me/itv", "sourceType": "tv", "provider": "2.onj.me"},
+    {"title": "ITV2", "streamUrl": "https://2.onj.me/itv2", "sourceType": "tv", "provider": "2.onj.me"},
+    {"title": "ITV4", "streamUrl": "https://2.onj.me/itv4", "sourceType": "tv", "provider": "2.onj.me"},
+    {"title": "ITV Quiz", "streamUrl": "https://2.onj.me/itvquiz", "sourceType": "tv", "provider": "2.onj.me"},
+    {"title": "Channel 4", "streamUrl": "https://2.onj.me/channel4", "sourceType": "tv", "provider": "2.onj.me"},
+    {"title": "E4", "streamUrl": "https://2.onj.me/e4", "sourceType": "tv", "provider": "2.onj.me"},
+    {"title": "More 4", "streamUrl": "https://2.onj.me/more4", "sourceType": "tv", "provider": "2.onj.me"},
+    {"title": "Film4", "streamUrl": "https://2.onj.me/film4", "sourceType": "tv", "provider": "2.onj.me"},
+    {"title": "4seven", "streamUrl": "https://2.onj.me/4seven", "sourceType": "tv", "provider": "2.onj.me"},
+    {"title": "5", "streamUrl": "https://2.onj.me/channel5", "sourceType": "tv", "provider": "2.onj.me"},
+    {"title": "That's 20th Century", "streamUrl": "https://2.onj.me/thatstv3", "sourceType": "tv", "provider": "2.onj.me"},
+)
+TV_PROVIDER_SOURCES: tuple[dict[str, str], ...] = (
+    {
+        "key": "onj-programme-guide",
+        "title": "2.onj.me TV Guide",
+        "kind": "guide",
+        "url": TV_GUIDE_URL,
+        "provider": "2.onj.me",
+        "mode": "live_and_on_demand",
+    },
+)
+
+
+def _tv_preset_key(entry: object) -> tuple[str, str]:
+    """Return a stable title/URL key for a TV station entry."""
+
+    if not isinstance(entry, dict):
+        return "", ""
+    return (
+        str(entry.get("title") or entry.get("name") or "").strip().casefold(),
+        str(entry.get("streamUrl") or entry.get("url") or "").strip().casefold(),
+    )
+
+
+def ensure_tv_channel_defaults(item: WorldItem) -> bool:
+    """Add the shared TV channels and guide metadata to one TV item."""
+
+    if item.type != "house_object" or str(item.params.get("objectKind", "")).strip().lower() != "tv":
+        return False
+    changed = False
+    presets = item.params.get("stationPresets")
+    if not isinstance(presets, list):
+        presets = []
+        item.params["stationPresets"] = presets
+        changed = True
+    existing_keys = {_tv_preset_key(entry) for entry in presets}
+    for entry in (*TV_CHANNEL_PRESETS, *RADIO_STATION_PRESETS):
+        key = _tv_preset_key(entry)
+        if key == ("", "") or key in existing_keys:
+            continue
+        presets.append(deepcopy(entry))
+        existing_keys.add(key)
+        changed = True
+    provider_sources = item.params.get("tvProviderSources")
+    if not isinstance(provider_sources, list):
+        provider_sources = []
+        item.params["tvProviderSources"] = provider_sources
+        changed = True
+    provider_keys = {
+        str(entry.get("key") or "").strip().casefold()
+        for entry in provider_sources
+        if isinstance(entry, dict)
+    }
+    for entry in TV_PROVIDER_SOURCES:
+        key = str(entry["key"]).casefold()
+        if key in provider_keys:
+            continue
+        provider_sources.append(deepcopy(entry))
+        provider_keys.add(key)
+        changed = True
+    return changed
+
 RAYWONDER_STUDIO_MUSIC_PRESETS: tuple[dict[str, str], ...] = (
     {
         "title": "SoulFoodRadio",
@@ -2692,4 +2773,13 @@ def ensure_builtin_items(items: dict[str, WorldItem], *, now_ms: int) -> list[Wo
         item = build_seed_item(seed, now_ms=now_ms)
         items[item.id] = item
         changed.append(item)
+    for item in items.values():
+        if not ensure_tv_channel_defaults(item):
+            continue
+        item.updatedAt = now_ms
+        item.updatedBy = "system"
+        item.updatedByName = "system"
+        item.version += 1
+        if item not in changed:
+            changed.append(item)
     return changed
