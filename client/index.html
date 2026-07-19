@@ -4,8 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chat Grid</title>
+    <style>
+      .hidden,
+      [hidden],
+      body.auth-locked .auth-required {
+        display: none !important;
+      }
+    </style>
   </head>
-  <body>
+  <body class="auth-locked">
     <main class="app">
       <h1 id="gridTitle">Chat Grid</h1>
       <div id="connectionStatus" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -20,7 +27,7 @@
         <h2>Logged In</h2>
         <p id="authSessionText" class="auth-hint"></p>
       </section>
-      <div class="controls" id="button-container">
+      <div class="controls auth-required" id="button-container">
         <button id="connectButton" type="button">Connect</button>
         <button id="logoutButton" class="hidden" type="button">Log out</button>
         <button id="settingsButton" type="button">Audio setup</button>
@@ -28,11 +35,11 @@
         <button id="focusGridButton" class="hidden" type="button" aria-controls="gameCanvas">Chat Grid</button>
         <button id="midiButton" class="hidden" type="button" hidden>Enable MIDI</button>
       </div>
-      <div id="deviceSummary">
+      <div id="deviceSummary" class="auth-required">
         <p id="audioInputCurrent" class="hidden"></p>
         <p id="audioOutputCurrent" class="hidden"></p>
       </div>
-      <section id="joinGuide" class="join-guide" aria-labelledby="joinGuideTitle">
+      <section id="joinGuide" class="join-guide auth-required" aria-labelledby="joinGuideTitle">
         <div class="join-guide-header">
           <h2 id="joinGuideTitle">Join the grid</h2>
           <button id="readGuideButton" type="button" aria-controls="status" aria-pressed="false">Read guide</button>
@@ -44,8 +51,8 @@
           <p><b>Use things:</b> press I to find items, Enter to use one, and ? for full help.</p>
         </div>
       </section>
-      <div id="status" role="region" aria-live="polite"></div>
-      <section id="gridDashboard" class="grid-dashboard hidden" hidden aria-label="Current grid state">
+      <div id="status" class="auth-required" role="region" aria-live="polite"></div>
+      <section id="gridDashboard" class="grid-dashboard auth-required hidden" hidden aria-label="Current grid state">
         <p><b>Position</b> <span id="gridPosition">--</span></p>
         <p><b>People</b> <span id="gridPeople">--</span></p>
         <p><b>Items</b> <span id="gridItems">--</span></p>
@@ -67,12 +74,12 @@
         tabindex="0"
         role="application"
         aria-roledescription="interactive audio world"
-        class="hidden"
+        class="auth-required hidden"
         aria-label="Chat Grid, press question mark for help."
       ></canvas>
       <section
         id="interactiveItemPanel"
-        class="interactive-item-panel hidden"
+        class="interactive-item-panel auth-required hidden"
         aria-labelledby="interactiveItemTitle"
         role="region"
       >

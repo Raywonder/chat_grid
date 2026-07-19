@@ -147,6 +147,8 @@ export function createAuthController(deps: AuthControllerDeps): {
     const hasSavedUsernameHint = sanitizeAuthUsername(authUsername).length > 0;
     const hasSavedSessionHint = hasSavedUsernameHint || savedSessionCookieAvailable;
     const hasExternalAuth = externalAuthAssertion.length > 0;
+    const authReady = hasExternalAuth || hasSavedSessionHint;
+    document.body.classList.toggle('auth-locked', !authReady);
     const showLogout = deps.isRunning() || hasSavedSessionHint;
     deps.dom.logoutButton.classList.toggle('hidden', !showLogout);
     deps.dom.logoutButton.disabled = !showLogout;
@@ -167,7 +169,6 @@ export function createAuthController(deps: AuthControllerDeps): {
       deps.dom.loginView.classList.remove('hidden');
       deps.dom.authSessionView.classList.add('hidden');
     }
-    const authReady = hasExternalAuth || hasSavedSessionHint;
     deps.dom.connectButton.textContent = deps.isConnecting()
       ? 'Connecting...'
       : hasSavedSessionHint
