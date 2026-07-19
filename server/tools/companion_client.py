@@ -862,14 +862,15 @@ class CompanionClient:
                         text,
                         runtime_root=Path.cwd(),
                     )
-                    # The signaling server validates its internal /voice URL,
-                    # while the public client is served from /chatgrid/.
-                    # Publish the generated file into the existing public
-                    # voice directory so the browser can fetch it same-origin.
-                    PUBLIC_VOICE_DIR.mkdir(parents=True, exist_ok=True)
-                    public_audio_path = PUBLIC_VOICE_DIR / _audio_path.name
-                    shutil.copyfile(_audio_path, public_audio_path)
-                    os.chmod(public_audio_path, 0o644)
+                    try:
+                        PUBLIC_VOICE_DIR.mkdir(parents=True, exist_ok=True)
+                        public_audio_path = PUBLIC_VOICE_DIR / _audio_path.name
+                        shutil.copyfile(_audio_path, public_audio_path)
+                        os.chmod(public_audio_path, 0o644)
+                    except OSError as exc:
+                        # WebRTC delivery and the Grid announcement must still
+                        # proceed if the front-end static mirror is unavailable.
+                        print(f"voice publish unavailable: {exc}", flush=True)
                     live_queued = await self._queue_grid_voice(_audio_path)
                     self._last_world_activity = time.monotonic()
                     await ws.send(_json_packet(

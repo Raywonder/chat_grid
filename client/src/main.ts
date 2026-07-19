@@ -1943,6 +1943,9 @@ function resolveIncomingSoundUrl(url: string): string {
   if (raw.startsWith('/sounds/')) {
     return withBase(raw.slice(1));
   }
+  if (raw.startsWith('/voice/')) {
+    return withBase(raw.slice(1));
+  }
   if (raw.startsWith('sounds/')) {
     return withBase(raw);
   }
