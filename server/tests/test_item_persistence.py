@@ -8,6 +8,7 @@ from websockets.asyncio.server import ServerConnection
 
 from app.client import ClientConnection
 from app.item_service import ItemService
+from app.seed_items import TV_CHANNEL_PRESETS, TV_GUIDE_URL, ensure_tv_channel_defaults
 from app.world import WORLD_LOCATIONS
 
 
@@ -25,6 +26,19 @@ def test_world_location_ambience_assets_exist() -> None:
     ]
 
     assert missing == []
+
+
+def test_tv_defaults_include_onj_channels_and_guide(tmp_path: Path) -> None:
+    service = ItemService(state_file=tmp_path / "items.json")
+    client = ClientConnection(websocket=_fake_ws(), id="u1", x=3, y=4)
+    tv = service.default_item(client, "house_object")
+    tv.params["objectKind"] = "tv"
+
+    assert ensure_tv_channel_defaults(tv) is True
+    titles = [entry["title"] for entry in tv.params["stationPresets"]]
+    assert [entry["title"] for entry in TV_CHANNEL_PRESETS] == titles[: len(TV_CHANNEL_PRESETS)]
+    guide = next(entry for entry in tv.params["tvProviderSources"] if entry["key"] == "onj-programme-guide")
+    assert guide["url"] == TV_GUIDE_URL
 
 
 def test_item_persistence_omits_global_type_properties(tmp_path: Path) -> None:

@@ -58,6 +58,7 @@ from .item_catalog import (
 )
 from .item_type_handlers import get_item_type_handler
 from .item_service import ItemService
+from .seed_items import ensure_tv_channel_defaults
 from .items.types.clock.time_format import parse_alarm_time_flexible
 from .items.types.house_alarm.actions import evaluate_access as evaluate_house_alarm_access
 from .items.types.house_alarm.actions import use_with_credential as use_house_alarm_with_credential
@@ -10960,6 +10961,13 @@ class SignalingServer:
                         client, False, "update", str(exc), update_item.id
                     )
                     return
+                if (
+                    update_item.type == "house_object"
+                    and str(next_params.get("objectKind", "")).strip().lower() == "tv"
+                ):
+                    update_item.params = next_params
+                    if ensure_tv_channel_defaults(update_item):
+                        next_params = handler.validate_update(update_item, update_item.params)
                 update_item.params = next_params
                 if update_item.type == "room":
                     target_location_id = self._normalize_world_location_id(
