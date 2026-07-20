@@ -91,6 +91,19 @@ def check_source(args: argparse.Namespace) -> int:
         mismatches.append(f"macOS short version: expected {args.version}, found {macos_short_version}")
     if client_revision != args.revision:
         mismatches.append(f"web client revision: expected {args.revision}, found {client_revision}")
+
+    for manifest_path in (
+        repo / "desktop" / "wxpython" / "updates" / "latest-windows.json",
+        repo / "desktop" / "native" / "updates" / "latest-windows.json",
+    ):
+        manifest = _read_json(manifest_path)
+        platform = manifest.get("platforms", {}).get("windows", {})
+        if not str(platform.get("sha256", "")).strip():
+            mismatches.append(f"Windows update manifest has no SHA-256: {manifest_path}")
+        if str(manifest.get("version", "")).strip() != args.version:
+            mismatches.append(f"Windows update manifest version mismatch: {manifest_path}")
+        if str(manifest.get("revision", "")).strip() != args.revision:
+            mismatches.append(f"Windows update manifest revision mismatch: {manifest_path}")
     if mismatches:
         raise SystemExit("source preflight failed:\n- " + "\n- ".join(mismatches))
     print(f"source preflight ok: {args.framework} {args.version} {args.revision} at {repo}")

@@ -13,6 +13,7 @@ import sys
 import tempfile
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 from packaging.version import InvalidVersion, Version
 import requests
@@ -56,6 +57,11 @@ class UpdateManifest:
             raise ValueError("Update manifest SHA-256 is missing or invalid.")
         if Path(self.file_name).suffix.lower() != ".exe":
             raise ValueError("Windows update must be an executable installer.")
+        published_name = Path(urlparse(self.download_url).path).name
+        if published_name != self.file_name:
+            raise ValueError("Update URL filename does not match the manifest filename.")
+        if self.version not in self.file_name:
+            raise ValueError("Update filename does not identify the manifest version.")
 
 
 class UpdateService:
@@ -103,9 +109,13 @@ class UpdateService:
         helper = self.root / "updates" / "install-update.ps1"
         helper.write_text(
             "param([int]$Pid,[string]$Installer,[string]$Arguments,[string]$App)\n"
+            "$mutex = New-Object System.Threading.Mutex($false, 'EndiginousUpdateInstall')\n"
+            "if(-not $mutex.WaitOne(0)){ exit 0 }\n"
             "Wait-Process -Id $Pid -ErrorAction SilentlyContinue\n"
-            "$p=Start-Process -FilePath $Installer -ArgumentList $Arguments -Wait -PassThru\n"
-            "if($p.ExitCode -eq 0){Start-Process -FilePath $App}\n",
+            "try {\n"
+            "  $p=Start-Process -FilePath $Installer -ArgumentList $Arguments -Wait -PassThru\n"
+            "  if($p.ExitCode -eq 0){Start-Process -FilePath $App}\n"
+            "} finally { $mutex.ReleaseMutex(); $mutex.Dispose() }\n",
             encoding="utf-8-sig",
         )
         subprocess.Popen(
