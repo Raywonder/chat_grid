@@ -1,5 +1,5 @@
 {
-  "version": "0.4.1",
+  "version": "0.4.2",
   "releaseNotes": "Renames the macOS desktop client to Endiginous and updates the bundled web runtime to R505. This package is unsigned and will be replaced by a signed and notarized package later.",
   "platforms": {
     "macos": {
