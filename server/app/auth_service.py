@@ -147,7 +147,7 @@ class AuthSession:
 
 @dataclass(frozen=True)
 class EcryptoAccountSummary:
-    """Per-user eCrypto account summary linked to a Chat Grid auth user."""
+    """Per-user eCrypto account summary linked to an Endiginous auth user."""
 
     account_id: str
     user_id: str
@@ -851,7 +851,7 @@ class AuthService:
         *,
         memo: str = "",
     ) -> tuple[EcryptoAccountSummary, EcryptoAccountSummary]:
-        """Move test-chain eCrypto between two linked Chat Grid accounts."""
+        """Move test-chain eCrypto between two linked Endiginous accounts."""
 
         if amount <= 0:
             raise AuthError("Amount must be positive.")
@@ -1061,7 +1061,7 @@ class AuthService:
         role: str = "user",
         display_name: str | None = None,
     ) -> AuthSession:
-        """Authenticate a verified external identity and issue a Chat Grid session."""
+        """Authenticate a verified external identity and issue an Endiginous session."""
 
         normalized_provider = self._normalize_external_provider(provider)
         normalized_subject = subject.strip()
@@ -1090,7 +1090,7 @@ class AuthService:
                 self._conn.commit()
                 user = self.get_user_by_id(str(user_id))
                 if user is None:
-                    raise AuthError("Linked Chat Grid account was not found.")
+                    raise AuthError("Linked Endiginous account was not found.")
                 return self._create_session(user)
 
             user_id = self._find_existing_external_user_id(
@@ -1127,7 +1127,7 @@ class AuthService:
 
         user = self.get_user_by_id(str(user_id))
         if user is None:
-            raise AuthError("Failed to load external Chat Grid account.")
+            raise AuthError("Failed to load external Endiginous account.")
         return self._create_session(user)
 
     def login_external_assertion(
@@ -1756,7 +1756,7 @@ class AuthService:
         role: str,
         display_name: str | None,
     ) -> int:
-        """Create a local Chat Grid account for a verified external identity."""
+        """Create a local Endiginous account for a verified external identity."""
 
         normalized_username = self._unique_external_username(username, email)
         role_row = self._conn.execute(
@@ -1875,7 +1875,7 @@ class AuthService:
             ).fetchone()
             if row is None:
                 return attempt
-        raise AuthError("Could not allocate a Chat Grid username.")
+        raise AuthError("Could not allocate an Endiginous username.")
 
     def _consume_external_nonce(self, nonce: str, exp_seconds: int) -> None:
         """Store a one-use external assertion nonce or reject a replay."""
@@ -2107,7 +2107,7 @@ class AuthService:
 
     @staticmethod
     def _external_role_name(role_name: str) -> str:
-        """Map external site roles into Chat Grid roles."""
+        """Map external site roles into Endiginous roles."""
 
         normalized = role_name.strip().lower()
         if normalized == "admin":

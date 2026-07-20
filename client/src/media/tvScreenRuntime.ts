@@ -36,7 +36,7 @@ export class TvScreenRuntime {
 
   constructor() {
     this.region.id = 'chatgrid-tv-screen';
-    this.region.setAttribute('aria-label', 'Chat Grid television');
+    this.region.setAttribute('aria-label', 'Endiginous television');
     this.region.hidden = true;
     Object.assign(this.region.style, {
       position: 'fixed', right: '1rem', bottom: '1rem', zIndex: '20',

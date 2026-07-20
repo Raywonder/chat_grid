@@ -10,9 +10,9 @@ Updated 2026-07-18 from the Rocco/TeamTalk work.
 - Socket-only reconnect has been observed without leaving TeamTalk.
 - The bridge self-test state is recorded in the private OpenClaw state file; the detailed transcript/audio log remains private and is not copied into project documentation.
 
-## Chat Grid wiring
+## Endiginous wiring
 
-Chat Grid already consumes the compatible pieces through its normal audio architecture:
+Endiginous already consumes the compatible pieces through its normal audio architecture:
 
 - microphone/user voice uses the permission-gated WebRTC peer path;
 - remote voice is attached to the spatial audio engine and follows the listener position;

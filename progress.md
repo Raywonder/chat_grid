@@ -10,3 +10,10 @@ Original prompt: all updates instead of in main UI can be found within world und
 - WebSocket upgrade returned HTTP 101.
 - Visually inspected the fresh R445 logged-out Playwright screenshot: no updates section is present in the landing UI.
 - TODO: verify the connected navigation landmark through an authenticated test path when a safe session fixture is available.
+
+## Next Version Accessibility Navigation Note
+
+- Treat the main game/window canvas as a world-navigation surface, not a web-document surface. When technically possible, auto-disable or suppress screen reader browse/navigation modes while the player is in the main world so arrow keys and other controls stay in the game.
+- Keep ordinary text, links, and app/web navigation out of the main canvas. The main surface should expose concise world/location titles and live world narration only.
+- Put app links, external links, settings, account actions, downloads, help, and similar web/app options in menus, command palettes, or other explicit navigation surfaces.
+- If an in-world item opens web-like content, its navigation should still follow the in-world navigation model first. Browser-style navigation should be presented through world controls/menus rather than leaking page/link browsing into the main play surface.

@@ -104,7 +104,7 @@ def resolve_aaastreamer_playback(
     try:
         with open_validated_public_url(
             station_url,
-            headers={"User-Agent": "ChatGrid"},
+            headers={"User-Agent": "Endiginous"},
             timeout=timeout,
         ) as response:
             html_text = response.read(STATION_PAGE_MAX_BYTES).decode(
@@ -117,7 +117,7 @@ def resolve_aaastreamer_playback(
             try:
                 with open_validated_public_url(
                     api_url,
-                    headers={"Accept": "application/json", "User-Agent": "ChatGrid"},
+                    headers={"Accept": "application/json", "User-Agent": "Endiginous"},
                     timeout=timeout,
                 ) as response:
                     payload = json.loads(

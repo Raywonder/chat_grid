@@ -1,6 +1,6 @@
 {
   "version": "0.3.0",
-  "releaseNotes": "Native NVDA speech routing, background tray mode, registered Chat Grid links, resilient reconnect, and mandatory verified automatic updates.",
+  "releaseNotes": "Native NVDA speech routing, background tray mode, registered Endiginous links, resilient reconnect, and mandatory verified automatic updates.",
   "platforms": {
     "windows": {
       "url": "https://blind.software/chatgrid/downloads/ChatGridSetup-0.3.0.exe",

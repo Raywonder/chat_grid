@@ -107,7 +107,7 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
     },
     "targetLocation": {
         "valueType": "text",
-        "tooltip": "Optional Chat Grid location id entered when this room is used.",
+        "tooltip": "Optional Endiginous location id entered when this room is used.",
         "maxLength": 64,
     },
     "description": {"valueType": "text", "tooltip": "Short room description.", "maxLength": 360},

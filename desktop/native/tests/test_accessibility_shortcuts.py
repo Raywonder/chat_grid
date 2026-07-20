@@ -18,4 +18,4 @@ def test_update_install_has_visible_countdown_and_cancel_path():
     assert '"Cancel update"' in SOURCE
     assert "service.install_after_exit(installer, manifest)" in SOURCE
     assert "self._prepare_exit()" in SOURCE
-    assert "Exit cancelled. Chat Grid will keep running." in SOURCE
+    assert "Exit cancelled. Endiginous will keep running." in SOURCE

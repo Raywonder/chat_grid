@@ -1,4 +1,4 @@
-"""py2app bundle definition for the official Chat Grid macOS client."""
+"""py2app bundle definition for the official Endiginous macOS client."""
 
 from setuptools import setup
 
@@ -6,14 +6,14 @@ OPTIONS = {
     "argv_emulation": False,
     "packages": ["chat_grid_native", "requests", "packaging", "certifi"],
     "plist": {
-        "CFBundleName": "Chat Grid",
-        "CFBundleDisplayName": "Chat Grid",
+        "CFBundleName": "Endiginous",
+        "CFBundleDisplayName": "Endiginous",
         "CFBundleIdentifier": "fm.tappedin.chatgrid",
-        "CFBundleShortVersionString": "0.3.9",
-        "CFBundleVersion": "0.3.9",
+        "CFBundleShortVersionString": "0.4.1",
+        "CFBundleVersion": "0.4.1",
         "LSMinimumSystemVersion": "12.0",
         "CFBundleURLTypes": [{
-            "CFBundleURLName": "Chat Grid Connect",
+            "CFBundleURLName": "Endiginous Connect",
             "CFBundleURLSchemes": ["chatgrid"],
         }],
         "NSHighResolutionCapable": True,
@@ -22,8 +22,8 @@ OPTIONS = {
 
 setup(
     app=["macos/macos_entry.py"],
-    name="Chat Grid",
-    version="0.3.9",
+    name="Endiginous",
+    version="0.4.1",
     options={"py2app": OPTIONS},
     setup_requires=["py2app"],
 )

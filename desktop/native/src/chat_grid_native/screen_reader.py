@@ -1,4 +1,4 @@
-"""Native screen-reader speech routing for trusted Chat Grid messages."""
+"""Native screen-reader speech routing for trusted Endiginous messages."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Stable PyInstaller entry point for Chat Grid Desktop."""
+"""Stable PyInstaller entry point for Endiginous Desktop."""
 
 from chat_grid_native.app import main
 

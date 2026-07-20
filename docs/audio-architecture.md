@@ -107,7 +107,7 @@ version remains only as fallback if the asset cannot load or decode.
 
 `emitSound` uses a base gain multiplier of `0.3` before spatial attenuation.
 
-Preset radios can also define `stationSwitchSound` or per-preset `switchSound`. The built-in Chat Grid Radio uses short MP3 stingers under `sounds/radio/station-switch/`; each stinger is a compact static/tuning burst with the station name embedded inside the noise. Station-switch stingers are intentionally subtle, sped up, and played as spatial one-shots from the radio tile instead of as loud global UI sounds.
+Preset radios can also define `stationSwitchSound` or per-preset `switchSound`. The built-in Endiginous Radio uses short MP3 stingers under `sounds/radio/station-switch/`; each stinger is a compact static/tuning burst with the station name embedded inside the noise. Station-switch stingers are intentionally subtle, sped up, and played as spatial one-shots from the radio tile instead of as loud global UI sounds.
 
 Radio stream playback always passes through a radio-body EQ after media effects and speaker-role filters: high-pass cleanup, presence shaping, and low-pass bandwidth limiting. While a listener moves around a directional radio, that body EQ shifts between low, mid, and high tone profiles based on distance and whether the listener is in front of the radio cone.
 
@@ -139,7 +139,7 @@ under `sounds/radio/relaxation/`.
 Mounted wall TVs are modeled as `house_object` items with `objectKind="tv"` and
 `placement="wall"`. The nearest enabled video-capable TV also opens a native,
 keyboard-accessible video surface. Its picture is muted because the same program
-audio continues through Chat Grid's synchronized spatial media graph. Finite
+audio continues through Endiginous's synchronized spatial media graph. Finite
 programs use the server `playStartedAt` marker to join at the shared playhead;
 native controls remain available when autoplay requires a gesture. The intended
 in-world TV provider path is a second

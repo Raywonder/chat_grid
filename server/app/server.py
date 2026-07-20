@@ -582,9 +582,9 @@ class SignalingServer:
         state_save_max_delay_ms: int = 1000,
         host_origin: str | None = None,
         base_path: str = "/",
-        grid_name: str = "Chat Grid",
+        grid_name: str = "Endiginous",
         welcome_message: str = (
-            "Welcome to the Chat Grid, your immersive audio playground. "
+            "Welcome to Endiginous, your immersive audio playground. "
             "Configure your audio, then Log in or register to join the grid."
         ),
     ):
@@ -639,10 +639,10 @@ class SignalingServer:
             else None
         )
         self.base_path = self._normalize_base_path(base_path)
-        self.grid_name = str(grid_name).strip() or "Chat Grid"
+        self.grid_name = str(grid_name).strip() or "Endiginous"
         self.welcome_message = (
             str(welcome_message).strip()
-            or "Welcome to the Chat Grid, your immersive audio playground. Configure your audio, then Log in or register to join the grid."
+            or "Welcome to Endiginous, your immersive audio playground. Configure your audio, then Log in or register to join the grid."
         )
         self.auth_session_cookie_name = self._session_cookie_name_for_base_path(
             self.base_path
@@ -703,7 +703,7 @@ class SignalingServer:
 
     @staticmethod
     def _load_flexpbx_bindings() -> dict[str, dict[str, object]]:
-        """Load verified Chat Grid username-to-FlexPBX bindings from service config."""
+        """Load verified Endiginous username-to-FlexPBX bindings from service config."""
 
         raw = os.getenv("CHGRID_FLEXPBX_BINDINGS", "").strip()
         if not raw:
@@ -4544,7 +4544,7 @@ class SignalingServer:
         try:
             with open_validated_public_url(
                 stream_url,
-                headers={"Icy-MetaData": "1", "User-Agent": "ChatGrid"},
+                headers={"Icy-MetaData": "1", "User-Agent": "Endiginous"},
                 timeout=RADIO_METADATA_TIMEOUT_S,
             ) as response:
                 station = str(
@@ -6495,7 +6495,7 @@ class SignalingServer:
         return added
 
     async def _sync_blind_productions_billboards_once(self) -> list[WorldItem]:
-        """Mirror public Blind Productions messages into Chat Grid billboards."""
+        """Mirror public Blind Productions messages into Endiginous billboards."""
 
         try:
             messages = await asyncio.to_thread(fetch_blind_productions_messages)
@@ -7740,7 +7740,7 @@ class SignalingServer:
     def _ecrypto_transfer_text(
         self, client: ClientConnection, args: list[str]
     ) -> str:
-        """Transfer internal test-chain eCrypto to another Chat Grid account."""
+        """Transfer internal test-chain eCrypto to another Endiginous account."""
 
         if not client.user_id:
             return "Log in to transfer eCrypto."
@@ -9119,7 +9119,7 @@ class SignalingServer:
                     if not dialing["enabled"]:
                         await self._send(client.websocket, state(
                             "failed", target=target,
-                            message="Outbound dialing is disabled in your Chat Grid phone settings.",
+                            message="Outbound dialing is disabled in your Endiginous phone settings.",
                         ))
                         return
                     if not os.getenv("CHGRID_FLEXPBX_BRIDGE_URL", "").strip():

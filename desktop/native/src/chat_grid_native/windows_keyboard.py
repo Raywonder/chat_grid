@@ -57,7 +57,7 @@ class WindowsWorldKeyHook:
             WH_KEYBOARD_LL, self.proc, self.kernel32.GetModuleHandleW(None), 0
         )
         if not self.hook:
-            raise OSError(ctypes.get_last_error(), "Unable to install Chat Grid keyboard hook")
+            raise OSError(ctypes.get_last_error(), "Unable to install Endiginous keyboard hook")
 
     def _is_foreground_process(self) -> bool:
         hwnd = self.user32.GetForegroundWindow()

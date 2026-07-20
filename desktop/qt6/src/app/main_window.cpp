@@ -19,7 +19,7 @@
 namespace chatgrid::app {
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
-    setWindowTitle(QStringLiteral("Chat Grid — Native Qt 6 foundation"));
+    setWindowTitle(QStringLiteral("Endiginous — Native Qt 6 foundation"));
     resize(900, 620);
     buildMenus();
     buildCentralView();
@@ -52,7 +52,7 @@ void MainWindow::buildMenus() {
     connect(settingsAction, &QAction::triggered, this, &MainWindow::showSettings);
 
     auto* helpMenu = menuBar()->addMenu(QStringLiteral("&Help"));
-    auto* aboutAction = helpMenu->addAction(QStringLiteral("&About Chat Grid Native Qt 6"));
+    auto* aboutAction = helpMenu->addAction(QStringLiteral("&About Endiginous Native Qt 6"));
     connect(aboutAction, &QAction::triggered, this, &MainWindow::showAbout);
 }
 
@@ -62,7 +62,7 @@ void MainWindow::buildCentralView() {
     auto* connectionBox = new QGroupBox(QStringLiteral("Connection"), root);
     auto* connectionLayout = new QHBoxLayout(connectionBox);
     endpointEdit_ = new QLineEdit(QStringLiteral("wss://example.invalid/chat-grid/ws"), connectionBox);
-    endpointEdit_->setAccessibleName(QStringLiteral("Chat Grid server endpoint"));
+    endpointEdit_->setAccessibleName(QStringLiteral("Endiginous server endpoint"));
     auto* connectButton = new QPushButton(QStringLiteral("Connect"), connectionBox);
     connectButton->setDefault(true);
     connect(connectButton, &QPushButton::clicked, this, &MainWindow::connectToEndpoint);
@@ -93,7 +93,7 @@ void MainWindow::showStatus(const QString& message) {
 
 void MainWindow::showSettings() {
     QDialog dialog(this);
-    dialog.setWindowTitle(QStringLiteral("Chat Grid Settings"));
+    dialog.setWindowTitle(QStringLiteral("Endiginous Settings"));
     auto* layout = new QVBoxLayout(&dialog);
     auto* form = new QFormLayout;
     form->addRow(QStringLiteral("Server endpoint:"), new QLineEdit(endpointEdit_->text(), &dialog));
@@ -108,12 +108,12 @@ void MainWindow::showSettings() {
 
 void MainWindow::showAbout() {
     QDialog dialog(this);
-    dialog.setWindowTitle(QStringLiteral("About Chat Grid Native Qt 6"));
+    dialog.setWindowTitle(QStringLiteral("About Endiginous Native Qt 6"));
     auto* layout = new QVBoxLayout(&dialog);
     auto* text = new QTextEdit(&dialog);
     text->setReadOnly(true);
     text->setPlainText(QStringLiteral(
-        "Chat Grid native Qt 6 foundation\n\n"
+        "Endiginous native Qt 6 foundation\n\n"
         "A platform-neutral Widgets shell with native menus, status, settings, "
         "about, and a placeholder world viewport.\n\n"
         "This is not a release build. Authentication, world protocol, media, "

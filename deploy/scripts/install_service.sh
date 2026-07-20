@@ -20,7 +20,7 @@ fi
 
 sudo tee "$DST_UNIT" >/dev/null <<EOF
 [Unit]
-Description=Chat Grid signaling server
+Description=Endiginous signaling server
 After=network.target
 
 [Service]

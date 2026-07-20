@@ -1,6 +1,6 @@
 # Release Error Audit
 
-Use this note before each Chat Grid release candidate to catch runtime errors that tests and build output do not see.
+Use this note before each Endiginous release candidate to catch runtime errors that tests and build output do not see.
 
 Run:
 
@@ -8,7 +8,7 @@ Run:
 python3 scripts/chatgrid_log_audit.py
 ```
 
-The script reads the current nginx access/error logs for `blind.software` plus `server/runtime/server.log`, groups Chat Grid failures by endpoint/status, and redacts high-value query strings such as media proxy stream URLs.
+The script reads the current nginx access/error logs for `blind.software` plus `server/runtime/server.log`, groups Endiginous failures by endpoint/status, and redacts high-value query strings such as media proxy stream URLs.
 
 ## Current Findings From 2026-07-14
 

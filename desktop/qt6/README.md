@@ -1,7 +1,7 @@
-# Chat Grid native Qt 6 foundation
+# Endiginous native Qt 6 foundation
 
 This directory is an isolated, initial Qt 6 Widgets foundation for a native
-Chat Grid client. It is intentionally disjoint from the existing browser,
+Endiginous client. It is intentionally disjoint from the existing browser,
 wxPython, and Windows client trees. It contains no WebView, browser widget,
 HTML UI, or deployment integration.
 

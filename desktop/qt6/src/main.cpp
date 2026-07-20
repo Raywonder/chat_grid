@@ -4,7 +4,7 @@
 
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
-    application.setApplicationName(QStringLiteral("Chat Grid Native Qt 6"));
+    application.setApplicationName(QStringLiteral("Endiginous Native Qt 6"));
     application.setOrganizationName(QStringLiteral("Divine Creations"));
 
     chatgrid::app::MainWindow window;

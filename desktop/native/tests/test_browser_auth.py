@@ -27,7 +27,7 @@ def test_browser_auth_rejects_wrong_state() -> None:
     except HTTPError as error:
         assert error.code == 400
     thread.join(2)
-    assert errors == ["The browser returned an invalid or expired Chat Grid sign-in response."]
+    assert errors == ["The browser returned an invalid or expired Endiginous sign-in response."]
 
 
 def test_browser_auth_requires_https_origin() -> None:

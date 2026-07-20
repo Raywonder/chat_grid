@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the fixed Chat Grid alarm-system voice prompt library."""
+"""Generate the fixed Endiginous alarm-system voice prompt library."""
 
 from __future__ import annotations
 

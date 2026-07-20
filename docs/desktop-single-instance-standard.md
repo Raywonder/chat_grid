@@ -30,4 +30,4 @@ For each release, test all of these from the installed user-facing build:
 4. Confirm explicit Quit removes the tray icon and process, then a later launch starts normally.
 5. Confirm reconnect/reload recovers the existing UI without duplicating audio, authentication, or background services.
 
-Chat Grid's Electron and accessible wxPython Windows shells are the initial reference implementations.
+Endiginous's Electron and accessible wxPython Windows shells are the initial reference implementations.

@@ -9,7 +9,7 @@
         },
         {
           "keys": "MIDI keyboard",
-          "description": "When piano mode opens, Chat Grid automatically requests MIDI access when the browser allows it. Physical notes play the active piano across the 88-key A0-C8 range."
+          "description": "When piano mode opens, Endiginous automatically requests MIDI access when the browser allows it. Physical notes play the active piano across the 88-key A0-C8 range."
         },
         {
           "keys": "Qwerty row",

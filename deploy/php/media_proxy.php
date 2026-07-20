@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Chat Grid media proxy (compat-focused).
+ * Endiginous media proxy (compat-focused).
  *
  * Usage:
  *   /chgrid/media_proxy.php?url=<urlencoded-remote-url>
@@ -183,7 +183,7 @@ function fetch_rewritten_hls_playlist($url, $requestHeaders, $method, $cookieFil
     curl_setopt($ch, CURLOPT_HEADER, false);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_NOSIGNAL, true);
-    curl_setopt($ch, CURLOPT_USERAGENT, 'ChatGridMediaProxy/1.0');
+    curl_setopt($ch, CURLOPT_USERAGENT, 'EndiginousMediaProxy/1.0');
     curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
     curl_setopt($ch, CURLOPT_HEADERFUNCTION, 'proxy_header_callback');
     apply_proxy_cookie_jar($ch, $cookieFile);
@@ -326,7 +326,7 @@ function require_valid_proxy_session($sessionCheckUrl, $allowedOrigin)
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_NOSIGNAL, true);
-    curl_setopt($ch, CURLOPT_USERAGENT, 'ChatGridMediaProxy/1.0');
+    curl_setopt($ch, CURLOPT_USERAGENT, 'EndiginousMediaProxy/1.0');
     curl_setopt(
         $ch,
         CURLOPT_HTTPHEADER,
@@ -578,7 +578,7 @@ function resolve_safe_redirect_chain($initialUrl, $allowlistSuffixes, $requestHe
         curl_setopt($ch, CURLOPT_HEADER, false);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_NOSIGNAL, true);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'ChatGridMediaProxy/1.0');
+        curl_setopt($ch, CURLOPT_USERAGENT, 'EndiginousMediaProxy/1.0');
         curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
         curl_setopt($ch, CURLOPT_HEADERFUNCTION, 'proxy_header_callback');
         curl_setopt($ch, CURLOPT_NOBODY, true);
@@ -708,7 +708,7 @@ curl_setopt($ch, CURLOPT_TIMEOUT, 0);
 curl_setopt($ch, CURLOPT_HEADER, false);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
 curl_setopt($ch, CURLOPT_NOSIGNAL, true);
-curl_setopt($ch, CURLOPT_USERAGENT, 'ChatGridMediaProxy/1.0');
+curl_setopt($ch, CURLOPT_USERAGENT, 'EndiginousMediaProxy/1.0');
 curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
 curl_setopt($ch, CURLOPT_HEADERFUNCTION, 'proxy_header_callback');
 curl_setopt($ch, CURLOPT_WRITEFUNCTION, 'proxy_write_callback');

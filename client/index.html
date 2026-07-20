@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Chat Grid</title>
+    <title>Endiginous</title>
     <style>
       .hidden,
       [hidden],
@@ -14,14 +14,14 @@
   </head>
   <body class="auth-locked">
     <main class="app">
-      <h1 id="gridTitle">Chat Grid</h1>
+      <h1 id="gridTitle">Endiginous</h1>
       <div id="connectionStatus" role="status" aria-live="polite" aria-atomic="true"></div>
       <section id="loginView" class="auth-panel">
         <h2>Sign in</h2>
         <p class="auth-hint">
-          <a class="button-link" href="/?route=chatgrid_auth_start">Sign in with blind.software</a>
+          <a class="button-link" href="/?route=chatgrid_auth_start">Sign in to Endiginous with blind.software</a>
         </p>
-        <p class="auth-hint">Use the normal blind.software account sign-in, then return here to join the grid.</p>
+        <p class="auth-hint">Use the normal blind.software account sign-in, then return here to join Endiginous.</p>
       </section>
       <section id="authSessionView" class="auth-panel hidden">
         <h2>Logged In</h2>
@@ -32,7 +32,7 @@
         <button id="logoutButton" class="hidden" type="button">Log out</button>
         <button id="settingsButton" type="button">Audio setup</button>
         <button id="disconnectButton" class="hidden" type="button">Disconnect</button>
-        <button id="focusGridButton" class="hidden" type="button" aria-controls="gameCanvas">Chat Grid</button>
+        <button id="focusGridButton" class="hidden" type="button" aria-controls="gameCanvas">Endiginous</button>
         <button id="midiButton" class="hidden" type="button" hidden>Enable MIDI</button>
       </div>
       <div id="deviceSummary" class="auth-required">
@@ -75,7 +75,7 @@
         role="application"
         aria-roledescription="interactive audio world"
         class="auth-required hidden"
-        aria-label="Chat Grid, press question mark for help."
+        aria-label="Endiginous, press question mark for help."
       ></canvas>
       <section
         id="interactiveItemPanel"
@@ -105,7 +105,7 @@
         </section>
         <small id="appVersion">Raywonder/TappedIn version. Original Chat Grid by Jage. Version</small>
         <small id="appGithubLinkWrap">
-          <a id="appGithubLink" href="https://git.tappedin.fm/raywonder/chat_grid">Chat Grid on TappedIn Gitea</a>
+          <a id="appGithubLink" href="https://git.tappedin.fm/raywonder/endiginous">Endiginous on TappedIn Gitea</a>
           <span aria-hidden="true"> · </span>
           <a id="appOriginalLink" href="https://github.com/jage9/chat_grid">Original project</a>
         </small>
@@ -157,12 +157,12 @@
             <legend>ntfy notifications</legend>
             <label class="checkbox-row" for="ntfyNotificationsToggle">
               <input id="ntfyNotificationsToggle" type="checkbox" disabled />
-              Send my Chat Grid identity notifications through ntfy
+              Send my Endiginous identity notifications through ntfy
             </label>
             <p id="ntfyNotificationsStatus" class="auth-hint" aria-live="polite">Sign in and connect to manage ntfy notifications.</p>
             <p><a id="ntfySubscriptionLink" class="hidden" target="_blank" rel="noopener">Open my private ntfy subscription</a></p>
             <button id="rotateNtfyTopicButton" class="hidden" type="button">Replace private ntfy topic</button>
-            <p class="auth-hint">Keep the subscription link private. The same Chat Grid identity settings can be used by web, Windows, macOS, and iOS clients.</p>
+            <p class="auth-hint">Keep the subscription link private. The same Endiginous identity settings can be used by every supported desktop client.</p>
           </fieldset>
           <button id="closeSettingsButton" type="button">Close settings</button>
         </div>

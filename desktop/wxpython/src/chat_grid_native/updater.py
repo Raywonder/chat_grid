@@ -42,7 +42,7 @@ class UpdateManifest:
             version=str(data.get("version", "")).strip(),
             download_url=str(data.get("downloadUrl") or data.get("download_url") or platform.get("downloadUrl") or platform.get("url") or "").strip(),
             sha256=str(data.get("sha256") or platform.get("sha256") or "").strip().lower(),
-            file_name=str(data.get("fileName") or data.get("file_name") or platform.get("fileName") or "ChatGridSetup.exe").strip(),
+            file_name=str(data.get("fileName") or data.get("file_name") or platform.get("fileName") or "EndiginousSetup.exe").strip(),
             release_notes=str(data.get("releaseNotes") or data.get("release_notes") or "").strip(),
             silent_args=str(data.get("silentArgs") or platform.get("silentArgs") or DEFAULT_SILENT_ARGS).strip(),
         )
@@ -82,7 +82,7 @@ class UpdateService:
         manifest.validate()
         updates = self.root / "updates"
         updates.mkdir(parents=True, exist_ok=True)
-        target = updates / f"ChatGridSetup-{manifest.version}.exe"
+        target = updates / manifest.file_name
         temporary = target.with_suffix(".download")
         digest = hashlib.sha256()
         with requests.get(manifest.download_url, stream=True, timeout=(5, 120)) as response:

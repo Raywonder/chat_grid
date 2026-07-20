@@ -1,17 +1,17 @@
-#define MyAppName "Chat Grid"
-#define MyAppVersion "0.3.9"
+#define MyAppName "Endiginous"
+#define MyAppVersion "0.4.1"
 #define MyAppPublisher "Raywonder / TappedIn"
-#define MyAppExeName "ChatGrid.exe"
+#define MyAppExeName "Endiginous.exe"
 
 [Setup]
 AppId={{8E748C80-7600-4AA2-97CC-834088D47792}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={localappdata}\Programs\Chat Grid
-DefaultGroupName=Chat Grid
+DefaultDirName={localappdata}\Programs\Endiginous
+DefaultGroupName=Endiginous
 OutputDir=..\release
-OutputBaseFilename=ChatGridSetup-0.3.9
+OutputBaseFilename=EndiginousSetup-0.4.1
 Compression=lzma2
 SolidCompression=yes
 PrivilegesRequired=lowest
@@ -22,14 +22,18 @@ RestartApplications=yes
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Files]
-Source: "..\dist\ChatGrid\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\Endiginous\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[InstallDelete]
+Type: files; Name: "{autodesktop}\Endiginous.lnk"
+Type: files; Name: "{group}\Endiginous.lnk"
 
 [Icons]
-Name: "{group}\Chat Grid"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\Chat Grid"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{group}\Endiginous"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\Endiginous"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
-Root: HKCU; Subkey: "Software\Classes\chatgrid"; ValueType: string; ValueName: ""; ValueData: "URL:Chat Grid Protocol"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\chatgrid"; ValueType: string; ValueName: ""; ValueData: "URL:Endiginous Protocol"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\chatgrid"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
 Root: HKCU; Subkey: "Software\Classes\chatgrid\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
 Root: HKCU; Subkey: "Software\Classes\chatgrid\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
@@ -38,4 +42,4 @@ Root: HKCU; Subkey: "Software\Classes\chatgrid\shell\open\command"; ValueType: s
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch Chat Grid"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch Endiginous"; Flags: nowait postinstall skipifsilent

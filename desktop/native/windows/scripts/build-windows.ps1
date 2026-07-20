@@ -18,7 +18,7 @@ if (-not (Test-Path $Python)) {
             }
         }
     }
-    if (-not $Created) { throw "Python 3.11-3.13 x64 is required to build Chat Grid." }
+    if (-not $Created) { throw "Python 3.11-3.13 x64 is required to build Endiginous." }
 }
 & $Python -m pip install --upgrade pip
 & $Python -m pip install -e "$Root[build,test]"
@@ -29,7 +29,7 @@ if (-not (Test-Path $Assets)) {
 }
 $Args = @(
     "-m", "PyInstaller", "--noconfirm", "--clean", "--windowed",
-    "--name", "ChatGrid", "--collect-all", "wx", "--hidden-import", "wx.html2",
+    "--name", "Endiginous", "--collect-all", "wx", "--hidden-import", "wx.html2",
     "--distpath", (Join-Path $PlatformRoot "dist"), "--workpath", (Join-Path $PlatformRoot "build"),
     "--specpath", $PlatformRoot
 )

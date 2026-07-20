@@ -8,7 +8,7 @@ This is behavior-focused documentation for item types and their defaults.
 - Item placement, visibility, containment, attachment, and carry/drop rules should
   follow real-world plausibility. If an object would not sensibly be inside,
   outside, hidden in, attached to, carried from, or separated from another object
-  in a real scenario, Chat Grid should not model it that way. Examples: internal
+  in a real scenario, Endiginous should not model it that way. Examples: internal
   speaker components can be hidden/attached as part of one radio system, but a
   freestanding billboard should not be treated as being inside a pocket-like
   object; room fixtures should stay in their room unless a feature explicitly
@@ -150,7 +150,7 @@ This is behavior-focused documentation for item types and their defaults.
 - Bank items are fixed service counters. They are intentionally not carryable;
   users navigate to bank branches on the map the same way they navigate to other
   places and items.
-- Logged-in users are auto-linked to an eCrypto account by their Chat Grid user id.
+- Logged-in users are auto-linked to an eCrypto account by their Endiginous user id.
 - `use` reports the current user's linked eCrypto status, including internal
   test-chain `TEST-ECR` balance and connected wallet counts.
 - `secondary use` reports bank details and command help.
@@ -158,12 +158,12 @@ This is behavior-focused documentation for item types and their defaults.
 - `/ecrypto wallets` lists connected test and real-chain wallet records.
 - `/ecrypto connect <test|real> <chain> <address> [label]` links a wallet record
   to the current user's eCrypto account. Real-chain links are stored for account
-  use, but Chat Grid does not send real-chain transactions until an approved
+  use, but Endiginous does not send real-chain transactions until an approved
   provider/signature flow is wired.
 - `/ecrypto faucet [amount]` credits internal test-chain `TEST-ECR` for grid
   testing.
 - `/ecrypto transfer <username> <amount> [memo]` transfers internal test-chain
-  `TEST-ECR` between Chat Grid accounts.
+  `TEST-ECR` between Endiginous accounts.
 
 ### Validation
 - `serviceScope`: `wallets | wallets_transfers | deposits_withdrawals | full_service | information_only`
@@ -412,7 +412,7 @@ This is behavior-focused documentation for item types and their defaults.
 ### Validation
 - `serviceKind`: `app | door | game | house | room | service | site | station | tool | portal`
 - `url`: empty, absolute public `http/https` URL, or site-relative path
-- `targetLocation`: optional Chat Grid location id or room entered when the service is used
+- `targetLocation`: optional Endiginous location id or room entered when the service is used
 - `portalDestinationMode`: `random | static`
 - `portalLocationPool`: optional comma-separated location ids
 - `doorState`: `unlocked | locked`
@@ -428,13 +428,13 @@ This is behavior-focused documentation for item types and their defaults.
 - `enabled`: boolean or on/off style input
 
 ### Built-In Seeds
-- City: `Chat Grid Radio` with SoulFoodRadio, DivineCreations radio, Chris Mix Radio, StreamMadness, Tony Gebhard Radio, VoiceLink-popular streams, and ACB Media 1 through 10 as knob presets, plus `AAAStreamer`, `blind.software`, `tappedin.fm`, and portals to Town, Arcade, Offices, and Houses
+- City: `Endiginous Radio` with SoulFoodRadio, DivineCreations radio, Chris Mix Radio, StreamMadness, Tony Gebhard Radio, VoiceLink-popular streams, and ACB Media 1 through 10 as knob presets, plus `AAAStreamer`, `blind.software`, `tappedin.fm`, and portals to Town, Arcade, Offices, and Houses
 - Town: `tCast`, `Bema Media Player`, `Thrive Messenger`, and a return portal to Main City
 
 ### BlindSoftware Catalog Placement
 - Software catalog entries should credit the software author or publisher in `softwareAuthor`; verification status is a trust marker, not a substitute for attribution.
 - Public-safe software can be discoverable spatially through grid locations, forums/squares, portals, and billboards. A town-square billboard may rotate a showcase of software entries, while forum-style areas may let guests and members browse nearby software through normal item interaction.
-- Town Square has a public café interior with accessible clear approaches, two tables, four usable chairs, a service counter, a spatial café ambience bed, a wall-mounted World Cup TV, and an adjacent accessible live-score billboard. The score board refreshes from FIFA's official public match-calendar JSON feed and links to FIFA's schedule/results page. No match video or commentary audio is restreamed by Chat Grid; broadcaster rights and regional availability remain external.
+- Town Square has a public café interior with accessible clear approaches, two tables, four usable chairs, a service counter, a spatial café ambience bed, a wall-mounted World Cup TV, and an adjacent accessible live-score billboard. The score board refreshes from FIFA's official public match-calendar JSON feed and links to FIFA's schedule/results page. No match video or commentary audio is restreamed by Endiginous; broadcaster rights and regional availability remain external.
 
 ### FIFA live-score provider dependency
 
@@ -443,7 +443,7 @@ This is behavior-focused documentation for item types and their defaults.
 - Authentication/secrets: none.
 - Cost: none known for the public endpoint.
 - Refresh: every 30 seconds; the last good in-world text remains if FIFA is temporarily unavailable.
-- Viewing: the board links to FIFA's official schedule/results and where-to-watch information; Chat Grid does not rebroadcast protected match media.
+- Viewing: the board links to FIFA's official schedule/results and where-to-watch information; Endiginous does not rebroadcast protected match media.
 - Signed-in users can monitor content they own from the owned-content overview, which lists their items and grid coordinates without granting broader admin powers.
 - Arcade: `Moonstep Runner`, `Future games shelf`, `Clawdia's toolkit`, and a return portal to Main City
 - Offices: `VoiceLink`, `OpenLink`, `OpenClaw and Clawdia`, `FlexPBX`, and a return portal to Main City
@@ -490,7 +490,7 @@ This is behavior-focused documentation for item types and their defaults.
 - `objectKind` includes everyday objects plus `remote`, `speaker`, `radio`, and `tv`.
 - TV objects follow the same shared-media power rule as radios: disconnecting, switching users, or reconnecting must not turn a TV off. Only an explicit user action should change the TV object's `enabled` state.
 - Video-capable TV sources expose a visible native-controls screen while program audio stays spatial and synchronized. Audio-described MP3 programs remain audio-first and do not create a blank video panel.
-- TV objects can be mounted with `placement="wall"`. Every TV receives the shared server-managed channel catalog: the 14 live TV channels from `https://2.onj.me/guide.html`, followed by the existing Chat Grid stream presets. The guide is also exposed as a browseable `tvProviderSources` entry, and the universal TV remote tunes this shared preset list across linked TVs.
+- TV objects can be mounted with `placement="wall"`. Every TV receives the shared server-managed channel catalog: the 14 live TV channels from `https://2.onj.me/guide.html`, followed by the existing Endiginous stream presets. The guide is also exposed as a browseable `tvProviderSources` entry, and the universal TV remote tunes this shared preset list across linked TVs.
 - Radio remotes expose `remoteControlLinkedRadios`. When true, the remote tunes/adjusts compatible connected radios and speakers in the current location; Raywonder house radios may additionally share their explicitly linked set across house rooms. When false, it controls only the nearest/current-location radio.
 - TV remotes expose `remoteControlLinkedTvs`. When true, remote channel and volume controls apply to the connected house TV system; when false, they target the nearest/current-room TV.
 - `tvLibrarySources` describes approved movie, show, and miscellaneous libraries; `tvProviderSources` describes approved online sources such as Jellyfin and Pluto TV. These entries are server-managed metadata and must not contain credentials.

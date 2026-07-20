@@ -23,7 +23,7 @@ if (-not (Test-Path $Python)) {
 }
 & $Python -m pip install --upgrade pip
 & $Python -m pip install -e "$Root[build,test]"
-$PytestBase = Join-Path $Root "build\pytest-temp"
+$PytestBase = "C:\BuildCache\EndiginousPytestTemp"
 if (Test-Path $PytestBase) {
     Remove-Item -Recurse -Force $PytestBase
 }
@@ -38,7 +38,7 @@ if (-not (Test-Path $Assets)) {
 }
 $Args = @(
     "-m", "PyInstaller", "--noconfirm", "--clean", "--windowed",
-    "--name", "ChatGrid", "--collect-all", "wx", "--hidden-import", "wx.html2",
+    "--name", "Endiginous", "--collect-all", "wx", "--hidden-import", "wx.html2",
     "--paths", (Join-Path $Root "src"),
     "--distpath", (Join-Path $Root "dist"), "--workpath", (Join-Path $Root "build"),
     "--specpath", $Root
@@ -58,7 +58,7 @@ if (Test-Path $Assets) {
 }
 $Args += (Join-Path $Root "src\chat_grid_native\__main__.py")
 & $Python @Args
-$DistRoot = Join-Path $Root "dist\ChatGrid"
+$DistRoot = Join-Path $Root "dist\Endiginous"
 Copy-Item (Join-Path $Root "..\..\LICENSE") (Join-Path $DistRoot "LICENSE.txt") -Force
 Copy-Item (Join-Path $Root "..\..\THIRD_PARTY_NOTICES.md") (Join-Path $DistRoot "THIRD_PARTY_NOTICES.md") -Force
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" (Join-Path $Root "installer\ChatGrid.iss")

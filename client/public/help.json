@@ -1,7 +1,7 @@
 {
   "sections": [
     {
-      "title": "Chat Grid Help",
+      "title": "Endiginous Help",
       "items": [
         {
           "keys": "Admin menu, Location ambience",
@@ -218,7 +218,7 @@
         },
         {
           "keys": "AAAStreamer and radio",
-          "description": "Chat Grid Radio holds SoulFoodRadio, DivineCreations, Chris Mix Radio, StreamMadness, VoiceLink-popular streams, and ACB Media presets in one tunable radio item"
+          "description": "Endiginous Radio holds SoulFoodRadio, DivineCreations, Chris Mix Radio, StreamMadness, VoiceLink-popular streams, and ACB Media presets in one tunable radio item"
         },
         {
           "keys": "Moonstep Runner and games",

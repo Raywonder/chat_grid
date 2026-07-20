@@ -22,7 +22,7 @@ def test_native_file_menu_does_not_use_single_item_submenus():
     assert "connection_menu" not in source
     assert "information_menu" not in source
     assert "self.browser_sign_in_item = file_menu.Append(" in source
-    assert '"Sign in with &browser\\tCtrl+Shift+S"' in source
+    assert '"Sign in to &server\\tCtrl+Shift+S"' in source
     assert 'label = "Sign &out\\tCtrl+Shift+S" if signed_in' in source
 
 

@@ -26,7 +26,7 @@ function normalizeChatGridUrl(value) {
   if (!raw) return DEFAULT_CHAT_GRID_URL;
   const url = new URL(raw);
   if (!ALLOWED_PROTOCOLS.has(url.protocol)) {
-    throw new Error('Chat Grid URL must start with http:// or https://.');
+    throw new Error('Endiginous URL must start with http:// or https://.');
   }
   return url.toString();
 }
@@ -87,13 +87,13 @@ function createTrayIcon() {
 function createTray() {
   if (tray) return;
   tray = new Tray(createTrayIcon());
-  tray.setToolTip('Chat Grid');
+  tray.setToolTip('Endiginous');
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Open Chat Grid', click: () => showMainWindow({ recover: true }) },
-    { label: 'Reload Chat Grid', click: () => loadChatGrid() },
+    { label: 'Open Endiginous', click: () => showMainWindow({ recover: true }) },
+    { label: 'Reload Endiginous', click: () => loadChatGrid() },
     { type: 'separator' },
     {
-      label: 'Quit Chat Grid',
+      label: 'Quit Endiginous',
       click: () => {
         isQuitting = true;
         app.quit();
@@ -109,10 +109,10 @@ async function promptForChatGridUrl() {
   const current = getCurrentUrl();
   const result = await dialog.showMessageBox(mainWindow, {
     type: 'question',
-    title: 'Chat Grid URL',
-    message: 'Choose which Chat Grid to open.',
+    title: 'Endiginous URL',
+    message: 'Choose which Endiginous to open.',
     detail: `Current URL:\n${current}`,
-    buttons: ['Use live Chat Grid', 'Use local development', 'Cancel'],
+    buttons: ['Use live Endiginous', 'Use local development', 'Cancel'],
     defaultId: 0,
     cancelId: 2,
     noLink: true,
@@ -126,11 +126,11 @@ async function promptForChatGridUrl() {
 function createApplicationMenu() {
   const template = [
     {
-      label: 'Chat Grid',
+      label: 'Endiginous',
       submenu: [
         { label: 'Reload', accelerator: 'Ctrl+R', click: () => mainWindow?.reload() },
         { label: 'Focus Grid', accelerator: 'Ctrl+G', click: () => mainWindow?.webContents.send('chat-grid-focus') },
-        { label: 'Chat Grid URL...', accelerator: 'Ctrl+Shift+U', click: promptForChatGridUrl },
+        { label: 'Endiginous URL...', accelerator: 'Ctrl+Shift+U', click: promptForChatGridUrl },
         { label: 'Cast to device...', accelerator: 'Ctrl+Shift+C', click: () => mainWindow?.webContents.executeJavaScript("window.dispatchEvent(new Event('chatgrid-cast-to-device'));") },
         { type: 'separator' },
         { label: 'Open Current Page in Browser', click: () => mainWindow && shell.openExternal(mainWindow.webContents.getURL()) },
@@ -178,7 +178,7 @@ function createWindow() {
     height: 820,
     minWidth: 720,
     minHeight: 520,
-    title: 'Chat Grid',
+    title: 'Endiginous',
     backgroundColor: '#111827',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

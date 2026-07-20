@@ -1,12 +1,12 @@
 {
-  "version": "0.4.0",
-  "revision": "R503",
-  "releaseNotes": "Includes the current Chat Grid companion voice delivery fix and the accessible native Windows client.",
+  "version": "0.4.1",
+  "revision": "R505",
+  "releaseNotes": "Renames the accessible Windows client to Endiginous, updates the bundled web runtime to R505, keeps existing chatgrid:// sign-in/update compatibility, and preserves verified automatic update installation.",
   "platforms": {
     "windows": {
-      "url": "https://blind.software/chatgrid/downloads/ChatGridSetup-0.4.0.exe",
-      "fileName": "ChatGridSetup-0.4.0.exe",
-      "sha256": "ef03a7e4a0166686477cc6f407e3f06d91e4008d3381a3260ca3b2a0bd1539f7",
+      "url": "https://blind.software/chatgrid/downloads/EndiginousSetup-0.4.1.exe",
+      "fileName": "EndiginousSetup-0.4.1.exe",
+      "sha256": "c675256cdceb7883b95d5db1a445a0be345fdfcd22d37cc6ee5344fc7f56d43d",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }
   }

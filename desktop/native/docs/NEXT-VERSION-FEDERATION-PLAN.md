@@ -1,10 +1,10 @@
-# Chat Grid Next-Version Federation Plan
+# Endiginous Next-Version Federation Plan
 
 ## Goal
 
-Let a user sign in once through the official portal and enter Chat Grid without
+Let a user sign in once through the official portal and enter Endiginous without
 knowing which domain currently hosts the selected world. A client may begin at
-`blind.software` and be quietly handed to any approved, healthy Chat Grid
+`blind.software` and be quietly handed to any approved, healthy Endiginous
 instance, provided that instance is federated, current, and has the assets
 required by the destination world.
 
@@ -21,7 +21,11 @@ complete.
 ## User Experience
 
 1. The user opens the web or native client and chooses **Connect**.
-2. The client opens the central portal login when no valid session exists.
+2. The client opens the central portal login when no valid session exists. The
+   portal presents the login methods enabled on that BlindSoftware account,
+   including Mastodon/fediverse authentication when the account owner has
+   configured it. The client does not hard-code BlindSoftware username/password
+   as the only path.
 3. The portal resolves the account, requested world, permissions, and best
    available federated server.
 4. The portal returns a short-lived, single-use handoff—not a password or
@@ -41,13 +45,61 @@ complete.
 ### Portal and identity authority
 
 - Maintain one canonical account identifier per person.
-- Keep passwords, MFA, recovery, subscription status, bans, and account
-  ownership authoritative at the portal.
+- Keep passwords, Mastodon/fediverse provider links, MFA, recovery,
+  subscription status, bans, notification routing, and account ownership
+  authoritative at the portal.
+- Treat BlindSoftware as the account authority, not as the only credential
+  type. A user may authenticate with any login method enabled and verified on
+  that account, including local password, passkey/future MFA methods, and
+  Mastodon/fediverse OAuth where configured.
 - Give each hosted server its own revocable machine identity and signing keys.
 - Synchronize only the account claims a server needs: canonical user ID,
-  display identity, roles/entitlements, moderation state, and claim version.
+  display identity, linked-provider summary, roles/entitlements, moderation
+  state, notification preference claims, and claim version.
 - Never replicate password hashes, recovery secrets, portal cookies, or MFA
-  seeds to world servers.
+  seeds to world servers. Never replicate Mastodon access tokens or private
+  provider refresh tokens to world servers or clients.
+
+### Account login providers
+
+- The portal owns provider discovery. Clients ask for an authorization route
+  and render the accessible provider choices returned by the portal; they do
+  not ship a fixed list that can drift from the account settings.
+- If BlindSoftware local login is disabled for a user but Mastodon login is
+  enabled and verified, the same browser/native connect flow must still work.
+- Provider callbacks resolve to the canonical BlindSoftware account before any
+  Endiginous handoff is issued. Provider display names, handles, or domains are
+  never treated as standalone Endiginous identity.
+- Handoff grants contain canonical account claims only. They may include a
+  non-secret provider label for UI clarity, but never provider tokens, secrets,
+  or raw OAuth callback parameters.
+- Account-linking, unlinking, provider consent, and recovery remain portal
+  actions. World servers can request fresh claims but cannot add or remove
+  login providers.
+- Acceptance coverage must include local login, Mastodon login, local-login
+  disabled with Mastodon enabled, expired/revoked provider authorization, and a
+  provider handle that does not map to a verified BlindSoftware account.
+
+### Account notification routing
+
+- Endiginous notifications are account features. The client should surface the
+  notification destinations enabled on the signed-in BlindSoftware account,
+  such as in-grid notifications and private ntfy topics, rather than requiring
+  each client install to configure its own unrelated destination.
+- ntfy preferences stay server-backed and identity-scoped. Web, Windows,
+  macOS, and future iOS clients should read/write the same account preference
+  packet and display whether ntfy is available, enabled, disabled, or needs
+  portal setup.
+- When ntfy is enabled and the account has a valid private topic, targeted
+  identity events should publish through the approved server-side publisher.
+  Clients must never contain publisher credentials.
+- If ntfy is unavailable, misconfigured, rotated, or disabled, the event should
+  still create the in-grid/account notification and report an accessible,
+  non-secret status to the user or admin surface. Notification failures must
+  not block login, world entry, or account handoff.
+- Future notification destinations should follow the same model: user-enabled
+  account preferences, server-side delivery, no client secrets, clear
+  per-destination status, and graceful fallback to in-grid notifications.
 
 ### Federation registry
 
@@ -213,7 +265,7 @@ reports.
 
 - No password database replication between hosted servers.
 - No arbitrary user-entered server URLs in the standard UI.
-- No automatic trust of a domain merely because it runs Chat Grid software.
+- No automatic trust of a domain merely because it runs Endiginous software.
 - No transparent migration of volatile live-world state unless that state has a
   separately designed, tested replication contract.
 - No production rollout before the multi-topology development federation passes

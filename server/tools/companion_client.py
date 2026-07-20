@@ -1,4 +1,4 @@
-"""Command-file controlled Chat Grid companion client.
+"""Command-file controlled Endiginous companion client.
 
 This lightweight websocket client gives a server-side agent a visible grid
 presence without needing a browser tab. It logs in or registers one account,
@@ -204,7 +204,7 @@ def _clamp_position(value: object, fallback: int, grid_size: int) -> int:
 
 
 class CompanionClient:
-    """Maintains one Chat Grid websocket session and applies command-file input."""
+    """Maintains one Endiginous websocket session and applies command-file input."""
 
     def __init__(
         self,

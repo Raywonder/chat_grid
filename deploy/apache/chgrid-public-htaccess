@@ -1,4 +1,4 @@
-# Chat Grid publish-dir cache policy.
+# Endiginous publish-dir cache policy.
 # Applied to /chgrid/.htaccess by deploy_client.sh.
 
 <IfModule mod_headers.c>

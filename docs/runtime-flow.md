@@ -11,8 +11,16 @@
    - includes `serverVersion` and `expectedClientRevision` for stale-client detection before login.
    - includes `authPolicy` limits for username/password.
 6. Client sends `auth_login` or `auth_register` (or explicit `auth_resume` if provided by caller).
+   Future portal-backed clients should treat this as the local/direct fallback:
+   the preferred browser/native flow asks the BlindSoftware portal for an
+   account-auth route, lets the user use any login method enabled on that
+   account such as local login or Mastodon/fediverse authentication, and returns
+   a short-lived Endiginous authorization code or handoff for the canonical
+   account.
 7. Server sends `auth_result`.
    - includes role + permissions for authenticated session.
+   - includes canonical account claims; external-provider secrets such as
+     Mastodon access/refresh tokens must never be included.
 8. Client persists authenticated session into instance-scoped server-managed `HttpOnly` cookie helpers under the active app base path via `GET <base_path>auth/session/set` (`Authorization: Bearer <sessionToken>`, `X-Chgrid-Auth-Client: 1`), and clears it via `GET <base_path>auth/session/clear` on logout/session errors.
    - the optional PHP media proxy validates that same cookie through `GET <base_path>auth/session/check` before relaying media
 9. Server sends `welcome` with users/items snapshot.

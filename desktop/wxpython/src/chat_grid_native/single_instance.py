@@ -1,4 +1,4 @@
-"""Windows single-instance activation for the native Chat Grid client."""
+"""Windows single-instance activation for the native Endiginous client."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ class SingleInstanceActivation:
         kernel32.SetLastError(0)
         handle = kernel32.CreateEventW(None, False, False, ACTIVATION_EVENT_NAME)
         if not handle:
-            raise OSError(ctypes.get_last_error(), "Unable to create Chat Grid activation event")
+            raise OSError(ctypes.get_last_error(), "Unable to create Endiginous activation event")
         if kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
             kernel32.SetEvent(handle)
             kernel32.CloseHandle(handle)

@@ -1,11 +1,11 @@
 {
-  "version": "0.3.6",
-  "releaseNotes": "Moves desktop audio setup under File > Settings, removes the duplicate native status strip, hides non-navigation audio controls from the native world surface, and retains all connection, speech, and dialog fixes.",
+  "version": "0.4.1",
+  "releaseNotes": "Renames the desktop client to Endiginous, updates the bundled web runtime to R505, keeps existing chatgrid:// sign-in/update compatibility, and preserves verified automatic update installation.",
   "platforms": {
     "windows": {
-      "url": "https://blind.software/chatgrid/downloads/ChatGridSetup-0.3.6.exe",
-      "fileName": "ChatGridSetup-0.3.6.exe",
-      "sha256": "1f78207f7550b7909cf18fe733a6c5a61af9719f708436466fd4e9e86b35da5a",
+      "url": "https://blind.software/chatgrid/downloads/EndiginousSetup-0.4.1.exe",
+      "fileName": "EndiginousSetup-0.4.1.exe",
+      "sha256": "c675256cdceb7883b95d5db1a445a0be345fdfcd22d37cc6ee5344fc7f56d43d",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }
   }

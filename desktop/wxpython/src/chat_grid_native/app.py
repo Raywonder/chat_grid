@@ -1,4 +1,4 @@
-"""Accessible wxPython shell around the shared Chat Grid client."""
+"""Accessible wxPython shell around the shared Endiginous client."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ChatGridTrayIcon(wx.adv.TaskBarIcon):
-    """System-tray access to the one running Chat Grid window."""
+    """System-tray access to the one running Endiginous window."""
 
     def __init__(self, frame: "MainFrame") -> None:
         super().__init__()
@@ -33,7 +33,7 @@ class ChatGridTrayIcon(wx.adv.TaskBarIcon):
         bitmap = wx.ArtProvider.GetBitmap(wx.ART_INFORMATION, wx.ART_OTHER, (16, 16))
         icon = wx.Icon()
         icon.CopyFromBitmap(bitmap)
-        self.SetIcon(icon, "Chat Grid")
+        self.SetIcon(icon, "Endiginous")
         self.Bind(wx.adv.EVT_TASKBAR_LEFT_DOWN, lambda _event: frame.show_from_tray())
         self.Bind(wx.adv.EVT_TASKBAR_LEFT_DCLICK, lambda _event: frame.show_from_tray())
 
@@ -43,10 +43,10 @@ class ChatGridTrayIcon(wx.adv.TaskBarIcon):
         open_id = wx.NewIdRef()
         reconnect_id = wx.NewIdRef()
         quit_id = wx.NewIdRef()
-        menu.Append(open_id, "Open Chat Grid")
-        menu.Append(reconnect_id, "Reconnect Chat Grid")
+        menu.Append(open_id, "Open Endiginous")
+        menu.Append(reconnect_id, "Reconnect Endiginous")
         menu.AppendSeparator()
-        menu.Append(quit_id, "Quit Chat Grid")
+        menu.Append(quit_id, "Quit Endiginous")
         self.Bind(wx.EVT_MENU, lambda _event: self.frame.show_from_tray(), id=open_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.frame.reload_from_tray(), id=reconnect_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.frame.request_exit(), id=quit_id)
@@ -57,12 +57,12 @@ class SettingsDialog(wx.Dialog):
     """Accessible desktop behavior settings."""
 
     def __init__(self, parent: wx.Window, settings: Settings) -> None:
-        super().__init__(parent, title="Chat Grid desktop settings")
+        super().__init__(parent, title="Endiginous desktop settings")
         self.settings = settings
         panel = wx.Panel(self)
         layout = wx.BoxSizer(wx.VERTICAL)
 
-        self.startup = wx.CheckBox(panel, label="Start Chat Grid when I sign in to Windows")
+        self.startup = wx.CheckBox(panel, label="Start Endiginous when I sign in to Windows")
         self.startup.SetValue(settings.start_with_windows)
         layout.Add(self.startup, 0, wx.ALL, 8)
         self.minimized = wx.CheckBox(panel, label="Start minimized when Windows starts")
@@ -94,7 +94,7 @@ class UpdateInstallCountdown(wx.Dialog):
     """Give the user a visible, cancellable pause before update installation."""
 
     def __init__(self, parent: wx.Window, version: str, seconds: int = 5) -> None:
-        super().__init__(parent, title="Chat Grid update ready")
+        super().__init__(parent, title="Endiginous update ready")
         self.remaining = max(1, seconds)
         panel = wx.Panel(self)
         layout = wx.BoxSizer(wx.VERTICAL)
@@ -107,7 +107,7 @@ class UpdateInstallCountdown(wx.Dialog):
         outer = wx.BoxSizer(wx.VERTICAL)
         outer.Add(panel, 1, wx.EXPAND)
         self.SetSizerAndFit(outer)
-        self.message.SetLabel(f"Chat Grid {version} will close and install the verified update in {self.remaining} seconds.")
+        self.message.SetLabel(f"Endiginous {version} will close and install the verified update in {self.remaining} seconds.")
         self.timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._tick, self.timer)
         self.Bind(wx.EVT_CHAR_HOOK, self._on_key)
@@ -121,7 +121,7 @@ class UpdateInstallCountdown(wx.Dialog):
             self.EndModal(wx.ID_OK)
             return
         self.message.SetLabel(
-            f"Chat Grid will close and install the verified update in {self.remaining} seconds."
+            f"Endiginous will close and install the verified update in {self.remaining} seconds."
         )
 
     def _on_key(self, event: wx.KeyEvent) -> None:
@@ -148,8 +148,8 @@ class MainFrame(wx.Frame):
 
         self.panel = wx.Panel(self)
         self.layout = wx.BoxSizer(wx.VERTICAL)
-        self.status = wx.StaticText(self.panel, label="Starting Chat Grid.")
-        self.status.SetName("Chat Grid status")
+        self.status = wx.StaticText(self.panel, label="Starting Endiginous.")
+        self.status.SetName("Endiginous status")
         self.layout.Add(self.status, 0, wx.EXPAND | wx.ALL, 6)
         self.web = self._create_webview()
         self.layout.Add(self.web, 1, wx.EXPAND)
@@ -157,7 +157,7 @@ class MainFrame(wx.Frame):
 
         self._build_menu()
         self.CreateStatusBar()
-        self.SetStatusText("Starting Chat Grid")
+        self.SetStatusText("Starting Endiginous")
         self.Bind(wx.EVT_TIMER, self._on_reconnect_timer, self.reconnect_timer)
         self.Bind(wx.EVT_CLOSE, self._on_close)
         self.Bind(wx.EVT_ICONIZE, self._on_iconize)
@@ -189,12 +189,12 @@ class MainFrame(wx.Frame):
         file_menu.Append(cast_id, "Cast to &device...\tCtrl+Shift+C")
         file_menu.Append(tray_id, "&Minimize to system tray\tCtrl+M")
         file_menu.AppendSeparator()
-        file_menu.Append(wx.ID_EXIT, "E&xit Chat Grid\tAlt+F4")
+        file_menu.Append(wx.ID_EXIT, "E&xit Endiginous\tAlt+F4")
         menu_bar.Append(file_menu, "&File")
         help_menu = wx.Menu()
         update_id = wx.NewIdRef()
         help_menu.Append(update_id, "Check for &updates")
-        help_menu.Append(wx.ID_ABOUT, "&About Chat Grid")
+        help_menu.Append(wx.ID_ABOUT, "&About Endiginous")
         menu_bar.Append(help_menu, "&Help")
         self.SetMenuBar(menu_bar)
         self.Bind(wx.EVT_MENU, lambda _event: self._reload(), id=reconnect_id)
@@ -224,7 +224,7 @@ class MainFrame(wx.Frame):
             if not web:
                 raise RuntimeError("No usable wx.html2 WebView backend is installed")
             LOGGER.info("Using default wx.html2 WebView backend")
-        web.SetName("Chat Grid world")
+        web.SetName("Endiginous world")
         web.Bind(wx.html2.EVT_WEBVIEW_LOADED, self._on_loaded)
         web.Bind(wx.html2.EVT_WEBVIEW_ERROR, self._on_error)
         return web
@@ -249,7 +249,7 @@ class MainFrame(wx.Frame):
     def _on_loaded(self, _event: wx.html2.WebViewEvent) -> None:
         self.reconnect_timer.Stop()
         self.backoff.reset()
-        self._announce("Chat Grid loaded. Session and reconnect monitoring are active.")
+        self._announce("Endiginous loaded. Session and reconnect monitoring are active.")
         if self.settings.auto_connect:
             self.web.RunScript("setTimeout(() => document.getElementById('connectButton')?.click(), 500);")
         # Native WebView focus alone does not activate the web world's
@@ -313,10 +313,10 @@ class MainFrame(wx.Frame):
         self._prepare_exit()
 
     def _prepare_exit(self) -> None:
-        self._announce("Chat Grid will exit after the countdown.")
-        with UpdateInstallCountdown(self, "exit Chat Grid") as dialog:
+        self._announce("Endiginous will exit after the countdown.")
+        with UpdateInstallCountdown(self, "exit Endiginous") as dialog:
             if dialog.ShowModal() != wx.ID_OK:
-                self._announce("Exit cancelled. Chat Grid will keep running.")
+                self._announce("Exit cancelled. Endiginous will keep running.")
                 return
         self.force_quit = True
         self.Close()
@@ -345,10 +345,10 @@ class MainFrame(wx.Frame):
                 manifest = service.check()
                 if manifest is None:
                     if interactive:
-                        wx.CallAfter(self._announce, "Chat Grid is up to date.")
+                        wx.CallAfter(self._announce, "Endiginous is up to date.")
                     return
                 if not self.settings.auto_update and not interactive:
-                    wx.CallAfter(self._announce, f"Chat Grid {manifest.version} is available.")
+                    wx.CallAfter(self._announce, f"Endiginous {manifest.version} is available.")
                     return
                 installer = service.download(manifest)
                 wx.CallAfter(self._prepare_update_install, service, installer, manifest)
@@ -363,10 +363,10 @@ class MainFrame(wx.Frame):
     def _prepare_update_install(self, service: UpdateService, installer: Path, manifest: object) -> None:
         """Show the countdown on the UI thread before closing for installation."""
         version = str(getattr(manifest, "version", "the update"))
-        self._announce(f"Chat Grid {version} is verified and ready to install.")
+        self._announce(f"Endiginous {version} is verified and ready to install.")
         with UpdateInstallCountdown(self, version) as dialog:
             if dialog.ShowModal() != wx.ID_OK:
-                self._announce("Update cancelled. Chat Grid will keep running.")
+                self._announce("Update cancelled. Endiginous will keep running.")
                 return
         service.install_after_exit(installer, manifest)
         self.force_quit = True
@@ -374,8 +374,8 @@ class MainFrame(wx.Frame):
 
     def _show_about(self, _event: wx.CommandEvent) -> None:
         wx.MessageBox(
-            f"Chat Grid {__version__}\nOfficial accessible Windows client by Raywonder / TappedIn.",
-            "About Chat Grid", wx.OK | wx.ICON_INFORMATION, self,
+            f"Endiginous {__version__}\nOfficial accessible Windows client by Raywonder / TappedIn.",
+            "About Endiginous", wx.OK | wx.ICON_INFORMATION, self,
         )
 
     def _on_char_hook(self, event: wx.KeyEvent) -> None:
@@ -462,7 +462,7 @@ def main() -> int:
     if not activation.is_owner:
         return 0
     try:
-        LOGGER.info("Starting Chat Grid %s on Python %s", __version__, sys.version)
+        LOGGER.info("Starting Endiginous %s on Python %s", __version__, sys.version)
         app = ChatGridApp(activation)
         app.MainLoop()
         return 0
@@ -470,9 +470,9 @@ def main() -> int:
         LOGGER.exception("Fatal desktop startup failure")
         try:
             wx.MessageBox(
-                "Chat Grid could not start. A diagnostic log was saved to "
+                "Endiginous could not start. A diagnostic log was saved to "
                 f"{root / 'chat-grid.log'}.",
-                "Chat Grid startup error",
+                "Endiginous startup error",
                 wx.OK | wx.ICON_ERROR,
             )
         except Exception:

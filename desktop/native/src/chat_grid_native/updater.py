@@ -39,7 +39,7 @@ class UpdateManifest:
     def from_dict(cls, data: dict[str, Any]) -> "UpdateManifest":
         """Resolve both flat and tCast platform-nested manifest forms."""
         platform = data.get("platforms", {}).get(PLATFORM_KEY, {})
-        default_name = "ChatGrid-macOS.zip" if sys.platform == "darwin" else "ChatGridSetup.exe"
+        default_name = "Endiginous-macOS.zip" if sys.platform == "darwin" else "EndiginousSetup.exe"
         return cls(
             version=str(data.get("version", "")).strip(),
             download_url=str(data.get("downloadUrl") or data.get("download_url") or platform.get("downloadUrl") or platform.get("url") or "").strip(),
@@ -111,8 +111,8 @@ class UpdateService:
                     "/bin/sh", "-c",
                     'while kill -0 "$1" 2>/dev/null; do sleep 1; done; '
                     'tmp=$(mktemp -d); /usr/bin/ditto -x -k "$2" "$tmp" && '
-                    '/usr/bin/ditto "$tmp/Chat Grid.app" "$3/Chat Grid.app" && '
-                    '/usr/bin/open "$3/Chat Grid.app"; /bin/rm -rf "$tmp"',
+                    '/usr/bin/ditto "$tmp/Endiginous.app" "$3/Endiginous.app" && '
+                    '/usr/bin/open "$3/Endiginous.app"; /bin/rm -rf "$tmp"',
                     "chatgrid-update", str(os_getpid()), str(installer), str(destination),
                 ],
                 start_new_session=True,

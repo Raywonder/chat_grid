@@ -79,7 +79,7 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "valueType": "text",
         "label": "Interior location",
         "tooltip": (
-            "Optional Chat Grid location id entered when this house door is used. "
+            "Optional Endiginous location id entered when this house door is used. "
             "Blank creates a connected house interior automatically."
         ),
         "maxLength": 64,

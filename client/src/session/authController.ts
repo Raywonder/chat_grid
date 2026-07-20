@@ -193,7 +193,7 @@ export function createAuthController(deps: AuthControllerDeps): {
       if (sanitizeAuthUsername(authUsername).length > 0 || savedSessionCookieAvailable) {
         deps.setConnectionStatus('Restoring saved session...');
       } else {
-        deps.setConnectionStatus('Sign in with blind.software to join the grid.');
+        deps.setConnectionStatus('Sign in with blind.software to join Endiginous.');
         deps.setConnecting(false);
       }
       updateConnectAvailability();
@@ -266,7 +266,7 @@ export function createAuthController(deps: AuthControllerDeps): {
       }
     } catch (error) {
       console.warn('Unable to clear auth cookie.', error);
-      deps.pushChatMessage('Session clear failed. Your browser may retain an old login cookie.');
+      deps.pushChatMessage('Session clear failed. This client may retain an old login cookie.');
     }
   }
 

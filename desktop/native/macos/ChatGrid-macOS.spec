@@ -17,7 +17,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="Chat Grid",
+    name="Endiginous",
     console=False,
     target_arch="x86_64",
 )
@@ -27,21 +27,21 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    name="Chat Grid",
+    name="Endiginous",
 )
 app = BUNDLE(
     coll,
-    name="Chat Grid.app",
+    name="Endiginous.app",
     bundle_identifier="fm.tappedin.chatgrid",
-    version="0.3.9",
+    version="0.4.1",
     info_plist={
-        "CFBundleDisplayName": "Chat Grid",
-        "CFBundleShortVersionString": "0.3.9",
-        "CFBundleVersion": "0.3.9",
+        "CFBundleDisplayName": "Endiginous",
+        "CFBundleShortVersionString": "0.4.1",
+        "CFBundleVersion": "0.4.1",
         "LSMinimumSystemVersion": "14.0",
         "NSHighResolutionCapable": True,
         "CFBundleURLTypes": [{
-            "CFBundleURLName": "Chat Grid Connect",
+            "CFBundleURLName": "Endiginous Connect",
             "CFBundleURLSchemes": ["chatgrid"],
         }],
     },

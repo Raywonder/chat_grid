@@ -17,7 +17,7 @@ voice generation pass so the cue is tailored to the object, room, or action.
 External audio searches, including YouTube, are a fallback path and should only
 be used for reference or for audio with rights/licensing that fit the project.
 
-For Chat Grid rooms and locations, check `Ambiance/` before generating new loops. It already has room and office candidates such as:
+For Endiginous rooms and locations, check `Ambiance/` before generating new loops. It already has room and office candidates such as:
 
 - `AMBRoom-Basic_Room_Tone_with-Elevenlabs.wav`
 - `AMBRoom-Quiet_vintage_hotel_-Elevenlabs.wav`
@@ -39,7 +39,7 @@ The clock's default ticking emitter remains `sounds/clock.ogg`, because the
 archive pack only had short one-shot bell/chime cues and no better loopable
 clock bed.
 
-Chat Grid widgets can use these as full HTTPS URLs in `emitSound` for ambience loops or `useSound` for one-shot item sounds. Example:
+Endiginous widgets can use these as full HTTPS URLs in `emitSound` for ambience loops or `useSound` for one-shot item sounds. Example:
 
 ```text
 https://tappedin.fm/wp-content/uploads/Archive/fx/Ambiance/AMBSubn-Late_spring_afternoo-Elevenlabs.wav

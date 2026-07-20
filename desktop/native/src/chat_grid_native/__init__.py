@@ -1,3 +1,3 @@
-"""Official Chat Grid desktop shell."""
+"""Official Endiginous desktop shell."""
 
-__version__ = "0.3.9"
+__version__ = "0.4.1"

@@ -1,4 +1,4 @@
-"""Validation for browser-to-desktop Chat Grid handoff links."""
+"""Validation for browser-to-desktop Endiginous handoff links."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from .config import DEFAULT_URL
 
 
 def resolve_launch_url(arguments: list[str], default_url: str = DEFAULT_URL) -> str:
-    """Return an approved Chat Grid URL from command-line protocol arguments."""
+    """Return an approved Endiginous URL from command-line protocol arguments."""
     links = [value for value in arguments if value.lower().startswith("chatgrid://")]
     if not links:
         return default_url

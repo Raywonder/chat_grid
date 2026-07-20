@@ -1,4 +1,4 @@
-"""Built-in service/station items for the default Chat Grid world."""
+"""Built-in service/station items for the default Endiginous world."""
 
 from __future__ import annotations
 
@@ -375,7 +375,7 @@ BUILTIN_WORLD_ITEMS: tuple[SeedItem, ...] = (
     SeedItem(
         id="seed-city-chat-grid-radio",
         type="radio_station",
-        title="Chat Grid Radio",
+        title="Endiginous Radio",
         location_id="city",
         x=5,
         y=8,
@@ -469,9 +469,9 @@ BUILTIN_WORLD_ITEMS: tuple[SeedItem, ...] = (
         y=17,
         params={
             **DEFAULT_BILLBOARD_PARAMS,
-            "headline": "Welcome to Chat Grid",
+            "headline": "Welcome to Endiginous",
             "body": "Walk the squares, hear nearby people and items, and use portals to visit the Town, Arcade, Offices, and Houses.",
-            "announcementText": "Welcome to Chat Grid. The portals around you lead to the public rooms and games.",
+            "announcementText": "Welcome to Endiginous. The portals around you lead to the public rooms and games.",
             "voiceAssetUrl": "sounds/billboards/clawdia-welcome.mp3",
             "bannerText": "Town portal south-west|Arcade portal south-east|Offices portal north|Houses portal south",
         },
@@ -2433,7 +2433,7 @@ BUILTIN_WORLD_ITEMS: tuple[SeedItem, ...] = (
         y=18,
         params={
             "serviceKind": "game",
-            "description": "A placeholder shelf for future Chat Grid games and playful experiments.",
+            "description": "A placeholder shelf for future Endiginous games and playful experiments.",
             "launchMessage": "Future games will appear here as they are added.",
         },
     ),

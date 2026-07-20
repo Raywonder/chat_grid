@@ -1,6 +1,6 @@
-# Chat Grid Windows Native
+# Endiginous Windows Native
 
-Official accessible wxPython Windows client. The native frame hosts the shared Chat Grid web runtime in the installed Edge WebView2 engine so browser, Windows, and future platforms keep one world protocol and audio implementation.
+Official accessible wxPython Windows client. The native frame hosts the shared Endiginous web runtime in the installed Edge WebView2 engine so browser, Windows, and future platforms keep one world protocol and audio implementation.
 
 - Persistent WebView2 profile retains the blind.software sign-in securely.
 - Automatic connect after the retained session is restored.

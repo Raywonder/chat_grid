@@ -1,0 +1,14 @@
+{
+  "version": "0.4.1",
+  "releaseNotes": "Renames the macOS desktop client to Endiginous and updates the bundled web runtime to R505. This package is unsigned and will be replaced by a signed and notarized package later.",
+  "platforms": {
+    "macos": {
+      "url": "https://blind.software/chatgrid/downloads/Endiginous-0.4.1.dmg",
+      "fileName": "Endiginous-0.4.1.dmg",
+      "sha256": "9d70a065805840cdf0335f5ea8f40d6811a36fba2bba04c6a36ae3c418c5be32",
+      "zipUrl": "https://blind.software/chatgrid/downloads/Endiginous-0.4.1-macOS.zip",
+      "zipFileName": "Endiginous-0.4.1-macOS.zip",
+      "zipSha256": "2666260d7f30e01621f7a506f9dea364c3b822479ede7a6b30b92035fd1d403c"
+    }
+  }
+}

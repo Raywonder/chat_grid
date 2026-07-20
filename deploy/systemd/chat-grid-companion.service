@@ -1,5 +1,5 @@
 [Unit]
-Description=Chat Grid Clawdia companion presence
+Description=Endiginous Clawdia companion presence
 After=network.target chat-grid.service
 Requires=chat-grid.service
 PartOf=chat-grid.service

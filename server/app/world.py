@@ -10,7 +10,7 @@ DEFAULT_LOCATION_ID = "city"
 
 @dataclass(frozen=True)
 class WorldLocation:
-    """One travel destination/room in the larger Chat Grid world."""
+    """One travel destination/room in the larger Endiginous world."""
 
     id: str
     name: str

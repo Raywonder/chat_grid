@@ -1,8 +1,8 @@
-# Chat Grid macOS 0.3.0 unsigned build status
+# Endiginous macOS 0.3.0 unsigned build status
 
 Date: 2026-07-15
 
-- Source is pushed to Gitea `raywonder/chat_grid`, branch `main`, under `desktop/native/macos`.
+- Source is pushed to Gitea `raywonder/endiginous`, branch `main`, under `desktop/native/macos`.
 - Final packaging commit: `171807a8a940bcebec625910a33ffe6e0c4ced7b`.
 - Build host: macOS 15.7.7 x86_64 using Python 3.13.14, wxPython 4.2.5, and PyInstaller 6.21.0.
 - Automated tests: 10 passed.

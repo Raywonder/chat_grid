@@ -9,7 +9,7 @@ from pathlib import Path
 import sys
 
 
-APP_NAME = "Chat Grid"
+APP_NAME = "Endiginous"
 APP_ID = "fm.tappedin.chatgrid.wxpython"
 DEFAULT_URL = "https://blind.software/chatgrid/"
 DEFAULT_UPDATE_URL = (
@@ -22,9 +22,9 @@ DEFAULT_UPDATE_URL = (
 def app_data_dir() -> Path:
     """Return the per-user application data directory."""
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "Chat Grid"
+        return Path.home() / "Library" / "Application Support" / "Endiginous"
     root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-    return root / "TappedIn" / "ChatGrid"
+    return root / "TappedIn" / "Endiginous"
 
 
 @dataclass(slots=True)

@@ -390,24 +390,29 @@ const APP_CLIENT_REVISION = String(window.CHGRID_CLIENT_REVISION ?? '').trim();
 const APP_DISPLAY_VERSION = [APP_RELEASE_VERSION, APP_CLIENT_REVISION].filter((value) => value.length > 0).join(' ').trim();
 const STARTED_FROM_VERSION_RELOAD = isVersionReloadedSession();
 const IS_NATIVE_CLIENT = new URLSearchParams(window.location.search).has('native_client');
+document.documentElement.classList.toggle('chatgrid-native', IS_NATIVE_CLIENT);
 dom.appVersion.textContent = APP_DISPLAY_VERSION
-  ? `Another AI experiment with Jage. Version ${APP_DISPLAY_VERSION}`
-  : 'Another AI experiment with Jage. Version unknown';
-const DEFAULT_GRID_NAME = 'Chat Grid';
+  ? `${IS_NATIVE_CLIENT ? 'Endiginous desktop client' : 'Another AI experiment with Jage'}. Version ${APP_DISPLAY_VERSION}`
+  : `${IS_NATIVE_CLIENT ? 'Endiginous desktop client' : 'Another AI experiment with Jage'}. Version unknown`;
+const DEFAULT_GRID_NAME = 'Endiginous';
 const DEFAULT_WELCOME_MESSAGE =
-  'Welcome to the Chat Grid, your immersive audio playground. Configure your audio, then sign in with blind.software to join the grid.';
+  IS_NATIVE_CLIENT
+    ? 'Welcome to Endiginous, your immersive audio playground. Use the File menu for sign-in, audio setup, updates, and desktop settings.'
+    : 'Welcome to Endiginous, your immersive audio playground. Configure your audio, then sign in with blind.software to join the grid.';
 const APP_BASE_URL = import.meta.env.BASE_URL || '/';
 /** Resolves an app-relative path against the configured Vite base path. */
 function withBase(path: string): string {
   const normalizedBase = APP_BASE_URL.endsWith('/') ? APP_BASE_URL : `${APP_BASE_URL}/`;
   return `${normalizedBase}${path.replace(/^\/+/, '')}`;
 }
-/** Announces a newer browser bundle and navigates through a cache-busted URL. */
+/** Announces a newer client bundle and navigates through a cache-busted URL. */
 function scheduleClientUpdateReload(metadata: ClientVersionMetadata): void {
   if (reloadScheduledForVersionMismatch) return;
   reloadScheduledForVersionMismatch = true;
   const label = [metadata.releaseVersion, metadata.clientRevision].filter((value) => value.length > 0).join(' ');
-  const message = label ? `New Chat Grid update ${label} found. Reloading...` : 'New Chat Grid update found. Reloading...';
+  const message = label
+    ? `New Endiginous ${IS_NATIVE_CLIENT ? 'world runtime' : 'update'} ${label} found. Reloading...`
+    : `New Endiginous ${IS_NATIVE_CLIENT ? 'world runtime update' : 'update'} found. Reloading...`;
   setConnectionStatus(message);
   pushChatMessage(message);
   window.setTimeout(
@@ -809,6 +814,7 @@ const mediaSession = new MediaSession({
   micCalibrationActiveRmsThreshold: MIC_CALIBRATION_ACTIVE_RMS_THRESHOLD,
   micInputGainScaleMultiplier: MIC_INPUT_GAIN_SCALE_MULTIPLIER,
   micInputGainStep: MIC_INPUT_GAIN_STEP,
+  hostLabel: IS_NATIVE_CLIENT ? 'desktop client' : 'browser',
 });
 
 let midiControllerHandle: MidiControllerHandle = {
@@ -1689,7 +1695,7 @@ function handleSignalingStatus(message: string): void {
   pushChatMessage(message);
 }
 
-/** Performs cache-busted navigation so the browser loads the newest client bundle. */
+/** Performs cache-busted navigation so the host loads the newest client bundle. */
 function reloadClientForVersion(versionToken: string): void {
   const nextUrl = new URL(window.location.href);
   nextUrl.searchParams.set('v', versionToken || 'unknown');
@@ -2001,7 +2007,7 @@ function openInteractiveItem(item: WorldItem): boolean {
     },
     { once: true },
   );
-  updateStatus(serviceKind === 'game' ? `You opened ${item.title}. The game is ready in Chat Grid.` : `You opened ${item.title} in Chat Grid.`);
+  updateStatus(serviceKind === 'game' ? `You opened ${item.title}. The game is ready in Endiginous.` : `You opened ${item.title} in Endiginous.`);
   audio.sfxUiConfirm();
   return true;
 }
@@ -3272,7 +3278,7 @@ function stopLocalMedia(): void {
   mediaSession.stopLocalMedia();
 }
 
-/** Maps browser media/capture errors to user-facing remediation text. */
+/** Maps host media/capture errors to user-facing remediation text. */
 function describeMediaError(error: unknown): string {
   return mediaSession.describeMediaError(error);
 }
@@ -3442,7 +3448,7 @@ function handleAdminActionResult(message: Extract<IncomingMessage, { type: 'admi
   audio.sfxUiConfirm();
 }
 
-/** Applies server-backed ntfy preferences for the signed-in Chat Grid identity. */
+/** Applies server-backed ntfy preferences for the signed-in Endiginous identity. */
 function handleNtfyPreferences(message: Extract<IncomingMessage, { type: 'ntfy_preferences' }>): void {
   dom.ntfyNotificationsToggle.disabled = !message.configured;
   dom.ntfyNotificationsToggle.checked = message.enabled;
@@ -4115,7 +4121,7 @@ function handleRemoteCastStream(casterId: string, stream: MediaStream): void {
     : { display: 'none' });
   document.body.append(element);
   remoteCastMedia.set(casterId, element);
-  void element.play().catch(() => updateStatus('Cast received. Press the cast media control to start playback if the browser blocked autoplay.'));
+  void element.play().catch(() => updateStatus(`Cast received. Press the cast media control to start playback if ${IS_NATIVE_CLIENT ? 'the desktop client' : 'the browser'} blocked autoplay.`));
 }
 
 function setLocalCastPlayback(stream: MediaStream | null): void {
@@ -5377,6 +5383,7 @@ const itemPropertyEditor = createItemPropertyEditor({
   updateStatus,
   sfxUiBlip: () => audio.sfxUiBlip(),
   sfxUiCancel: () => audio.sfxUiCancel(),
+  hostLabel: IS_NATIVE_CLIENT ? 'desktop client' : 'browser',
 });
 
 /** Handles nickname edit mode submission/cancel and text editing keys. */

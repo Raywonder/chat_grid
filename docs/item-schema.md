@@ -147,7 +147,7 @@ and rejects missing, non-numeric, or unusably large dimensions.
 - `houseName`: max 80 chars.
 - `ownerName`: optional owner/family name, max 80 chars.
 - `doorState`: `unlocked | locked`.
-- `targetLocation`: optional Chat Grid interior id. Blank houses get a generated
+- `targetLocation`: optional Endiginous interior id. Blank houses get a generated
   interior location with connected entry/exit doors and practical starter
   companion items.
 - `description`: short spoken description, max 240 chars.
@@ -237,7 +237,7 @@ and rejects missing, non-numeric, or unusably large dimensions.
 - `repairMode`: `inspect | auto_repair`.
 - `targetKinds`: comma-separated target kinds, currently `radio` and `object`.
 - `authorizedNames`: optional comma-separated display names allowed to ask the keeper to act. Blank means any user in the room may ask.
-- House keepers repair modeled Chat Grid state only. They do not contact outside services, send notifications, touch accounts, or claim to fix real physical devices unless a separate approved integration is added.
+- House keepers repair modeled Endiginous state only. They do not contact outside services, send notifications, touch accounts, or claim to fix real physical devices unless a separate approved integration is added.
 
 ### `service_link`
 
@@ -264,7 +264,7 @@ and rejects missing, non-numeric, or unusably large dimensions.
 
 - `serviceKind`: one of `app | door | game | house | room | service | site | station | tool | portal`.
 - `url`: empty, absolute public `http/https` URL, or site-relative path.
-- `targetLocation`: optional Chat Grid location id or room entered when used.
+- `targetLocation`: optional Endiginous location id or room entered when used.
 - `portalDestinationMode`: `random | static`; random portals choose a destination at use time, while static portals always use `targetLocation`.
 - `portalLocationPool`: optional comma-separated location ids for random portals. When empty, random portals choose from public map locations.
 - `doorState`: `unlocked | locked`; locked doors report their status and do not move the user unless a matching key unlocks them.
@@ -305,7 +305,7 @@ and rejects missing, non-numeric, or unusably large dimensions.
 - `url`: optional public `http/https` URL or site-relative path.
 - `announcementText`: text intended for spoken voice announcements, max 500 chars.
 - `voiceName`: optional voice label such as a creator/agent name, max 80 chars.
-- `voiceAssetUrl`: optional real voice MP3/OGG path or URL. `sounds/...` paths are served from the Chat Grid static assets; public `http/https` URLs are validated.
+- `voiceAssetUrl`: optional real voice MP3/OGG path or URL. `sounds/...` paths are served from the Endiginous static assets; public `http/https` URLs are validated.
 - `bannerText`: optional rotating banner lines separated with `|`, max 500 chars.
 - `rotationSeconds`: integer seconds between banner lines, range `3-300`.
 - `emitRange`: integer hearing range in squares, range `1-20`.

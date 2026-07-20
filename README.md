@@ -1,9 +1,9 @@
-# Chat Grid
+# Endiginous
 ## A Mostly Vibed, Audio-first Interactive Playground
 
-Chat Grid is one of those projects that started with a random idea, and then grew to be many things, but most with spacial audio as its core. Briefly put, Chat Grid allows users to move around a grid and interact with each other, or with items placed on the grid. Your voice, as well as items are shared as positional audio. Item types currently range from dice and a wheel to a fully-playable toy piano and media players with directional audio. New item types can be added as plugins.
+Endiginous is one of those projects that started with a random idea, and then grew to be many things, but most with spacial audio as its core. Briefly put, Endiginous allows users to move around a grid and interact with each other, or with items placed on the grid. Your voice, as well as items are shared as positional audio. Item types currently range from dice and a wheel to a fully-playable toy piano and media players with directional audio. New item types can be added as plugins.
 
-Chat Grid is designed to be run on a secure server with users connecting via a web client. The client works best currently with Windows browsers, with minimal testing on mobile/Mac. Ideally, client apps would be better in the long-run, especially for mobile.
+Endiginous is designed to be run on a secure server with users connecting via a web client. The client works best currently with Windows browsers, with minimal testing on mobile/Mac. Ideally, client apps would be better in the long-run, especially for mobile.
 
 ## Local Run
 

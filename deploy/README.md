@@ -31,7 +31,7 @@ What this sets up:
 - `server/run_server.sh` (loads `.env` and starts server)
 - first-run admin bootstrap prompt (if no admin exists)
 
-Before starting the service, set `CHGRID_HOST_ORIGIN` in `server/.env` to the exact browser origin that will host Chat Grid, for example:
+Before starting the service, set `CHGRID_HOST_ORIGIN` in `server/.env` to the exact browser origin that will host Endiginous, for example:
 
 ```bash
 CHGRID_HOST_ORIGIN=https://example.com

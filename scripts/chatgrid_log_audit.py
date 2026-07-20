@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize Chat Grid runtime and web log errors for release triage."""
+"""Summarize Endiginous runtime and web log errors for release triage."""
 
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def bucket_path(path: str) -> str:
 
 
 def summarize_access(path: Path, lines: int) -> list[str]:
-    """Summarize recent Chat Grid non-2xx/3xx access log entries."""
+    """Summarize recent Endiginous non-2xx/3xx access log entries."""
     statuses: collections.Counter[str] = collections.Counter()
     endpoints: collections.Counter[tuple[str, str]] = collections.Counter()
     examples: dict[tuple[str, str], str] = {}
@@ -96,7 +96,7 @@ def summarize_access(path: Path, lines: int) -> list[str]:
 
 
 def summarize_error_log(path: Path, lines: int) -> list[str]:
-    """Summarize recent nginx errors mentioning Chat Grid paths."""
+    """Summarize recent nginx errors mentioning Endiginous paths."""
     buckets: collections.Counter[str] = collections.Counter()
     examples: dict[str, str] = {}
     for line in tail_lines(path, lines):

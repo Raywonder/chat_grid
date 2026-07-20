@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 
-APP_NAME = "Chat Grid"
+APP_NAME = "Endiginous"
 APP_ID = "fm.tappedin.chatgrid.wxpython"
 DEFAULT_URL = "https://blind.software/chatgrid/?desktop=1"
 DEFAULT_UPDATE_URL = "https://blind.software/chatgrid/updates/latest-windows.json"
@@ -17,7 +17,7 @@ DEFAULT_UPDATE_URL = "https://blind.software/chatgrid/updates/latest-windows.jso
 def app_data_dir() -> Path:
     """Return the per-user application data directory."""
     root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-    return root / "TappedIn" / "ChatGrid"
+    return root / "TappedIn" / "Endiginous"
 
 
 @dataclass(slots=True)

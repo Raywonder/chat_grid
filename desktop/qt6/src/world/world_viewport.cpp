@@ -8,7 +8,7 @@ namespace chatgrid::world {
 WorldViewport::WorldViewport(QWidget* parent) : QWidget(parent) {
     setFocusPolicy(Qt::StrongFocus);
     setMinimumSize(480, 320);
-    setAccessibleName(QStringLiteral("Chat Grid world viewport"));
+    setAccessibleName(QStringLiteral("Endiginous world viewport"));
     setAccessibleDescription(QStringLiteral("Native placeholder for the future server-authoritative world view."));
 }
 

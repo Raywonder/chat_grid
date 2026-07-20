@@ -44,5 +44,5 @@ deployment can be republished.
 6. Save the resulting manifest and receipts with the release artifacts.
 
 Remote streams and live feeds should normally remain URLs resolved at runtime,
-not copied media. Their providers' terms still apply, and Chat Grid must not
+not copied media. Their providers' terms still apply, and Endiginous must not
 imply that it owns or relicenses their content.

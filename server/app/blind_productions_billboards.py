@@ -233,7 +233,7 @@ def _fetch_text(url: str, *, timeout: int) -> str:
     request = Request(
         url,
         headers={
-            "User-Agent": "ChatGridBlindProductionsBillboardSync/1.0",
+            "User-Agent": "EndiginousBlindProductionsBillboardSync/1.0",
             "Accept": "text/html,application/xhtml+xml",
         },
     )

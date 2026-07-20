@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static accessibility contract for the public Chat Grid shell.
+"""Static accessibility contract for the public Endiginous shell.
 
 This intentionally does not replace a real screen-reader/browser pass. It catches
 the easy regressions: unnamed controls, expandable controls without state, and

@@ -57,7 +57,7 @@ def fetch_world_cup_status(
     request = Request(
         f"{FIFA_API_URL}?{query}",
         headers={
-            "User-Agent": "ChatGridWorldCupCafe/1.0",
+            "User-Agent": "EndiginousWorldCupCafe/1.0",
             "Accept": "application/json",
         },
     )

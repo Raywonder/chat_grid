@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chat-grid-desktop"
-version = "0.3.9"
-description = "Official accessible wxPython desktop client for Chat Grid"
+version = "0.4.1"
+description = "Official accessible wxPython desktop client for Endiginous"
 requires-python = ">=3.11"
 dependencies = [
   "wxPython>=4.2.2,<4.3",

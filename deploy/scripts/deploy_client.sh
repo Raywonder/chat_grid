@@ -66,9 +66,9 @@ except ModuleNotFoundError:  # pragma: no cover - compatibility fallback
     import tomli as tomllib
 
 config_path = Path(sys.argv[1])
-grid_name = "Chat Grid"
+grid_name = "Endiginous"
 welcome_message = (
-    "Welcome to the Chat Grid, your immersive audio playground. "
+    "Welcome to Endiginous, your immersive audio playground. "
     "Configure your audio, then Log in or register to join the grid."
 )
 if config_path.exists():

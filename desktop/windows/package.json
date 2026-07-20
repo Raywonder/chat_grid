@@ -2,7 +2,7 @@
   "name": "chat-grid-windows",
   "version": "0.1.0",
   "private": true,
-  "description": "Windows desktop shell for Chat Grid.",
+  "description": "Windows desktop shell for Endiginous.",
   "main": "src/main.cjs",
   "author": "Raywonder / TappedIn",
   "license": "MIT",
@@ -21,7 +21,7 @@
   },
   "build": {
     "appId": "fm.tappedin.chatgrid",
-    "productName": "Chat Grid",
+    "productName": "Endiginous",
     "directories": {
       "output": "release"
     },

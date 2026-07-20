@@ -44,7 +44,7 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
     "placeName": {"valueType": "text", "tooltip": "Shed name.", "maxLength": 80},
     "ownerName": {"valueType": "text", "tooltip": "Optional owner or group.", "maxLength": 80},
     "doorState": {"valueType": "list", "tooltip": "Whether this shed can be entered.", "options": ["unlocked", "locked"]},
-    "targetLocation": {"valueType": "text", "tooltip": "Optional Chat Grid location id entered when this shed is used.", "maxLength": 64},
+    "targetLocation": {"valueType": "text", "tooltip": "Optional Endiginous location id entered when this shed is used.", "maxLength": 64},
     "description": {"valueType": "text", "tooltip": "Short shed description.", "maxLength": 360},
     "zoneNotes": {"valueType": "text", "tooltip": "Useful areas inside or around the shed.", "maxLength": 500},
     "welcomeMessage": {"valueType": "text", "tooltip": "Spoken when the unlocked shed is used.", "maxLength": 240},

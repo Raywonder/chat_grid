@@ -44,7 +44,7 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
     "placeName": {"valueType": "text", "tooltip": "Cabin name.", "maxLength": 80},
     "ownerName": {"valueType": "text", "tooltip": "Optional owner or group.", "maxLength": 80},
     "doorState": {"valueType": "list", "tooltip": "Whether this cabin can be entered.", "options": ["unlocked", "locked"]},
-    "targetLocation": {"valueType": "text", "tooltip": "Optional Chat Grid location id entered when this cabin is used.", "maxLength": 64},
+    "targetLocation": {"valueType": "text", "tooltip": "Optional Endiginous location id entered when this cabin is used.", "maxLength": 64},
     "description": {"valueType": "text", "tooltip": "Short cabin description.", "maxLength": 360},
     "zoneNotes": {"valueType": "text", "tooltip": "Useful areas inside or around the cabin.", "maxLength": 500},
     "welcomeMessage": {"valueType": "text", "tooltip": "Spoken when the unlocked cabin is used.", "maxLength": 240},

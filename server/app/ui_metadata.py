@@ -48,7 +48,7 @@ ADMIN_MENU_ACTION_DEFINITIONS: tuple[AdminMenuActionDefinition, ...] = (
     {
         "id": "blindsoftware_admin_sync",
         "label": "BlindSoftware admin sync",
-        "tooltip": "Refresh BlindSoftware-related Chat Grid admin integrations, including public billboards.",
+        "tooltip": "Refresh BlindSoftware-related Endiginous admin integrations, including public billboards.",
         "permission": "server.manage_settings",
     },
     {

@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(ChatGridQt6Native
+project(EndiginousQt6Native
     VERSION 0.1.0
     LANGUAGES CXX
-    DESCRIPTION "Native Qt 6 Widgets foundation for Chat Grid"
+    DESCRIPTION "Native Qt 6 Widgets foundation for Endiginous"
 )
 
 include(CTest)
