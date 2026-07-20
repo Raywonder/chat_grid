@@ -14,6 +14,12 @@ if (-not (Test-Path $Python)) {
         $Python312 = (& py -V:Astral/CPython3.12.12 -c "import sys; print(sys.executable)" 2>$null | Select-Object -First 1)
     }
     if (-not $Python312 -or -not (Test-Path $Python312)) {
+        $PythonCommand = Get-Command python.exe -ErrorAction SilentlyContinue
+        if ($PythonCommand -and (Test-Path $PythonCommand.Source)) {
+            $Python312 = $PythonCommand.Source
+        }
+    }
+    if (-not $Python312 -or -not (Test-Path $Python312)) {
         throw "Python 3.12 was not found through uv or the Python launcher."
     }
     & $Python312 -m venv $Venv
