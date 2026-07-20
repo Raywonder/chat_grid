@@ -229,7 +229,7 @@ class MainFrame(wx.Frame):
         self.browser_sign_in_item = file_menu.Append(
             self.browser_sign_in_id, "Sign in to &server\tCtrl+Shift+S"
         )
-        file_menu.Append(wx.ID_REFRESH, "&Reconnect\tCtrl+R")
+        file_menu.Append(wx.ID_REFRESH, "&Reconnect")
         self.focus_world_id = wx.NewIdRef()
         file_menu.Append(self.focus_world_id, "&Focus world\tF6")
         file_menu.AppendSeparator()
@@ -531,10 +531,16 @@ class MainFrame(wx.Frame):
             return
         key, code = mapped
         LOGGER.info("Forwarding native world key %s", code)
-        success, result = self.web.RunScript(
-            f"window.chatGridNativeKey?.({json.dumps(code)});"
-        )
+        success, result = self.web.RunScript(f"window.chatGridNativeKey?.({json.dumps(code)});")
         LOGGER.info("Native world key result success=%s result=%s", success, result)
+
+    def _dispatch_world_shortcut(self, code: str, *, ctrl: bool = False, shift: bool = False) -> None:
+        """Forward a native-only shortcut into the embedded world command profile."""
+        if not self.web.IsShown():
+            return
+        options = json.dumps({"ctrlKey": ctrl, "shiftKey": shift})
+        success, result = self.web.RunScript(f"window.chatGridNativeKey?.({json.dumps(code)}, {options});")
+        LOGGER.info("Native world shortcut %s result success=%s result=%s", code, success, result)
 
     def _check_updates_background(self, interactive: bool = False) -> None:
         if self.update_thread and self.update_thread.is_alive():
@@ -584,6 +590,11 @@ class MainFrame(wx.Frame):
         unicode_key = event.GetUnicodeKey()
         if (event.ControlDown() or event.MetaDown()) and (key == ord(",") or unicode_key == ord(",")):
             self._show_settings(event)
+            return
+        if (event.ControlDown() or event.MetaDown()) and not event.AltDown() and (
+            key == ord("R") or key == ord("r") or unicode_key == ord("R") or unicode_key == ord("r")
+        ):
+            self._dispatch_world_shortcut("KeyR", ctrl=True)
             return
         if key == wx.WXK_ALT:
             self._open_file_menu()
@@ -651,7 +662,7 @@ class MainFrame(wx.Frame):
         self.Close(force=True)
 
 
-class ChatGridApp(wx.App):
+class EndiginousApp(wx.App):
     """Application entry point."""
 
     def OnInit(self) -> bool:
@@ -672,6 +683,6 @@ def main() -> int:
         filename=root / "chat-grid.log", level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-    app = ChatGridApp(False)
+    app = EndiginousApp(False)
     app.MainLoop()
     return 0

@@ -522,6 +522,7 @@ class WelcomePacket(BasePacket):
     uiDefinitions: dict | None = None
     serverInfo: dict | None = None
     auth: dict | None = None
+    chatHistory: dict | None = None
 
 
 class AuthRequiredPacket(BasePacket):

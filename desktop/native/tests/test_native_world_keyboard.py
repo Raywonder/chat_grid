@@ -16,6 +16,7 @@ def test_native_world_exposes_application_role_and_bridges_arrows() -> None:
     assert "wx.WXK_UP" in source
     assert "wx.WXK_DOWN" in source
     assert "window.chatGridNativeKey" in source
+    assert "ctrlKey" in source
     assert "wx.AcceleratorTable" in source
     assert "Focus world\\tF6" in source
     assert 'if key not in {"external_auth", "native_client"}' in source

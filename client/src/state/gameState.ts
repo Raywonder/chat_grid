@@ -12,7 +12,9 @@ export type WorldItem = {
   x: number;
   y: number;
   createdBy: string;
+  createdByName?: string;
   updatedBy: string;
+  updatedByName?: string;
   createdAt: number;
   updatedAt: number;
   version: number;
@@ -64,6 +66,7 @@ export type GameMode =
 
 export type Player = {
   id: string | null;
+  userId?: string | null;
   nickname: string;
   x: number;
   y: number;
@@ -151,6 +154,7 @@ export function createInitialState(): GameState {
     isMuted: false,
     player: {
       id: null,
+      userId: null,
       nickname: 'anon',
       x: 20,
       y: 20,

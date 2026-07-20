@@ -34,26 +34,62 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
   let internalClipboardText = '';
   const nativeArrowReleaseTimers = new Map<string, number>();
 
+  function clearPressedKeyState(): void {
+    for (const key of Object.keys(deps.state.keysPressed)) {
+      deps.state.keysPressed[key] = false;
+    }
+    for (const timer of nativeArrowReleaseTimers.values()) {
+      window.clearTimeout(timer);
+    }
+    nativeArrowReleaseTimers.clear();
+  }
+
+  function recoverFromInputError(error: unknown): void {
+    clearPressedKeyState();
+    // Keep the accessible UI usable even if a hidden command handler throws.
+    // Do not announce a retry prompt from a hidden/minimized desktop renderer;
+    // the next input frame will be clean after the pressed-key state is reset.
+    console.error('Endiginous input handler recovered after an error.', error);
+    if (document.visibilityState === 'visible' && document.hasFocus()) {
+      deps.updateStatus('Navigation recovered.');
+    }
+  }
+
   const nativeWindow = window as Window & {
-    chatGridNativeKey?: (code: string) => boolean;
+    chatGridDesktop?: unknown;
+    chatGridNativeKey?: (code: string, options?: { ctrlKey?: boolean; shiftKey?: boolean }) => boolean;
   };
-  nativeWindow.chatGridNativeKey = (code: string): boolean => {
-    if (!deps.state.running || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(code)) {
+  nativeWindow.chatGridNativeKey = (code: string, options = {}): boolean => {
+    if (!deps.state.running) {
       return false;
     }
+    const isArrow = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(code);
+    const isDesktopWorldShortcut =
+      code === 'KeyR' && Boolean(options.ctrlKey) && !options.shiftKey && !deps.isTextEditingMode(deps.state.mode);
+    if (!isArrow && !isDesktopWorldShortcut) return false;
     if (deps.hasBlockedArrowTeleport(code)) return false;
     deps.dom.canvas.focus({ preventScroll: true });
     deps.state.keysPressed[code] = true;
-    deps.handleModeInput({ code, key: code, ctrlKey: false, shiftKey: false });
-    const previousTimer = nativeArrowReleaseTimers.get(code);
-    if (previousTimer !== undefined) window.clearTimeout(previousTimer);
-    nativeArrowReleaseTimers.set(
-      code,
-      window.setTimeout(() => {
-        deps.state.keysPressed[code] = false;
-        nativeArrowReleaseTimers.delete(code);
-      }, 250),
-    );
+    try {
+      deps.handleModeInput({
+        code,
+        key: code,
+        ctrlKey: Boolean(options.ctrlKey),
+        shiftKey: Boolean(options.shiftKey),
+        source: 'native',
+      });
+      const previousTimer = nativeArrowReleaseTimers.get(code);
+      if (previousTimer !== undefined) window.clearTimeout(previousTimer);
+      nativeArrowReleaseTimers.set(
+        code,
+        window.setTimeout(() => {
+          deps.state.keysPressed[code] = false;
+          nativeArrowReleaseTimers.delete(code);
+        }, 250),
+      );
+    } catch (error) {
+      recoverFromInputError(error);
+    }
     return true;
   };
 
@@ -140,6 +176,10 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     );
   }
 
+  function isDesktopClient(): boolean {
+    return document.documentElement.classList.contains('chatgrid-native') || nativeWindow.chatGridDesktop != null;
+  }
+
   document.addEventListener('keydown', (event) => {
     const code = normalizeInputCode(event);
     if (!code) return;
@@ -149,6 +189,7 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
       key: event.key,
       ctrlKey: hasShortcutModifier,
       shiftKey: event.shiftKey,
+      source: 'web',
     };
 
     if (!deps.dom.settingsModal.classList.contains('hidden') && code === 'Escape') {
@@ -168,7 +209,13 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     if (event.altKey) return;
     const allowedModifiedNormalShortcut =
       deps.state.mode === 'normal' &&
-      (code === 'KeyG' || code === 'KeyM' || code === 'Comma' || code === 'Period' || code === 'BracketLeft' || code === 'BracketRight');
+      (code === 'KeyG' ||
+        code === 'KeyM' ||
+        (isDesktopClient() && code === 'KeyR') ||
+        code === 'Comma' ||
+        code === 'Period' ||
+        code === 'BracketLeft' ||
+        code === 'BracketRight');
     if (hasShortcutModifier && !deps.isTextEditingMode(deps.state.mode) && !allowedModifiedNormalShortcut) return;
     if (deps.hasBlockedArrowTeleport(code)) {
       event.preventDefault();
@@ -219,8 +266,12 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
       return;
     }
 
-    deps.handleModeInput(input);
-    deps.state.keysPressed[code] = true;
+    try {
+      deps.handleModeInput(input);
+      deps.state.keysPressed[code] = true;
+    } catch (error) {
+      recoverFromInputError(error);
+    }
   });
 
   document.addEventListener('keyup', (event) => {

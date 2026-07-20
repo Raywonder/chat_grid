@@ -16,7 +16,9 @@ export const itemSchema = z.object({
   x: z.number().int(),
   y: z.number().int(),
   createdBy: z.string(),
+  createdByName: z.string().optional(),
   updatedBy: z.string(),
+  updatedByName: z.string().optional(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
   version: z.number().int(),
@@ -165,6 +167,29 @@ export const welcomeMessageSchema = z.object({
           ),
         })
         .optional(),
+    })
+    .optional(),
+  chatHistory: z
+    .object({
+      public: z.array(z.object({
+        type: z.literal('chat_message'),
+        message: z.string(),
+        senderId: z.string().optional(),
+        senderNickname: z.string().optional(),
+        system: z.boolean().optional(),
+        action: z.boolean().optional(),
+      })),
+      direct: z.array(z.object({
+        type: z.literal('direct_message'),
+        message: z.string(),
+        senderId: z.string(),
+        senderNickname: z.string(),
+        targetId: z.string(),
+        targetNickname: z.string(),
+        senderUserId: z.string().optional(),
+        targetUserId: z.string().optional(),
+        outgoing: z.boolean().optional(),
+      })),
     })
     .optional(),
 });

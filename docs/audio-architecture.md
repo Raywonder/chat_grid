@@ -84,7 +84,7 @@ Local footsteps use the current location's `ambienceKey` to choose a matching su
 - Billboards: enabled billboard items are active announcement sources, controlled by the item audio layer. When the listener is inside `emitRange`, the browser rotates the billboard's announcement/banner/headline text and announces the same text through the status reader. If `voiceAssetUrl` is set, the browser preloads and plays that real MP3/OGG voice asset through the Web Audio spatial sample path, so distance, direction, and listener movement continue to update while the user walks. If the asset is missing or fails to decode, the older synthetic spatial speaker cue and browser speech synthesis path are used as fallback. Distance changes the synthetic cue: close billboards are clearer and drier, while far billboards become more filtered, reverby, and slightly wobbly/distorted like an older speaker.
 - `emitSound`: continuous looping spatial source attached to an item runtime, controlled by the item audio layer.
 - Social reactions use the same world-layer one-shot path through `social_action.sound`. Each reaction action should point at its matching packaged local asset under `sounds/reactions/` instead of sharing a generic tap/chat cue, so browser and desktop clients can play the correct sound locally and use the same path remotely.
-- Radio and household-device controls play local device-button cues for power, tuning, preset, keypad, plastic, and hardware-toggle presses. Station-switch name stingers still play from the radio's spatial tile when the station actually changes.
+- Radio and household-device controls play local device-button cues for power, tuning, preset, keypad, plastic, and hardware-toggle presses. TV objects themselves do not play generic item-use beeps when directly pressed; TV sounds are reserved for explicit remote/programming/control actions such as channel changes. Station-switch name stingers still play from the radio's spatial tile when the station actually changes.
 - Guarded exterior doors broadcast the same generated door-knock asset at the outside door and its matching interior return door. Normal spatial attenuation makes it close and clear beside the doorway and faint at a distance; denied visitors remain outside.
 - Linked audio systems should model physically sensible relationships. A radio
   can own or sync hidden/internal components such as subwoofers, mids, tweeters,
@@ -150,11 +150,11 @@ presets. TVs follow the same shared-world power rule as radios: disconnect,
 reconnect, user switching, and client audio cleanup are listener-local events
 and must not switch the TV off. When a TV is actively playing, radios in the
 same linked media group yield to the TV system. Ordinary music radios switch off
-so the room does not play two programs at once. Radio items modeled as
-speaker/filter components (`syncWithPrimary=true` or a non-primary
+so the room does not play two programs at once. Room radio items modeled as
+surround speaker/filter components (`syncWithPrimary=true` or a non-primary
 `speakerRole`) instead adopt the TV stream, channel label, now-playing metadata,
-and playhead marker so the home theater/speaker system stays synchronized with
-the TV.
+and playhead marker so the home theater/surround-sound system stays
+synchronized with the TV.
 
 House objects can also emit item-layer loops. The kitchen fridge uses
 `sounds/house/fridge_hum_loop.ogg` as a short-range spatial appliance hum, so it

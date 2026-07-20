@@ -2235,6 +2235,11 @@ BUILTIN_WORLD_ITEMS: tuple[SeedItem, ...] = (
             purchase_cost=14,
             replacement_hint="A book belongs on the nightstand or shelf.",
             description="A bedside book resting on the nightstand.",
+            readableText=(
+                "The bedside book is a quiet placeholder for future Grid stories. "
+                "For now, it marks the nightstand as a real reading spot."
+            ),
+            interactionHint="press Enter to read",
             surface_id="seed-raywonder-bedroom-nightstand",
             surface_title="Bedroom nightstand",
         ),
@@ -2259,6 +2264,7 @@ BUILTIN_WORLD_ITEMS: tuple[SeedItem, ...] = (
                 "It belongs in the desk drawer and can be picked up, held, and read in the Grid. "
                 "The source writings remain preserved in the shared OpenCloud Journal and Letters folders."
             ),
+            interactionHint="press Enter to inspect the journal and letter counts",
             surface_id="2a1c134d-294d-4b56-a4a8-eb1d2f95989e",
             surface_title="Claudia writing desk drawer",
             journalFolder=True,

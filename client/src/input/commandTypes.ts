@@ -5,6 +5,7 @@ export type ModeInput = {
   key: string;
   ctrlKey: boolean;
   shiftKey: boolean;
+  source?: 'web' | 'native';
 };
 
 export type CommandDescriptor<CommandId extends string = string> = {

@@ -514,21 +514,25 @@ This is behavior-focused documentation for item types and their defaults.
   - `replacementHint="A similar everyday replacement would work."`
   - `giftable=true`
   - `description="A small household object."`
+  - `readableText=""`
+  - `interactionHint=""`
 
 ### Use
 - `use` inspects the object, condition, owner, description, and placement.
+- Objects with `readableText` speak that text on `use`. Paper-like objects such as books, notebooks, letters, envelopes, notes, and signs should use `readableText` when the user is meant to read their contents.
+- `interactionHint` is a brief spoken clue for new or non-obvious objects, such as `press Enter to read` or `press Enter to check it`. Keep it short because the client includes it in focus, list, and location readouts.
 - Key objects can describe what they open.
 - Window objects report whether they are open or closed; open windows mean outside ambience can carry into the room, while closed windows keep it muffled.
 - `secondary use` repairs cracked/broken objects. For windows, `secondary use` toggles open/closed state.
 
 ### Validation
-- `objectKind`: household item or fixture, including mugs, books, lamps, radios, chairs, couches, beds, tables, counters, shelves, fridges, sinks, stoves, windows, curtains, and rugs.
+- `objectKind`: household item or fixture, including mugs, books, notebooks, letters, envelopes, notes, lamps, radios, chairs, couches, beds, tables, counters, shelves, fridges, sinks, stoves, windows, curtains, and rugs.
 - `placement`: `floor | table | counter | shelf | wall | ceiling | window | fixture | furniture | appliance | carried`
 - `material`: `ceramic | glass | wood | metal | paper | plastic | fabric | plant | mixed`
 - `fragility`: `sturdy | normal | fragile | delicate`
 - `condition`: `intact | scuffed | cracked | broken | repaired | replacement`
 - `windowState`: `closed | open`
-- `ownerName`, `keyId`, `keyFor`, `surfaceId`, `surfaceTitle`, `replacementHint`, and `description` are bounded text fields.
+- `ownerName`, `keyId`, `keyFor`, `surfaceId`, `surfaceTitle`, `replacementHint`, `description`, `readableText`, and `interactionHint` are bounded text fields.
 - `repairCost` and `purchaseCost` are non-negative integers up to 10000.
 - `giftable` accepts boolean/on-off style values.
 

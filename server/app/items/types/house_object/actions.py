@@ -67,6 +67,15 @@ def _station_label(item: WorldItem) -> str:
     return station_name or "TV audio"
 
 
+def _is_paper_readable(item: WorldItem, object_kind: str) -> bool:
+    """Return whether this object should behave like something readable."""
+
+    title = item.title.strip().lower()
+    if object_kind in {"book", "notebook", "letter", "envelope", "note", "sign"}:
+        return True
+    return any(token in title for token in ("book", "notebook", "letter", "envelope", "note"))
+
+
 def use_item(
     item: WorldItem, _nickname: str, _clock_formatter: Callable[[dict], str]
 ) -> ItemUseResult:
@@ -85,6 +94,13 @@ def use_item(
             self_message=f"{item.title}, extension {extension}. Phone audio is {mode}.",
             others_message="",
         )
+    readable_text = str(item.params.get("readableText", "") or "").strip()
+    if readable_text:
+        verb = "open and read" if object_kind == "envelope" else "read"
+        return ItemUseResult(
+            self_message=f"You {verb} {item.title}: {readable_text}",
+            others_message="",
+        )
     if item.params.get("journalFolder"):
         journals = item.params.get("journalIndex")
         letters = item.params.get("letterIndex")
@@ -96,6 +112,14 @@ def use_item(
                 f"{letter_count} letters. It is Claudia's private writing collection "
                 "kept in the desk drawer."
             ),
+            others_message="",
+        )
+    if _is_paper_readable(item, object_kind):
+        return ItemUseResult(
+            self_message=(
+                f"{item.title} is {condition}.{owner_text} {description}"
+                " There is nothing written inside yet."
+            ).strip(),
             others_message="",
         )
     if object_kind == "tv":

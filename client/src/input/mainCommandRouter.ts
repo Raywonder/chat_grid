@@ -63,16 +63,24 @@ export type MainModeCommand =
   | 'chatLast'
   | 'escape';
 
+export type InputProfile = 'web' | 'desktop';
+
 /**
  * Maps raw key events to a semantic command for main mode handling.
  */
-export function resolveMainModeCommand(code: string, shiftKey: boolean, ctrlKey = false): MainModeCommand | null {
+export function resolveMainModeCommand(
+  code: string,
+  shiftKey: boolean,
+  ctrlKey = false,
+  profile: InputProfile = 'web',
+): MainModeCommand | null {
   if (ctrlKey && (code === 'Comma' || code === 'Period' || code === 'BracketLeft' || code === 'BracketRight')) return null;
   if (ctrlKey && code === 'ArrowRight') return 'radioRemoteStationNext';
   if (ctrlKey && code === 'ArrowLeft') return 'radioRemoteStationPrevious';
   if (ctrlKey && shiftKey && (code === 'ArrowUp' || code === 'KeyU')) return 'radioRemoteVolumeUp';
   if (ctrlKey && shiftKey && (code === 'ArrowDown' || code === 'KeyD')) return 'radioRemoteVolumeDown';
   if (ctrlKey && code === 'KeyM') return 'openDirectMessage';
+  if (profile === 'desktop' && ctrlKey && code === 'KeyR') return 'openUserActionMenu';
   if (code === 'KeyG') return 'listLocations';
   if (code === 'KeyN') return shiftKey ? 'openNotifications' : 'editNickname';
   if (code === 'KeyM') return shiftKey ? 'toggleOutputMode' : 'toggleMute';

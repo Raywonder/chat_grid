@@ -20,6 +20,7 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `L`: Locate nearest user
 - `Shift+L`: List users alphabetically; `Enter` teleports to selected user; `ArrowLeft`/`ArrowRight` adjust selected user volume
 - `Shift+R`: Open reactions and actions toward the selected, focused, or nearest user, including hug, focus, tap, hand, walk, teleport, and direct message options. `Enter` runs the highlighted action; `Space` lets the system pick a safe dynamic action such as announcing focus or tapping a shoulder
+- Desktop clients also use `Ctrl+R` for this in-world reactions and actions menu. In the browser Web UI, `Ctrl+R` remains the normal browser refresh shortcut.
 - `Shift+H`: Ask the server to allow the selected, focused, or nearest visitor into the guarded house. The owner or authorized resident must be inside that house or standing with the visitor on the exact exterior-door square; the visitor does not need an access code.
 - `U`: Speak your current location, connected-user count, and connected users
 - `N`: Edit nickname
@@ -74,15 +75,16 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `2` or `Shift+2`: Toggle item layer (emit sounds)
 - `3` or `Shift+3`: Toggle media layer (radio)
 - `4` or `Shift+4`: Toggle world layer (other-user world sounds)
-- `Space` / `Shift+Space` with a carried radio remote: Tune connected radios forward/backward
-- `ArrowRight` / `ArrowLeft` with a carried radio remote: Tune connected radios forward/backward
-- `ArrowUp` / `ArrowDown` with a carried radio remote: Raise/lower connected radio volume
-- `,` / `.` with a carried radio remote: Tune connected radios/speakers in the current location, or only the current radio when linked control is off in the remote settings
-- `Ctrl+ArrowLeft` / `Ctrl+ArrowRight` with a carried radio remote: Tune connected radios/speakers in the current location, or only the current radio when linked control is off
-- `Ctrl+Shift+Up` / `Ctrl+Shift+Down` or `Ctrl+Shift+U` / `Ctrl+Shift+D` with a carried radio remote: Raise/lower connected radio/speaker volume, or only the current radio volume when linked control is off
-- `Home` / `End` with a carried radio remote: Tune the first/last station preset
-- `O` with a carried radio remote: Toggle connected radios on or off
-- `I` with a carried radio remote: Read station, power, volume, and now-playing information
+- `Space` / `Shift+Space` with a carried media remote: Tune connected radios or TVs forward/backward
+- `ArrowRight` / `ArrowLeft` with a carried media remote: Tune connected radios or TVs forward/backward
+- `ArrowUp` / `ArrowDown` with a carried media remote: Raise/lower connected radio or TV volume
+- `,` / `.` with a carried media remote: Tune connected radios/speakers or TVs in the current location/group, or only the current device when linked control is off in the remote settings
+- `Ctrl+ArrowLeft` / `Ctrl+ArrowRight` with a carried media remote: Tune connected radios/speakers or TVs in the current location/group, or only the current device when linked control is off
+- `Ctrl+Shift+Up` / `Ctrl+Shift+Down` or `Ctrl+Shift+U` / `Ctrl+Shift+D` with a carried media remote: Raise/lower connected radio/speaker or TV volume, or only the current device volume when linked control is off
+- `Home` / `End` with a carried media remote: Tune the first/last station or channel preset
+- `O` with a carried media remote: Toggle connected radios or TVs on or off
+- `I` with a carried media remote: Read station/channel, power, volume, and now-playing information
+- `C` with focused carried media remote, or `Shift+K`: Cast an available local screen, window, tab, or media app source to a nearby TV or radio
 - New radios added from the item menu start with the Town Square station presets, including Tony Gebhard Radio
 - `5` or `Shift+5`: Cycle TTS announcements between full, alert sounds only, and required only
 - `6` or `Shift+6`: Toggle optional nearby item beacons

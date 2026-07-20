@@ -31,6 +31,7 @@ type MessageHandlerDeps = {
     addItemTypeIndex: number;
     player: {
       id: string | null;
+      userId?: string | null;
       nickname: string;
       x: number;
       y: number;
@@ -111,6 +112,7 @@ type MessageHandlerDeps = {
   shouldAnnounceRadioAction: () => boolean;
   pushPublicChatMessage: (message: string) => void;
   pushDirectChatMessage: (message: string, peerId: string, peerName: string) => void;
+  resetChatHistoryForReplay: () => void;
   classifySystemMessageSound: (message: string) => 'logon' | 'logout' | 'notify' | null;
   ACTION_SOUND_URL: string;
   SYSTEM_SOUND_URLS: { logon: string; logout: string; notify: string };
@@ -187,6 +189,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         break;
 
       case 'welcome':
+        deps.resetChatHistoryForReplay();
         if (message.worldConfig?.gridSize && Number.isInteger(message.worldConfig.gridSize) && message.worldConfig.gridSize > 0) {
           deps.setWorldGridSize(message.worldConfig.gridSize);
         }
@@ -205,6 +208,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         }
         deps.state.addItemTypeIndex = 0;
         deps.state.player.id = message.id;
+        deps.state.player.userId = message.player.userId ?? message.auth?.userId ?? null;
         deps.state.running = true;
         deps.setConnecting(false);
         deps.state.player.x = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.x));
@@ -229,6 +233,20 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
 
         for (const user of message.users) {
           deps.state.peers.set(user.id, { ...user });
+        }
+        for (const historyMessage of message.chatHistory?.public ?? []) {
+          deps.pushPublicChatMessage(`${historyMessage.senderNickname || 'Unknown'}: ${historyMessage.message}`);
+        }
+        for (const historyMessage of message.chatHistory?.direct ?? []) {
+          const outgoing = historyMessage.outgoing ?? historyMessage.senderUserId === deps.state.player.userId;
+          const stablePeerId = outgoing
+            ? historyMessage.targetUserId ?? historyMessage.targetId
+            : historyMessage.senderUserId ?? historyMessage.senderId;
+          const currentPeer = Array.from(deps.state.peers.entries()).find(([, peer]) => peer.userId === stablePeerId);
+          const peerId = currentPeer?.[0] ?? stablePeerId;
+          const peerName = outgoing ? historyMessage.targetNickname : historyMessage.senderNickname;
+          const label = outgoing ? `DM to ${peerName}` : `DM from ${peerName}`;
+          deps.pushDirectChatMessage(`${label}: ${historyMessage.message}`, peerId, peerName);
         }
         deps.state.items.clear();
         for (const item of message.items || []) {

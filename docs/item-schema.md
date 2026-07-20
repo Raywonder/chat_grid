@@ -65,6 +65,17 @@
   just because a generic schema can represent them; an item should only be
   inside, outside, attached, hidden, carried, or separated when that state makes
   sense for the item type and the scenario being modeled.
+- Future add-item flows should resolve placement from the user's current
+  location instead of requiring manual coordinates or returning generic mounting
+  errors. For mountable/placed objects such as TVs, signs, speakers, remotes,
+  books, and household objects, the server/client flow should offer valid
+  targets like surfaces, walls, shelves, counters, tables, or item-specific
+  mounts. If no preferred target exists, use a sensible fallback or explain the
+  missing target in plain language.
+- Controllable media/device items should support an explicit remote pairing
+  model. If a TV, radio, or similar device is created and no compatible remote is
+  available in the location, creation should be able to bundle a remote and pair
+  it with the new device or connected media group.
 
 ## Type Params
 
@@ -162,11 +173,15 @@ and rejects missing, non-numeric, or unusably large dimensions.
   "ownerName": "",
   "remoteControlLinkedRadios": true,
   "description": "A small household object.",
+  "readableText": "",
+  "interactionHint": "",
   "enabled": true
 }
 ```
 
-- `objectKind`: everyday object kind. Includes `remote`, `speaker`, `radio`, and `tv`; TVs can be mounted with `placement="wall"`.
+- `objectKind`: everyday object kind. Includes paper items such as `book`, `notebook`, `letter`, `envelope`, and `note`, plus `remote`, `speaker`, `radio`, and `tv`; TVs can be mounted with `placement="wall"`.
+- `readableText`: optional content spoken when the object is used, intended for books, notebooks, letters, envelopes, notes, and signs; max 2000 chars.
+- `interactionHint`: optional brief spoken clue for non-obvious interactions; max 160 chars.
 - `remoteControlLinkedRadios`: boolean, default `true`, visible for `objectKind="remote"`. When true, the radio remote controls compatible connected radios/speakers in the current location, with explicit Raywonder house groups allowed to span rooms. When false, it controls only the nearest/current-location radio.
 - Mounted TV objects are the in-world receiver model for the future second-admin-AAAStreamer TV provider. The actual stream source still needs the approved folder and encoder wiring before live TV presets are seeded.
 - Active TVs coordinate radios in the same linked media group: ordinary preset/music radios switch off, while radio speaker components without their own presets can sync to the TV stream and playhead.

@@ -1,5 +1,5 @@
 [project]
-name = "chat-grid-server"
+name = "endiginous-server"
 version = "0.1.0"
 description = "Endiginous signaling server"
 requires-python = ">=3.11"

@@ -14,6 +14,18 @@
   - `app/models.py`: packet/data schemas.
 - `deploy/`: Apache snippet + systemd unit examples.
 
+## Product Naming
+- The current user-facing product name is **Endiginous**.
+- Treat **Chat Grid** as the old/original project name or a legacy technical
+  compatibility name only.
+- New visible UI, release notes, docs, package descriptions, and agent-facing
+  instructions should say Endiginous.
+- Keep existing `/chatgrid/`, `chatgrid://`, `CHGRID_*`, Python module paths,
+  bundle identifiers, service names, database filenames, and package-lock
+  compatibility values unless a dedicated migration also updates production,
+  installers, auth callbacks, update feeds, service units, and installed
+  clients together.
+
 ## Build, Test, and Development Commands
 - Client dev: `cd client && npm install && npm run dev -- --host 0.0.0.0 --port 5173`
 - Client build: `cd client && npm run build`
@@ -38,7 +50,7 @@
 - Runtime/protocol behavior changes: update `docs/runtime-flow.md` and/or `docs/protocol-notes.md`.
 
 ## Versioning & Configuration
-- Bump `client/public/version.js` on every user-visible client change using shared release version + client revision metadata (`CHGRID_RELEASE_VERSION` and `CHGRID_CLIENT_REVISION`, for example `0.1.1` + `R350`).
+- Bump `client/public/version.js` on every user-visible client change using shared release version + client revision metadata (`CHGRID_RELEASE_VERSION` and `CHGRID_CLIENT_REVISION`, for example `0.1.1` + `R350`). These variable names are legacy compatibility constants.
 - Keep the server-only revision in `server/app/version.py` (for example `S350`); server revisions do not require a client version bump unless browser code/assets changed.
 - Commit each completed logical change; include the version bump in that same commit when client behavior changes.
 - Docs-only changes do not require a version bump unless explicitly requested.

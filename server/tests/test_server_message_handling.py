@@ -1433,6 +1433,71 @@ async def test_active_tv_switches_off_linked_music_radio(
 
 
 @pytest.mark.asyncio
+async def test_direct_tv_use_does_not_play_extra_device_sound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(
+            websocket=ws,
+            id="u1",
+            nickname="tester",
+            location_id="raywonder_house_living_room",
+            x=5,
+            y=5,
+        ),
+        permissions={"item.use"},
+    )
+    server.clients[ws] = client
+
+    tv = server.item_service.default_item(client, "house_object")
+    tv.id = "living-tv"
+    tv.title = "Living room TV"
+    tv.locationId = client.location_id
+    tv.x = 5
+    tv.y = 5
+    tv.params["objectKind"] = "tv"
+    tv.params["placement"] = "wall"
+    tv.params["enabled"] = False
+    tv.params["useSound"] = "sounds/device-buttons/soft_plastic_press.mp3"
+    tv.params["streamUrl"] = "https://example.com/tv-live.mp3"
+    tv.params["stationName"] = "Movie Channel"
+    server.item_service.add_item(tv)
+
+    sent_payloads: list[object] = []
+    broadcast_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        sent_payloads.append(packet)
+
+    async def fake_broadcast_item(item: object) -> None:
+        return None
+
+    async def fake_broadcast_location(
+        location_id: str, packet: object, exclude: ServerConnection | None = None
+    ) -> None:
+        broadcast_payloads.append(packet)
+
+    async def fake_resolve(item: object) -> None:
+        return None
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+    monkeypatch.setattr(server, "_broadcast_location", fake_broadcast_location)
+    monkeypatch.setattr(server, "_resolve_radio_playback_before_broadcast", fake_resolve)
+
+    await server._handle_message(
+        client, json.dumps({"type": "item_use", "itemId": tv.id})
+    )
+
+    result = _last_packet_of_type(sent_payloads, ItemActionResultPacket)
+    assert result.ok is True
+    assert tv.params["enabled"] is True
+    assert _packets_of_type(broadcast_payloads, ItemUseSoundPacket) == []
+
+
+@pytest.mark.asyncio
 async def test_active_tv_syncs_linked_speaker_component(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2280,6 +2345,117 @@ async def test_radio_remote_control_requires_remote_in_hand(
     result = _last_packet_of_type(sent_payloads, ItemActionResultPacket)
     assert result.ok is False
     assert result.message == "The radio remote needs to be in your hand."
+
+
+@pytest.mark.asyncio
+async def test_carried_tv_remote_extra_keys_tune_with_tv_switch_fx(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(
+            websocket=ws,
+            id="u1",
+            nickname="tester",
+            location_id="raywonder_house_living_room",
+            x=5,
+            y=5,
+        ),
+        permissions={"item.use"},
+    )
+    server.clients[ws] = client
+
+    tv = server.item_service.default_item(client, "house_object")
+    tv.id = "living-tv"
+    tv.title = "Living room TV"
+    tv.locationId = client.location_id
+    tv.x = 5
+    tv.y = 6
+    tv.params["objectKind"] = "tv"
+    tv.params["placement"] = "wall"
+    tv.params["linkedMediaGroup"] = "test-house-tv"
+    tv.params["stationPresets"] = [
+        {
+            "title": "News TV",
+            "streamUrl": "https://example.com/news.m3u8",
+            "switchSound": "sounds/radio/station-switch/current.mp3",
+        },
+        {
+            "title": "Movie TV",
+            "streamUrl": "https://example.com/movie.m3u8",
+            "switchSound": "sounds/radio/station-switch/two.mp3",
+        },
+    ]
+    tv.params["stationIndex"] = 0
+    tv.params["stationSwitchSound"] = "sounds/radio/station-switch/current.mp3"
+    server.item_service.add_item(tv)
+
+    remote = server.item_service.default_item(client, "house_object")
+    remote.id = "tv-remote"
+    remote.title = "Universal TV remote"
+    remote.locationId = client.location_id
+    remote.carrierId = client.id
+    remote.params["objectKind"] = "remote"
+    remote.params["description"] = "A programmable TV remote with channel buttons."
+    remote.params["remoteControlLinkedTvs"] = True
+    server.item_service.add_item(remote)
+
+    sent_payloads: list[object] = []
+    broadcast_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        sent_payloads.append(packet)
+
+    async def fake_broadcast_item(item: object) -> None:
+        return None
+
+    async def fake_broadcast_location(
+        location_id: str, packet: object, exclude: ServerConnection | None = None
+    ) -> None:
+        broadcast_payloads.append(packet)
+
+    async def fake_resolve(item: object) -> None:
+        return None
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+    monkeypatch.setattr(server, "_broadcast_location", fake_broadcast_location)
+    monkeypatch.setattr(server, "_resolve_radio_playback_before_broadcast", fake_resolve)
+
+    await server._handle_message(
+        client,
+        json.dumps(
+            {
+                "type": "item_remote_control",
+                "itemId": remote.id,
+                "action": "station_last",
+            }
+        ),
+    )
+
+    result = _last_packet_of_type(sent_payloads, ItemActionResultPacket)
+    assert result.ok is True
+    assert result.message == "Remote tuned 1 connected TV to Movie TV."
+    assert tv.params["stationIndex"] == 1
+    assert tv.params["stationSwitchSound"] == "sounds/device-buttons/tv_channel_switch.mp3"
+    sound = _last_packet_of_type(broadcast_payloads, ItemUseSoundPacket)
+    assert sound.sound == "sounds/device-buttons/tv_channel_switch.mp3"
+    assert sound.itemId == tv.id
+
+    await server._handle_message(
+        client,
+        json.dumps(
+            {
+                "type": "item_remote_control",
+                "itemId": remote.id,
+                "action": "info",
+            }
+        ),
+    )
+    info = _last_packet_of_type(sent_payloads, ItemActionResultPacket)
+    assert info.ok is True
+    assert "Living room TV: on, Movie TV, volume" in info.message
 
 
 @pytest.mark.asyncio

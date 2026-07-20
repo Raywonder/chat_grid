@@ -63,6 +63,7 @@ import {
   getItemTypeTooltip,
   itemTypeLabel,
 } from './items/itemRegistry';
+import { formatItemInteractionHint, formatItemNarrationSummary } from './items/itemNarration';
 import { createItemInteractionController } from './items/itemInteractionController';
 import { createItemPropertyEditor } from './items/itemPropertyEditor';
 import { createItemPropertyPresentation } from './items/itemPropertyPresentation';
@@ -476,6 +477,7 @@ const RUN_MOVEMENT_TICK_MULTIPLIER = 0.55;
 const CAREFUL_MOVEMENT_TICK_MULTIPLIER = 1.25;
 const ITEM_BEACON_RADIUS = 3.5;
 const ITEM_BEACON_INTERVAL_MS = 3200;
+const RUNTIME_RECOVERY_STATUS_INTERVAL_MS = 5_000;
 const SEAT_INTERACTION_RADIUS = 1.5;
 const SEATED_BINAURAL_STEP = 0.25;
 const SEATED_BINAURAL_LIMIT = 1.25;
@@ -495,6 +497,7 @@ let pendingDoorCloseCue: { x: number; y: number; expiresAt: number } | null = nu
 let lastFocusedElement: Element | null = null;
 let lastAnnouncementText = '';
 let lastAnnouncementAt = 0;
+let lastRuntimeRecoveryStatusAt = 0;
 let lastMovementNarrationAt = 0;
 let lastMovementNarrationDirection = '';
 let outputMode = settings.loadOutputMode();
@@ -1161,7 +1164,7 @@ const itemInteractionController = createItemInteractionController({
   hasPermission: (key) => authController.hasPermission(key),
   getAuthUserId: () => authController.getAuthUserId(),
   getItemManagementActionMetadata,
-  itemLabel,
+  itemLabel: itemLabelWithInteractionHint,
   getEditableItemPropertyKeys,
   getInspectItemPropertyKeys,
   getItemPropertyValue,
@@ -1806,6 +1809,16 @@ function pushDirectChatMessage(message: string, peerId: string, peerName: string
   updateStatus(message);
 }
 
+function resetChatHistoryForReplay(): void {
+  messageBuffer.length = 0;
+  publicMessageBuffer.length = 0;
+  directConversationBuffers.clear();
+  messageCursor = -1;
+  publicMessageCursor = -1;
+  focusedConversationPeerId = null;
+  focusedConversationPeerName = null;
+}
+
 function loadQueuedChatMessages(): QueuedChatMessage[] {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(MESSAGE_OUTBOX_STORAGE_KEY) || '[]') as unknown;
@@ -1862,6 +1875,7 @@ function currentPeerIdForQueuedMessage(message: QueuedChatMessage): string | nul
 }
 
 function sendQueuedMessageNow(message: QueuedChatMessage): boolean {
+  if (!state.running || !signaling.isOpen()) return false;
   if (message.kind === 'room') {
     return signaling.send({ type: 'chat_message', message: message.message });
   }
@@ -1903,6 +1917,9 @@ function sendOrQueueChatMessage(rawMessage: string): void {
     targetName: directTargetName,
     createdAt: Date.now(),
   };
+  // Resolve direct targets by the current peer id before sending. A stale id
+  // can otherwise be accepted by WebSocket.send() and then discarded by the
+  // server after a reconnect or location change.
   if (sendQueuedMessageNow(queued)) {
     return;
   }
@@ -1915,8 +1932,9 @@ function updateGridDashboard(): void {
   const peerCount = state.peers.size;
   const itemCount = Array.from(state.items.values()).filter((item) => !item.carrierId && !isItemQuiet(item)).length;
   const namesHere = getPeerNamesAtPosition(state.player.x, state.player.y);
-  const itemsHere = getItemsAtPosition(state.player.x, state.player.y).map((item) => itemLabel(item));
-  const hereSummary = [...namesHere, ...itemsHere].join(', ') || 'just you';
+  const itemsHere = getItemsAtPosition(state.player.x, state.player.y);
+  const itemSummary = itemsHere.length > 0 ? formatItemNarrationSummary(itemsHere) : '';
+  const hereSummary = [...namesHere, itemSummary].filter(Boolean).join(', ') || 'just you';
 
   dom.gridPosition.textContent = `${state.player.x}, ${state.player.y}`;
   dom.gridPeople.textContent = peerCount === 1 ? '1 other user' : `${peerCount} other users`;
@@ -2218,6 +2236,12 @@ function itemLabel(item: WorldItem): string {
   return `${item.title} (${itemTypeLabel(item.type)})`;
 }
 
+/** Adds a brief use hint for objects whose interaction is not obvious. */
+function itemLabelWithInteractionHint(item: WorldItem): string {
+  const hint = formatItemInteractionHint(item);
+  return hint ? `${itemLabel(item)}. ${hint}.` : itemLabel(item);
+}
+
 /** Resolves effective spatial audio configuration for an item, with global fallbacks. */
 function getItemSpatialConfig(item: WorldItem): { range: number; directional: boolean; facingDeg: number } {
   const global = getItemTypeGlobalProperties(item.type);
@@ -2449,7 +2473,8 @@ function cycleFocusedItemCommand(reverse = false): void {
   const nextIndex = ((currentIndex + direction) % items.length + items.length) % items.length;
   const item = items[nextIndex];
   state.focusedItemId = item.id;
-  updateStatus(`Focused ${itemLabel(item)}. Shift+Enter for related actions.`);
+  const hint = formatItemInteractionHint(item);
+  updateStatus(`Focused ${itemLabel(item)}.${hint ? ` ${hint}.` : ''} Shift+Enter for related actions.`);
   audio.sfxUiBlip();
 }
 
@@ -2727,7 +2752,7 @@ function describeSurfaceCommand(): void {
   if (surface) {
     const contents = getSurfaceContents(surface);
     const description = contents.length > 0
-      ? contents.map(itemLabel).join(', ')
+      ? formatItemNarrationSummary(contents)
       : 'nothing';
     updateStatus(`${itemLabel(surface)} holds ${description}.`);
     audio.sfxUiBlip();
@@ -2739,7 +2764,7 @@ function describeSurfaceCommand(): void {
       String(item.params.surfaceId ?? '').trim().length === 0,
   );
   const description = floorItems.length > 0
-    ? floorItems.map(itemLabel).join(', ')
+    ? formatItemNarrationSummary(floorItems)
     : 'nothing';
   updateStatus(`The floor here holds ${description}.`);
   audio.sfxUiBlip();
@@ -2944,7 +2969,7 @@ function describeTileArrival(x: number, y: number, dx = 0, dy = 0): string {
 
   const itemsOnTile = getItemsAtPosition(x, y);
   if (itemsOnTile.length > 0) {
-    parts.push(`You notice ${itemsOnTile.map((item) => itemLabel(item)).join(', ')}.`);
+    parts.push(`You notice ${formatItemNarrationSummary(itemsOnTile)}.`);
   }
 
   return parts.join(' ');
@@ -3154,23 +3179,39 @@ function effectiveMovementTickMs(): number {
 /** Main animation/update loop for movement, spatial audio, and rendering. */
 function gameLoop(): void {
   if (!state.running) return;
-  updateTeleport();
-  handleMovement();
-  const listenerPosition = getListenerPosition();
-  if (!activeTeleport) {
-    void refreshAudioSubscriptions();
+  try {
+    updateTeleport();
+    handleMovement();
+    const listenerPosition = getListenerPosition();
+    if (!activeTeleport) {
+      void refreshAudioSubscriptions();
+    }
+    audio.updateSpatialAudio(peerManager.getPeers(), listenerPosition);
+    audio.updateSpatialSamples(listenerPosition);
+    radioRuntime.updateSpatialAudio(state.items, listenerPosition);
+    tvScreenRuntime.sync(state.items.values(), listenerPosition);
+    itemEmitRuntime.updateSpatialAudio(state.items, listenerPosition);
+    billboardRuntime.update(state.items, listenerPosition);
+    updateItemBeacon();
+    state.cursorVisible = Math.floor(Date.now() / 500) % 2 === 0;
+    updateGridDashboard();
+    renderer.draw(state);
+  } catch (error) {
+    const now = performance.now();
+    if (now - lastRuntimeRecoveryStatusAt >= RUNTIME_RECOVERY_STATUS_INTERVAL_MS) {
+      lastRuntimeRecoveryStatusAt = now;
+      console.error('Endiginous frame loop recovered after an error.', error);
+      state.keysPressed = {};
+      activeTeleport = null;
+      if (document.visibilityState === 'visible' && document.hasFocus()) {
+        updateStatus('Navigation recovered.');
+      }
+    }
+  } finally {
+    if (state.running) {
+      requestAnimationFrame(gameLoop);
+    }
   }
-  audio.updateSpatialAudio(peerManager.getPeers(), listenerPosition);
-  audio.updateSpatialSamples(listenerPosition);
-  radioRuntime.updateSpatialAudio(state.items, listenerPosition);
-  tvScreenRuntime.sync(state.items.values(), listenerPosition);
-  itemEmitRuntime.updateSpatialAudio(state.items, listenerPosition);
-  billboardRuntime.update(state.items, listenerPosition);
-  updateItemBeacon();
-  state.cursorVisible = Math.floor(Date.now() / 500) % 2 === 0;
-  updateGridDashboard();
-  renderer.draw(state);
-  requestAnimationFrame(gameLoop);
 }
 
 /** Applies held-arrow movement with bounds checks, tile cues, and server position sync. */
@@ -3717,6 +3758,7 @@ const onAppMessage = createOnMessageHandler({
   pushChatMessage,
   pushPublicChatMessage,
   pushDirectChatMessage,
+  resetChatHistoryForReplay,
   classifySystemMessageSound,
   ACTION_SOUND_URL,
   SYSTEM_SOUND_URLS,
@@ -4099,7 +4141,7 @@ function radioRemoteButtonCommand(
   action: 'station_first' | 'station_last' | 'power_toggle' | 'info',
 ): void {
   const remote = getCarriedMediaRemote();
-  if (!remote || remote.kind !== 'radio' || !state.remoteControlsFocused) {
+  if (!remote || !state.remoteControlsFocused) {
     updateStatus('Press Tab to focus the held remote controls first.');
     audio.sfxUiCancel();
     return;
@@ -4150,7 +4192,7 @@ function setLocalCastPlayback(stream: MediaStream | null): void {
   void element.play().catch(() => updateStatus('Local cast is ready. Press the local cast playback control to start it.'));
 }
 
-/** Starts a user-approved local display/tab cast and publishes its receiver metadata. */
+/** Starts a user-approved local screen/window/tab/app cast and publishes its receiver metadata. */
 async function castToNearestDevice(): Promise<void> {
   const candidates = Array.from(state.items.values()).filter((item) => {
     if (item.locationId && item.locationId !== currentLocationId) return false;
@@ -4165,17 +4207,26 @@ async function castToNearestDevice(): Promise<void> {
   }
   activeCastStream?.getTracks().forEach((track) => track.stop());
   try {
-  activeCastStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    activeCastStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      } as MediaTrackConstraints,
+      systemAudio: 'include',
+      preferCurrentTab: false,
+    } as DisplayMediaStreamOptions & { systemAudio?: 'include'; preferCurrentTab?: boolean });
     setLocalCastPlayback(activeCastStream);
     await peerManager.replaceCastStream(activeCastStream);
   } catch {
     setLocalCastPlayback(null);
     activeCastStream = null;
-    updateStatus('Casting was cancelled or the device permission was unavailable.');
+    updateStatus('Casting was cancelled, or no local screen, window, tab, or app media source was available.');
     audio.sfxUiCancel();
     return;
   }
-  const deviceName = String(activeCastStream.getVideoTracks()[0]?.label || activeCastStream.getAudioTracks()[0]?.label || 'Local device').slice(0, 80);
+  const deviceName = String(activeCastStream.getVideoTracks()[0]?.label || activeCastStream.getAudioTracks()[0]?.label || 'Local media').slice(0, 80);
   const stationCode = `CAST-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   if (dom.castLocalOnlyToggle.checked) {
     await peerManager.replaceCastStream(null);
@@ -4273,7 +4324,7 @@ function listItemsCommand(): void {
   const itemLabelText = itemCount === 1 ? 'item' : 'items';
   announceMenuEntry(
     `${itemCount} ${itemLabelText}`,
-    `${itemLabel(selected)}, ${distanceDirectionPhrase(state.player.x, state.player.y, selected.x, selected.y)}, ${selected.x}, ${selected.y}`,
+    `${itemLabelWithInteractionHint(selected)}, ${distanceDirectionPhrase(state.player.x, state.player.y, selected.x, selected.y)}, ${selected.x}, ${selected.y}`,
   );
 }
 
@@ -4288,7 +4339,7 @@ function locateNearestItemCommand(): void {
   if (!item) return;
   focusItemForAction(item);
   audio.sfxLocate({ x: item.x - state.player.x, y: item.y - state.player.y }, HEARING_RADIUS);
-  updateStatus(`${itemLabel(item)}, ${distanceDirectionPhrase(state.player.x, state.player.y, item.x, item.y)}, ${item.x}, ${item.y}`);
+  updateStatus(`${itemLabelWithInteractionHint(item)}, ${distanceDirectionPhrase(state.player.x, state.player.y, item.x, item.y)}, ${item.x}, ${item.y}`);
 }
 
 /** Plays a gentle proximity beacon for nearby discoverable items when enabled. */
@@ -4821,6 +4872,10 @@ function handleNormalModeInput(code: string, shiftKey: boolean, ctrlKey: boolean
       radioRemoteButtonCommand('info');
       return;
     }
+    if (code === 'KeyC' || (shiftKey && code === 'KeyK')) {
+      void castToNearestDevice();
+      return;
+    }
     if (code === 'Space') {
       radioRemoteControlCommand(shiftKey ? 'station_previous' : 'station_next');
       return;
@@ -4867,7 +4922,7 @@ function handleNormalModeInput(code: string, shiftKey: boolean, ctrlKey: boolean
     cycleFocusedItemCommand(false);
     return;
   }
-  const command = resolveMainModeCommand(code, shiftKey, ctrlKey);
+  const command = resolveMainModeCommand(code, shiftKey, ctrlKey, input.source === 'native' ? 'desktop' : 'web');
   if (!command) return;
   mainModeCommandHandlers[command]();
 }

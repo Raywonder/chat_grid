@@ -58,7 +58,7 @@ relative asset paths and copies it to `desktop/windows/web/`, including the full
 - `Ctrl+Shift+Enter`: disconnect
 - `Ctrl+,`: audio setup
 - `Ctrl+G`: focus the grid
-- `Ctrl+R`: reload
+- `Ctrl+R`: open in-world reactions and user actions
 - `Ctrl+Shift+U`: switch between live and local Endiginous URL
 - `Ctrl+Shift+I`: developer tools
 

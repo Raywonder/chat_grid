@@ -61,8 +61,8 @@
           "description": "List users with room/location details; Enter teleports to same-room users, left/right arrow adjusts volume"
         },
         {
-          "keys": "Shift+Enter",
-          "description": "Use Shift+R for reactions and actions toward the selected, focused, or nearest user, including hug, cuddle, kiss, wave, clap, blush, cry, yawn, apologize, and forgive"
+          "keys": "Shift+R / desktop Ctrl+R",
+          "description": "Use Shift+R for reactions and actions toward the selected, focused, or nearest user, including hug, cuddle, kiss, wave, clap, blush, cry, yawn, apologize, and forgive. Desktop clients can also use Ctrl+R; browser Ctrl+R remains refresh."
         },
         {
           "keys": "U",

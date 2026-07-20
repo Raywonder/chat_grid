@@ -28,6 +28,12 @@ describe('conversation shortcuts', () => {
     expect(resolveMainModeCommand('KeyR', true, false)).toBe('openUserActionMenu');
   });
 
+  it('keeps Control R browser refresh in web profile and user actions in desktop profile', () => {
+    expect(resolveMainModeCommand('KeyR', false, true)).toBeNull();
+    expect(resolveMainModeCommand('KeyR', false, true, 'web')).toBeNull();
+    expect(resolveMainModeCommand('KeyR', false, true, 'desktop')).toBe('openUserActionMenu');
+  });
+
   it('assigns Y to the current location', () => {
     expect(resolveMainModeCommand('KeyY', false, false)).toBe('speakLocation');
   });

@@ -65,6 +65,7 @@ Summary:
 - Protocol behavior notes: `docs/protocol-notes.md`
 - Item schema reference: `docs/item-schema.md`
 - Local dev commands: `docs/local.md`
+- Rename/compatibility plan: `docs/endiginous-rename-plan.md`
 
 ## Contributing
 Contributions and ideas are welcome. The grid is already home to several rather absurd ideas, and yours may fit right in. Please look over the docs and other files for guidance, or ask for help.

@@ -17,7 +17,8 @@ def test_audio_setup_is_file_menu_only_in_native_client():
 
 def test_native_file_menu_does_not_use_single_item_submenus():
     source = (Path(__file__).parents[1] / "src" / "chat_grid_native" / "app.py").read_text(encoding="utf-8")
-    assert 'file_menu.Append(wx.ID_REFRESH, "&Reconnect\\tCtrl+R")' in source
+    assert 'file_menu.Append(wx.ID_REFRESH, "&Reconnect")' in source
+    assert '"KeyR", ctrl=True' in source
     assert 'file_menu.Append(wx.ID_ABOUT, "&Credits and version\\tCtrl+Shift+C")' in source
     assert "connection_menu" not in source
     assert "information_menu" not in source

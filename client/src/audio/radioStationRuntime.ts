@@ -460,7 +460,6 @@ export class RadioStationRuntime {
     this.pendingSharedStarts.clear();
     this.nextSharedStartAtMs.clear();
     this.sharedStartFailureCount.clear();
-    this.lastRadioStates.clear();
   }
 
   /** Force paused, errored, or stalled active media elements to reload cleanly. */

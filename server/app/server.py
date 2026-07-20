@@ -43,6 +43,7 @@ from .world_cup_live import (
 )
 from .client import ClientConnection
 from .config import load_config
+from .chat_history import ChatHistory
 from .item_catalog import (
     CLOCK_DEFAULT_TIME_ZONE,
     CLOCK_TIME_ZONE_OPTIONS,
@@ -615,6 +616,8 @@ class SignalingServer:
             username_max_length=username_max_length,
         )
         self.item_service = ItemService(state_file=state_file, seed_builtin_items=True)
+        history_file = (state_file or Path.cwd() / "runtime" / "items.json").with_name("chat_history.jsonl")
+        self.chat_history = ChatHistory(history_file)
         self.notification_service = NotificationService()
         self.ntfy_publisher = NtfyPublisher(
             base_url=os.getenv("CHGRID_NTFY_BASE_URL", "").strip(),
@@ -2181,6 +2184,8 @@ class SignalingServer:
 
         if cls._is_door_transition_item(item):
             return "sounds/doors/door-open.mp3?v=20260714-real-door"
+        if cls._is_tv_media_item(item):
+            return None
         param_sound = item.params.get("useSound")
         if isinstance(param_sound, str):
             token = param_sound.strip()
@@ -3219,13 +3224,18 @@ class SignalingServer:
             return
         next_index = station_index % len(presets)
         station = presets[next_index]
+        switch_sound = (
+            self._tv_switch_sound(item, station)
+            if self._is_tv_media_item(item)
+            else station.get("switchSound", "")
+        )
         next_params = {
             **item.params,
             "stationIndex": next_index,
             "streamUrl": station["streamUrl"],
             "playbackUrl": "",
             "stationName": station["title"],
-            "stationSwitchSound": station.get("switchSound", ""),
+            "stationSwitchSound": switch_sound,
             "nowPlaying": "",
         }
         if enabled is not None:
@@ -3919,11 +3929,49 @@ class SignalingServer:
         )
         return True
 
+    @staticmethod
+    def _tv_switch_sound(item: WorldItem, channel_state: dict[str, str] | None = None) -> str:
+        """Return the dedicated TV channel-change one-shot sound."""
+
+        explicit = str(
+            (channel_state or {}).get("tvSwitchSound")
+            or item.params.get("tvSwitchSound")
+            or ""
+        ).strip()
+        return explicit or "sounds/device-buttons/tv_channel_switch.mp3"
+
+    async def _broadcast_tv_channel_switch_sound(self, item: WorldItem, sound: str) -> None:
+        """Play a TV channel-change cue from the TV tile for nearby listeners."""
+
+        if not sound:
+            return
+        sound_x, sound_y = self._get_item_sound_source_position(item)
+        await self._broadcast_location(
+            item.locationId,
+            ItemUseSoundPacket(
+                type="item_use_sound",
+                itemId=item.id,
+                sound=sound,
+                x=sound_x,
+                y=sound_y,
+                range=self._get_item_emit_range(item),
+            ),
+        )
+
     async def _handle_tv_remote_control(
         self,
         client: ClientConnection,
         remote: WorldItem,
-        action: Literal["station_next", "station_previous", "volume_up", "volume_down"],
+        action: Literal[
+            "station_next",
+            "station_previous",
+            "station_first",
+            "station_last",
+            "volume_up",
+            "volume_down",
+            "power_toggle",
+            "info",
+        ],
     ) -> bool:
         """Handle explicit keyboard remote-control actions for a carried TV remote."""
 
@@ -3958,7 +4006,56 @@ class SignalingServer:
             )
             return True
 
-        if action in {"station_next", "station_previous"}:
+        targets = self._tv_targets_for_remote(remote, target, require_presets=False)
+        if action == "info":
+            channel_name = str(target.params.get("stationName") or target.title).strip()
+            now_playing = str(target.params.get("nowPlaying") or "").strip()
+            enabled = target.params.get("enabled") is not False
+            volume = int(target.params.get("mediaVolume", 50) or 0)
+            playing = f", playing {now_playing}" if now_playing else ""
+            await self._send_item_result(
+                client,
+                True,
+                "use",
+                f"{target.title}: {'on' if enabled else 'off'}, {channel_name}, volume {volume}{playing}.",
+                remote.id,
+            )
+            return True
+
+        if action == "power_toggle":
+            next_enabled = target.params.get("enabled") is False
+            changed = 0
+            play_started_at = self.item_service.now_ms()
+            for item in targets:
+                presets = self._radio_presets(item)
+                if not presets:
+                    continue
+                try:
+                    await self._apply_radio_station_state(
+                        item,
+                        self._radio_station_index(item, len(presets)),
+                        presets[self._radio_station_index(item, len(presets))],
+                        client,
+                        enabled=next_enabled,
+                        play_started_at=play_started_at if next_enabled else None,
+                    )
+                except ValueError:
+                    continue
+                if next_enabled:
+                    await self._reconcile_radios_for_active_tv(
+                        item, client, play_started_at=play_started_at
+                    )
+                changed += 1
+            await self._send_item_result(
+                client,
+                changed > 0,
+                "use",
+                f"Remote switched {changed} connected TV{'s' if changed != 1 else ''} {'on' if next_enabled else 'off'}.",
+                remote.id,
+            )
+            return True
+
+        if action in {"station_next", "station_previous", "station_first", "station_last"}:
             source = (
                 self._tv_station_source_for_target(target)
                 if self._remote_controls_linked_tvs(remote)
@@ -3974,10 +4071,17 @@ class SignalingServer:
                     remote.id,
                 )
                 return True
-            step = 1 if action == "station_next" else -1
-            next_index = self._radio_station_index(source, len(presets)) + step
+            current_index = self._radio_station_index(source, len(presets))
+            if action == "station_first":
+                next_index = 0
+            elif action == "station_last":
+                next_index = len(presets) - 1
+            else:
+                step = 1 if action == "station_next" else -1
+                next_index = current_index + step
             channel_state = presets[next_index % len(presets)]
             channel = channel_state["title"]
+            switch_sound = self._tv_switch_sound(target, channel_state)
             changed = 0
             play_started_at = self.item_service.now_ms()
             for item in self._tv_targets_for_remote(
@@ -3997,6 +4101,7 @@ class SignalingServer:
                 await self._reconcile_radios_for_active_tv(
                     item, client, play_started_at=play_started_at
                 )
+                await self._broadcast_tv_channel_switch_sound(item, switch_sound)
                 changed += 1
             if changed <= 0:
                 await self._send_item_result(
@@ -4019,7 +4124,7 @@ class SignalingServer:
         step = 5 if action == "volume_up" else -5
         changed = 0
         changed_volumes: list[int] = []
-        for item in self._tv_targets_for_remote(remote, target, require_presets=False):
+        for item in targets:
             try:
                 current_volume = int(item.params.get("mediaVolume", 50))
             except (TypeError, ValueError):
@@ -4198,6 +4303,7 @@ class SignalingServer:
         next_index = target_index if sync_all else target_index + 1
         channel_state = presets[next_index % len(presets)]
         channel = channel_state["title"]
+        switch_sound = self._tv_switch_sound(target, channel_state)
         changed = 0
         play_started_at = self.item_service.now_ms()
         for item in self._tv_targets_for_remote(remote, target, require_presets=False):
@@ -4212,6 +4318,10 @@ class SignalingServer:
                 )
             except ValueError:
                 continue
+            await self._reconcile_radios_for_active_tv(
+                item, client, play_started_at=play_started_at
+            )
+            await self._broadcast_tv_channel_switch_sound(item, switch_sound)
             changed += 1
         if changed <= 0:
             await self._send_item_result(
@@ -6820,6 +6930,32 @@ class SignalingServer:
                 "permissions": self._sorted_permissions(client.permissions),
                 "policy": self._auth_policy(),
             },
+            chatHistory={
+                "public": [
+                    {
+                        "type": "chat_message",
+                        "message": entry["message"],
+                        "senderId": entry.get("senderUserId") or "history",
+                        "senderNickname": entry.get("senderNickname") or "Unknown",
+                        "system": False,
+                    }
+                    for entry in self.chat_history.public_for_location(client.location_id)
+                ],
+                "direct": [
+                    {
+                        "type": "direct_message",
+                        "message": entry["message"],
+                        "senderId": entry.get("senderUserId") or "history-sender",
+                        "senderNickname": entry.get("senderNickname") or "Unknown",
+                        "targetId": entry.get("targetUserId") or "history-target",
+                        "targetNickname": entry.get("targetNickname") or "Unknown",
+                        "senderUserId": entry.get("senderUserId"),
+                        "targetUserId": entry.get("targetUserId"),
+                        "outgoing": entry.get("senderUserId") == client.user_id,
+                    }
+                    for entry in self.chat_history.direct_for_user(client.user_id or "")
+                ],
+            } if client.user_id else None,
         )
         await self._send(client.websocket, packet)
         for cast in self._active_media_casts.get(client.location_id, {}).values():
@@ -9507,6 +9643,13 @@ class SignalingServer:
                 return
             if await self._handle_chat_command(client, packet.message):
                 return
+            self.chat_history.append({
+                "kind": "public",
+                "locationId": client.location_id,
+                "senderUserId": client.user_id,
+                "senderNickname": client.nickname,
+                "message": packet.message,
+            })
             await self._broadcast_location(
                 client.location_id,
                 BroadcastChatMessagePacket(
@@ -9550,6 +9693,15 @@ class SignalingServer:
                     ),
                 )
                 return
+            self.chat_history.append({
+                "kind": "direct",
+                "locationId": client.location_id,
+                "senderUserId": client.user_id,
+                "senderNickname": client.nickname,
+                "targetUserId": target.user_id,
+                "targetNickname": target.nickname,
+                "message": packet.message,
+            })
             await self._send(
                 target.websocket,
                 DirectMessageBroadcastPacket(

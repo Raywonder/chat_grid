@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import ctypes
 import os
 from pathlib import Path
@@ -24,7 +25,7 @@ from .updater import UpdateService
 LOGGER = logging.getLogger(__name__)
 
 
-class ChatGridTrayIcon(wx.adv.TaskBarIcon):
+class EndiginousTrayIcon(wx.adv.TaskBarIcon):
     """System-tray access to the one running Endiginous window."""
 
     def __init__(self, frame: "MainFrame") -> None:
@@ -179,7 +180,7 @@ class MainFrame(wx.Frame):
         restart_world_id = wx.NewIdRef()
         focus_world_id = wx.NewIdRef()
         tray_id = wx.NewIdRef()
-        file_menu.Append(reconnect_id, "&Reconnect to world\tCtrl+R", "Reconnect without opening another client")
+        file_menu.Append(reconnect_id, "&Reconnect to world", "Reconnect without opening another client")
         file_menu.Append(restart_world_id, "&Restart frozen world view\tCtrl+Shift+R", "Replace only the embedded world view")
         file_menu.Append(focus_world_id, "&Focus world\tCtrl+L", "Move keyboard focus into the world")
         file_menu.AppendSeparator()
@@ -273,6 +274,11 @@ class MainFrame(wx.Frame):
         """Activate web world controls and move native focus into the renderer."""
         self.web.RunScript("document.getElementById('focusGridButton')?.click();")
         self.web.SetFocus()
+
+    def _dispatch_world_shortcut(self, code: str, *, ctrl: bool = False, shift: bool = False) -> None:
+        """Forward a native-only shortcut into the embedded world command profile."""
+        options = json.dumps({"ctrlKey": ctrl, "shiftKey": shift})
+        self.web.RunScript(f"window.chatGridNativeKey?.({json.dumps(code)}, {options});")
 
     def _on_error(self, event: wx.html2.WebViewEvent) -> None:
         LOGGER.warning("WebView load error: %s", event.GetString())
@@ -384,6 +390,11 @@ class MainFrame(wx.Frame):
         if (event.ControlDown() or event.MetaDown()) and (key == ord(",") or unicode_key == ord(",")):
             self._show_settings(event)
             return
+        if (event.ControlDown() or event.MetaDown()) and not event.AltDown() and (
+            key == ord("R") or key == ord("r") or unicode_key == ord("R") or unicode_key == ord("r")
+        ):
+            self._dispatch_world_shortcut("KeyR", ctrl=True)
+            return
         if key == wx.WXK_ALT:
             self._open_file_menu()
             return
@@ -414,7 +425,7 @@ class MainFrame(wx.Frame):
         event.Skip()
 
 
-class ChatGridApp(wx.App):
+class EndiginousApp(wx.App):
     """Application entry point."""
 
     def __init__(self, activation: SingleInstanceActivation) -> None:
@@ -431,7 +442,7 @@ class ChatGridApp(wx.App):
         )
         autostart = "--autostart" in sys.argv
         self.frame = MainFrame(SettingsStore(), autostart=autostart)
-        self.tray = ChatGridTrayIcon(self.frame)
+        self.tray = EndiginousTrayIcon(self.frame)
         self.activation_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._on_activation_timer, self.activation_timer)
         self.activation_timer.Start(250)
@@ -463,7 +474,7 @@ def main() -> int:
         return 0
     try:
         LOGGER.info("Starting Endiginous %s on Python %s", __version__, sys.version)
-        app = ChatGridApp(activation)
+        app = EndiginousApp(activation)
         app.MainLoop()
         return 0
     except Exception:

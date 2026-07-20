@@ -358,6 +358,24 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
         max_length=240,
         field_name="description",
     )
+    next_params["readableText"] = enforce_max_length(
+        str(
+            next_params.get("readableText", item.params.get("readableText", ""))
+            or ""
+        ).strip(),
+        max_length=2000,
+        field_name="readableText",
+    )
+    next_params["interactionHint"] = enforce_max_length(
+        str(
+            next_params.get(
+                "interactionHint", item.params.get("interactionHint", "")
+            )
+            or ""
+        ).strip(),
+        max_length=160,
+        field_name="interactionHint",
+    )
     next_params["phoneExtension"] = enforce_max_length(
         str(next_params.get("phoneExtension", item.params.get("phoneExtension", "")) or "").strip(),
         max_length=24,

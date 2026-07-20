@@ -31,6 +31,8 @@ export type AdminNotificationSummary = {
   kind: string;
   title: string;
   message: string;
+  targetUserId?: string | null;
+  actorUserId?: string | null;
   read?: boolean;
 };
 
@@ -113,6 +115,66 @@ export function createAdminController(deps: AdminControllerDeps): {
   let notifications: AdminNotificationSummary[] = [];
   let notificationIndex = 0;
   let notificationScope: 'own' | 'admin' = 'own';
+  let notificationReturnMode: 'normal' | 'adminMenu' = 'normal';
+
+  function setListIndex(index: number, length: number): number {
+    if (length <= 0) return 0;
+    return Math.max(0, Math.min(index, length - 1));
+  }
+
+  function formatTimestamp(value: number): string {
+    if (!Number.isFinite(value) || value <= 0) return 'unknown time';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'unknown time';
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
+
+  function notificationScopeLabel(scope = notificationScope): string {
+    return scope === 'admin' ? 'Admin notifications' : 'My notifications';
+  }
+
+  function notificationPositionLabel(): string {
+    if (notifications.length === 0) return '0 of 0';
+    return `${notificationIndex + 1} of ${notifications.length}`;
+  }
+
+  function notificationDetail(entry: AdminNotificationSummary): string {
+    const state = entry.read ? 'read' : 'unread';
+    const kind = entry.kind ? ` Type ${entry.kind}.` : '';
+    return `${state} notification ${notificationPositionLabel()}. ${entry.title}. ${entry.message} Received ${formatTimestamp(entry.createdAt)}.${kind}`;
+  }
+
+  function announceSelectedNotification(): void {
+    const selected = notifications[notificationIndex];
+    if (!selected) {
+      deps.updateStatus(`${notificationScopeLabel()}. No notifications.`);
+      return;
+    }
+    deps.updateStatus(notificationDetail(selected));
+  }
+
+  function userListLabel(entry: AdminUserSummary): string {
+    return `${entry.username}, role ${entry.role}, ${entry.status}`;
+  }
+
+  function userDetail(entry: AdminUserSummary): string {
+    const action =
+      adminPendingUserAction === 'set_role'
+        ? 'Press Enter to choose a new role.'
+        : adminPendingUserAction === 'ban'
+          ? 'Press Enter to disable this account.'
+          : adminPendingUserAction === 'unban'
+            ? 'Press Enter to enable this account.'
+            : adminPendingUserAction === 'delete_account'
+              ? 'Press Enter to review account deletion.'
+              : 'Press Escape to return to the admin menu.';
+    return `User ${adminUserIndex + 1} of ${adminUsers.length}. ${entry.username}. Role ${entry.role}. Status ${entry.status}. ${action}`;
+  }
 
   function setServerAdminMenuActions(actions: Array<{ id: string; label: string; tooltip?: string }> | null | undefined): void {
     serverAdminMenuActions = (actions || [])
@@ -186,7 +248,7 @@ export function createAdminController(deps: AdminControllerDeps): {
     deps.state.mode = 'adminUserList';
     adminUserIndex = 0;
     const first = adminUsers[0];
-    deps.announceMenuEntry('Users', `${first.username}, ${first.role}, ${first.status}`);
+    deps.announceMenuEntry('Users', userListLabel(first));
   }
 
   function handleAdminPlatformOverview(message: Extract<IncomingMessage, { type: 'admin_platform_overview' }>): void {
@@ -225,24 +287,22 @@ export function createAdminController(deps: AdminControllerDeps): {
   function handleAdminNotificationsList(message: Extract<IncomingMessage, { type: 'admin_notifications_list' }>): void {
     notifications = [...message.notifications];
     notificationScope = message.scope === 'admin' ? 'admin' : 'own';
-    notificationIndex = Math.max(0, Math.min(notificationIndex, Math.max(0, notifications.length - 1)));
-    if (deps.state.mode !== 'adminMenu') deps.state.mode = 'notifications';
-    const scopeLabel = message.scope === 'admin' ? 'Admin notifications' : 'My notifications';
-    const summary =
-      message.notifications.length > 0
-        ? message.notifications
-            .slice(0, 8)
-            .map((entry) => `${entry.read ? 'read' : 'unread'} ${entry.title}: ${entry.message}`)
-            .join('; ')
-        : 'No notifications.';
+    notificationIndex = setListIndex(notificationIndex, notifications.length);
+    deps.state.mode = 'notifications';
+    const scopeLabel = notificationScopeLabel(notificationScope);
     const selected = notifications[notificationIndex];
-    deps.updateStatus(`${scopeLabel}. ${message.unreadCount} unread. ${selected ? `${selected.read ? 'read' : 'unread'} ${selected.title}: ${selected.message}` : summary}`);
+    if (selected) {
+      deps.updateStatus(`${scopeLabel}. ${message.unreadCount} unread. ${notificationDetail(selected)} Use arrows to move, Space for details, R to refresh, Enter to mark selected read, A to mark all visible read.`);
+    } else {
+      deps.updateStatus(`${scopeLabel}. No notifications. Press R or Enter to refresh, Escape to close.`);
+    }
     deps.sfxUiBlip();
   }
 
   function openNotifications(): void {
     notificationScope = 'own';
     notificationIndex = 0;
+    notificationReturnMode = 'normal';
     deps.state.mode = 'notifications';
     deps.signalingSend({ type: 'admin_notifications_list', scope: 'own' });
     deps.updateStatus('Loading notifications...');
@@ -250,9 +310,28 @@ export function createAdminController(deps: AdminControllerDeps): {
 
   function handleNotificationsModeInput(code: string, key: string): void {
     if (code === 'Escape') {
-      deps.state.mode = 'normal';
-      deps.updateStatus('Closed notifications.');
+      deps.state.mode = notificationReturnMode;
+      deps.updateStatus(notificationReturnMode === 'adminMenu' ? 'Admin menu.' : 'Closed notifications.');
       deps.sfxUiCancel();
+      return;
+    }
+    if (code === 'KeyM' && key.toLowerCase() === 'm') {
+      notificationScope = 'own';
+      notificationIndex = 0;
+      deps.signalingSend({ type: 'admin_notifications_list', scope: 'own' });
+      deps.updateStatus('Loading my notifications...');
+      return;
+    }
+    if (code === 'KeyG' && key.toLowerCase() === 'g') {
+      notificationScope = 'admin';
+      notificationIndex = 0;
+      deps.signalingSend({ type: 'admin_notifications_list', scope: 'admin' });
+      deps.updateStatus('Loading admin notifications...');
+      return;
+    }
+    if (code === 'KeyR' && key.toLowerCase() === 'r') {
+      deps.signalingSend({ type: 'admin_notifications_list', scope: notificationScope });
+      deps.updateStatus('Refreshing notifications...');
       return;
     }
     if (notifications.length === 0) {
@@ -262,17 +341,35 @@ export function createAdminController(deps: AdminControllerDeps): {
       }
       return;
     }
+    if (code === 'Home') {
+      notificationIndex = 0;
+      announceSelectedNotification();
+      deps.sfxUiBlip();
+      return;
+    }
+    if (code === 'End') {
+      notificationIndex = notifications.length - 1;
+      announceSelectedNotification();
+      deps.sfxUiBlip();
+      return;
+    }
+    if (code === 'PageDown' || code === 'PageUp') {
+      const delta = code === 'PageDown' ? 5 : -5;
+      notificationIndex = setListIndex(notificationIndex + delta, notifications.length);
+      announceSelectedNotification();
+      deps.sfxUiBlip();
+      return;
+    }
     const delta = code === 'ArrowDown' || key === 'j' ? 1 : code === 'ArrowUp' || key === 'k' ? -1 : 0;
     if (delta) {
       notificationIndex = (notificationIndex + delta + notifications.length) % notifications.length;
-      const selected = notifications[notificationIndex];
-      deps.updateStatus(`${selected.read ? 'read' : 'unread'} ${selected.title}: ${selected.message}`);
+      announceSelectedNotification();
       deps.sfxUiBlip();
       return;
     }
     if (code === 'Space') {
       const selected = notifications[notificationIndex];
-      if (selected) deps.updateStatus(`${selected.title}. ${selected.message}`);
+      if (selected) deps.updateStatus(notificationDetail(selected));
       deps.sfxUiBlip();
       return;
     }
@@ -350,7 +447,7 @@ export function createAdminController(deps: AdminControllerDeps): {
           if (userIndex >= 0) {
             adminUserIndex = userIndex;
             const selected = adminUsers[adminUserIndex];
-            deps.updateStatus(`${selected.username}, ${selected.role}, ${selected.status}.`);
+            deps.updateStatus(userDetail(selected));
           }
         }
       } else if (adminPendingUserMutation.action === 'ban') {
@@ -446,21 +543,29 @@ export function createAdminController(deps: AdminControllerDeps): {
         return;
       }
       if (selected.id === 'my_notifications') {
+        notificationScope = 'own';
+        notificationIndex = 0;
+        notificationReturnMode = 'adminMenu';
         deps.signalingSend({ type: 'admin_notifications_list', scope: 'own' });
         deps.updateStatus('Loading notifications...');
         return;
       }
       if (selected.id === 'mark_my_notifications_read') {
+        notificationScope = 'own';
         deps.signalingSend({ type: 'admin_notification_mark_read', scope: 'own' });
         deps.updateStatus('Marking notifications read...');
         return;
       }
       if (selected.id === 'admin_notifications') {
+        notificationScope = 'admin';
+        notificationIndex = 0;
+        notificationReturnMode = 'adminMenu';
         deps.signalingSend({ type: 'admin_notifications_list', scope: 'admin' });
         deps.updateStatus('Loading admin notifications...');
         return;
       }
       if (selected.id === 'mark_all_notifications_read') {
+        notificationScope = 'admin';
         deps.signalingSend({ type: 'admin_notification_mark_read', scope: 'admin' });
         deps.updateStatus('Marking admin notifications read...');
         return;
@@ -647,11 +752,35 @@ export function createAdminController(deps: AdminControllerDeps): {
       adminPendingUserAction = null;
       return;
     }
-    const control = handleListControlKey(code, key, adminUsers, adminUserIndex, (entry) => `${entry.username}, ${entry.role}, ${entry.status}`);
+    if (code === 'Home') {
+      adminUserIndex = 0;
+      deps.updateStatus(userDetail(adminUsers[adminUserIndex]));
+      deps.sfxUiBlip();
+      return;
+    }
+    if (code === 'End') {
+      adminUserIndex = adminUsers.length - 1;
+      deps.updateStatus(userDetail(adminUsers[adminUserIndex]));
+      deps.sfxUiBlip();
+      return;
+    }
+    if (code === 'PageDown' || code === 'PageUp') {
+      const delta = code === 'PageDown' ? 5 : -5;
+      adminUserIndex = setListIndex(adminUserIndex + delta, adminUsers.length);
+      deps.updateStatus(userDetail(adminUsers[adminUserIndex]));
+      deps.sfxUiBlip();
+      return;
+    }
+    if (code === 'Space') {
+      deps.updateStatus(userDetail(adminUsers[adminUserIndex]));
+      deps.sfxUiBlip();
+      return;
+    }
+    const control = handleListControlKey(code, key, adminUsers, adminUserIndex, userListLabel);
     if (control.type === 'move') {
       adminUserIndex = control.index;
       const selected = adminUsers[adminUserIndex];
-      deps.updateStatus(`${selected.username}, ${selected.role}, ${selected.status}.`);
+      deps.updateStatus(userDetail(selected));
       deps.sfxUiBlip();
       return;
     }
@@ -668,12 +797,14 @@ export function createAdminController(deps: AdminControllerDeps): {
         adminPendingUserMutation = { action: 'ban', username: selected.username };
         deps.signalingSend({ type: 'admin_user_ban', username: selected.username });
         adminPendingUserAction = 'ban';
+        deps.updateStatus(`Disabling account ${selected.username}...`);
         return;
       }
       if (adminPendingUserAction === 'unban') {
         adminPendingUserMutation = { action: 'unban', username: selected.username };
         deps.signalingSend({ type: 'admin_user_unban', username: selected.username });
         adminPendingUserAction = 'unban';
+        deps.updateStatus(`Enabling account ${selected.username}...`);
         return;
       }
       if (adminPendingUserAction === 'delete_account') {
@@ -734,7 +865,7 @@ export function createAdminController(deps: AdminControllerDeps): {
       deps.state.mode = 'adminUserList';
       const selected = adminUsers[adminUserIndex];
       if (selected) {
-        deps.updateStatus(`${selected.username}, ${selected.role}, ${selected.status}.`);
+        deps.updateStatus(userDetail(selected));
       } else {
         deps.updateStatus('Select user.');
       }
@@ -747,7 +878,7 @@ export function createAdminController(deps: AdminControllerDeps): {
         deps.state.mode = 'adminUserList';
         const selected = adminUsers[adminUserIndex];
         if (selected) {
-          deps.updateStatus(`${selected.username}, ${selected.role}, ${selected.status}.`);
+          deps.updateStatus(userDetail(selected));
         } else {
           deps.updateStatus('Select user.');
         }
