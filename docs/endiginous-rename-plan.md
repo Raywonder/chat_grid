@@ -14,6 +14,14 @@ Grid.
   Codex and other CLI workers to use Endiginous for new visible naming.
 - `scripts/endiginous_presence.py` is the preferred companion CLI entrypoint.
 
+## Staged User-Facing Alias
+
+The web client can be built with `VITE_BASE_PATH=/endiginous/` and served at
+`/endiginous/` while `/chatgrid/` remains the compatibility path. The alias
+must proxy WebSocket, session, and voice requests to the existing backend
+routes, and both paths must be checked from the public side before account
+links are switched.
+
 ## Compatibility Names To Keep For Now
 
 Keep these until a dedicated cutover updates production, installed clients,
