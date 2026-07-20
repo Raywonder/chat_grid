@@ -10,9 +10,9 @@ python -m pytest
 rm -rf build dist
 python -m PyInstaller --noconfirm --clean macos/ChatGrid-macOS.spec
 mkdir -p macos/release
-ditto -c -k --sequesterRsrc --keepParent "dist/Endiginous.app" "macos/release/Endiginous-0.4.2-macOS.zip"
+ditto -c -k --sequesterRsrc --keepParent "dist/Endiginous.app" "macos/release/Endiginous-0.4.3-macOS.zip"
 rm -rf macos/dmg-root
 mkdir -p macos/dmg-root
 ditto "dist/Endiginous.app" "macos/dmg-root/Endiginous.app"
 ln -s /Applications macos/dmg-root/Applications
-hdiutil create -volname "Endiginous" -srcfolder macos/dmg-root -ov -format UDZO "macos/release/Endiginous-0.4.2.dmg"
+hdiutil create -volname "Endiginous" -srcfolder macos/dmg-root -ov -format UDZO "macos/release/Endiginous-0.4.3.dmg"

@@ -58,8 +58,18 @@ export class SignalingClient {
 
   send(payload: OutgoingMessage): boolean {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
-    this.ws.send(JSON.stringify(payload));
-    return true;
+    try {
+      this.ws.send(JSON.stringify(payload));
+      return true;
+    } catch (error) {
+      // A socket can close between the readyState check and send().  Treat
+      // that narrow race as an ordinary unavailable connection so callers
+      // can queue retryable messages instead of the global keyboard handler
+      // turning it into a navigation-recovery failure.
+      this.status('Connection interrupted; message queued for reconnect.');
+      console.warn('Endiginous signaling send deferred after socket transition.', error);
+      return false;
+    }
   }
 
   isOpen(): boolean {

@@ -1,11 +1,11 @@
 {
-  "version": "0.4.2",
-  "releaseNotes": "Endiginous Windows 0.4.2 bundles web runtime R510 and includes the latest navigation, quiet movement recovery, and queued-message fixes.",
+  "version": "0.4.3",
+  "releaseNotes": "Endiginous Windows 0.4.3 bundles web runtime R512, keeps navigation recovery silent, and queues chat safely across socket close races.",
   "platforms": {
     "windows": {
-      "url": "https://blind.software/chatgrid/downloads/EndiginousSetup-0.4.2.exe",
-      "fileName": "EndiginousSetup-0.4.2.exe",
-      "sha256": "1280b9b2e30afe92da36a6fe8bfa15adb9f040b1bba2195566d2f8e58a8b4628",
+      "url": "https://blind.software/chatgrid/downloads/EndiginousSetup-0.4.3.exe",
+      "fileName": "EndiginousSetup-0.4.3.exe",
+      "sha256": "",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }
   }
