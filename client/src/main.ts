@@ -1275,7 +1275,23 @@ async function loadChangelog(): Promise<void> {
   }
 }
 
-/** Announces status text via ARIA with brief de-duplication and auto-clear timing. */
+function setStatusText(message: string, announceViaLiveRegion: boolean): void {
+  if (statusTimeout !== null) {
+    window.clearTimeout(statusTimeout);
+  }
+  dom.status.setAttribute('aria-live', announceViaLiveRegion ? 'polite' : 'off');
+  dom.status.textContent = '';
+  requestAnimationFrame(() => {
+    dom.status.textContent = message;
+  });
+  statusTimeout = window.setTimeout(() => {
+    if (dom.status.textContent === message) {
+      dom.status.textContent = '';
+    }
+  }, 4000);
+}
+
+/** Announces status text with brief de-duplication and auto-clear timing. */
 function updateStatus(message: string): void {
   if (!state.running && !joinGuideReaderActive) {
     return;
@@ -1300,20 +1316,11 @@ function updateStatus(message: string): void {
   ).chatGridNativeSpeak;
   if (normalized && typeof nativeSpeak === 'function') {
     nativeSpeak(normalized, { interrupt: true });
+    setStatusText(normalized, false);
+    return;
   }
 
-  if (statusTimeout !== null) {
-    window.clearTimeout(statusTimeout);
-  }
-  dom.status.textContent = '';
-  requestAnimationFrame(() => {
-    dom.status.textContent = normalized;
-  });
-  statusTimeout = window.setTimeout(() => {
-    if (dom.status.textContent === normalized) {
-      dom.status.textContent = '';
-    }
-  }, 4000);
+  setStatusText(normalized, true);
 }
 
 /** Updates persistent connection/update status shown under the page heading. */
