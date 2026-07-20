@@ -1,12 +1,12 @@
 {
   "version": "0.4.2",
-  "revision": "R505",
-  "releaseNotes": "Renames the accessible Windows client to Endiginous, updates the bundled web runtime to R505, keeps existing chatgrid:// sign-in/update compatibility, and preserves verified automatic update installation.",
+  "revision": "R510",
+  "releaseNotes": "Endiginous Windows 0.4.2 bundles web runtime R510 and includes the latest navigation, quiet movement recovery, and queued-message fixes.",
   "platforms": {
     "windows": {
       "url": "https://blind.software/chatgrid/downloads/EndiginousSetup-0.4.2.exe",
       "fileName": "EndiginousSetup-0.4.2.exe",
-      "sha256": "c675256cdceb7883b95d5db1a445a0be345fdfcd22d37cc6ee5344fc7f56d43d",
+      "sha256": "1280b9b2e30afe92da36a6fe8bfa15adb9f040b1bba2195566d2f8e58a8b4628",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }
   }
