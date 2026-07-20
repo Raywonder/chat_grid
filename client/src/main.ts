@@ -3182,6 +3182,16 @@ function gameLoop(): void {
   try {
     updateTeleport();
     handleMovement();
+  } catch (error) {
+    const now = performance.now();
+    if (now - lastRuntimeRecoveryStatusAt >= RUNTIME_RECOVERY_STATUS_INTERVAL_MS) {
+      lastRuntimeRecoveryStatusAt = now;
+      console.error('Endiginous movement loop recovered after an error.', error);
+      state.keysPressed = {};
+      activeTeleport = null;
+    }
+  }
+  try {
     const listenerPosition = getListenerPosition();
     if (!activeTeleport) {
       void refreshAudioSubscriptions();
@@ -3200,12 +3210,7 @@ function gameLoop(): void {
     const now = performance.now();
     if (now - lastRuntimeRecoveryStatusAt >= RUNTIME_RECOVERY_STATUS_INTERVAL_MS) {
       lastRuntimeRecoveryStatusAt = now;
-      console.error('Endiginous frame loop recovered after an error.', error);
-      state.keysPressed = {};
-      activeTeleport = null;
-      if (document.visibilityState === 'visible' && document.hasFocus()) {
-        updateStatus('Navigation recovered.');
-      }
+      console.error('Endiginous presentation loop recovered after an error.', error);
     }
   } finally {
     if (state.running) {

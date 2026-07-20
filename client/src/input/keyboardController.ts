@@ -50,9 +50,8 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     // Do not announce a retry prompt from a hidden/minimized desktop renderer;
     // the next input frame will be clean after the pressed-key state is reset.
     console.error('Endiginous input handler recovered after an error.', error);
-    if (document.visibilityState === 'visible' && document.hasFocus()) {
-      deps.updateStatus('Navigation recovered.');
-    }
+    // Recovery is deliberately silent. A transient input exception must not
+    // turn an ordinary arrow press into a repeated retry alert.
   }
 
   const nativeWindow = window as Window & {
