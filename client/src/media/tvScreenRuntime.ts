@@ -28,7 +28,6 @@ export class TvScreenRuntime {
   private readonly heading = document.createElement('h2');
   private readonly nowPlaying = document.createElement('p');
   private readonly sourceSummary = document.createElement('p');
-  private readonly providerLinks = document.createElement('nav');
   private readonly video = document.createElement('video');
   private hls: Hls | null = null;
   private activeItemId = '';
@@ -57,11 +56,7 @@ export class TvScreenRuntime {
     this.video.style.maxHeight = '52vh';
     this.video.style.background = '#000';
     this.sourceSummary.style.margin = '0 0 .5rem';
-    this.providerLinks.setAttribute('aria-label', 'TV providers');
-    this.providerLinks.style.display = 'flex';
-    this.providerLinks.style.gap = '.75rem';
-    this.providerLinks.style.flexWrap = 'wrap';
-    this.region.append(this.heading, this.nowPlaying, this.sourceSummary, this.providerLinks, this.video);
+    this.region.append(this.heading, this.nowPlaying, this.sourceSummary, this.video);
     document.body.append(this.region);
   }
 
@@ -99,22 +94,6 @@ export class TvScreenRuntime {
     this.sourceSummary.textContent = libraryNames.length > 0
       ? `Libraries: ${libraryNames.join(', ')}.`
       : '';
-    this.providerLinks.replaceChildren();
-    const providers = Array.isArray(item.params.tvProviderSources) ? item.params.tvProviderSources : [];
-    for (const entry of providers) {
-      if (!entry || typeof entry !== 'object') continue;
-      const record = entry as Record<string, unknown>;
-      const title = String(record.title ?? '').trim();
-      const url = String(record.url ?? '').trim();
-      if (!title || !/^https?:\/\//i.test(url)) continue;
-      const link = document.createElement('a');
-      link.href = url;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.textContent = `Browse ${title}`;
-      link.style.color = '#8fd3ff';
-      this.providerLinks.append(link);
-    }
   }
 
   hide(): void {

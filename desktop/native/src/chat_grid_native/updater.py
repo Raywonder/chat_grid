@@ -86,6 +86,25 @@ class UpdateService:
         except InvalidVersion as error:
             raise ValueError("Update manifest version is invalid.") from error
 
+    def _dismissal_path(self) -> Path:
+        return self.root / "updates" / "dismissed.json"
+
+    def is_dismissed(self, manifest: UpdateManifest) -> bool:
+        """Return whether this exact update was recently canceled by the user."""
+        try:
+            data = json.loads(self._dismissal_path().read_text(encoding="utf-8"))
+            return data.get("version") == manifest.version and data.get("sha256") == manifest.sha256 and float(data.get("until", 0)) > time.time()
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            return False
+
+    def dismiss(self, manifest: UpdateManifest, *, seconds: int = 24 * 60 * 60) -> None:
+        """Remember a canceled update without blocking a manual check."""
+        path = self._dismissal_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps({"version": manifest.version, "sha256": manifest.sha256, "until": time.time() + seconds}) + "\n", encoding="utf-8")
+        temporary.replace(path)
+
     def download(self, manifest: UpdateManifest) -> Path:
         """Download atomically and require the published checksum."""
         manifest.validate()
@@ -93,6 +112,8 @@ class UpdateService:
         updates.mkdir(parents=True, exist_ok=True)
         target = updates / manifest.file_name
         temporary = target.with_suffix(".download")
+        if target.is_file() and hashlib.sha256(target.read_bytes()).hexdigest().lower() == manifest.sha256:
+            return target
         digest = hashlib.sha256()
         with requests.get(manifest.download_url, stream=True, timeout=(5, 120)) as response:
             response.raise_for_status()

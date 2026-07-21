@@ -162,7 +162,6 @@ type Dom = {
   canvas: HTMLCanvasElement;
   interactiveItemPanel: HTMLElement;
   interactiveItemTitle: HTMLHeadingElement;
-  interactiveItemOpenLink: HTMLAnchorElement;
   interactiveItemCloseButton: HTMLButtonElement;
   interactiveItemFrame: HTMLIFrameElement;
   status: HTMLDivElement;
@@ -215,7 +214,6 @@ const dom: Dom = {
   canvas: requiredById('gameCanvas'),
   interactiveItemPanel: requiredById('interactiveItemPanel'),
   interactiveItemTitle: requiredById('interactiveItemTitle'),
-  interactiveItemOpenLink: requiredById('interactiveItemOpenLink'),
   interactiveItemCloseButton: requiredById('interactiveItemCloseButton'),
   interactiveItemFrame: requiredById('interactiveItemFrame'),
   status: requiredById('status'),
@@ -479,8 +477,6 @@ const ITEM_BEACON_RADIUS = 3.5;
 const ITEM_BEACON_INTERVAL_MS = 3200;
 const RUNTIME_RECOVERY_STATUS_INTERVAL_MS = 5_000;
 const SEAT_INTERACTION_RADIUS = 1.5;
-const SEATED_BINAURAL_STEP = 0.25;
-const SEATED_BINAURAL_LIMIT = 1.25;
 
 const state = createInitialState();
 const renderer = new CanvasRenderer(dom.canvas);
@@ -2008,6 +2004,17 @@ function interactiveItemFrameUrl(item: WorldItem, url: string): string {
   }
 }
 
+/** Keeps the raw WebUI version metadata in its own browser tab instead of the in-world iframe. */
+function isWebUiVersionUrl(item: WorldItem, url: string): boolean {
+  const serviceKind = stringParam(item, 'serviceKind').toLowerCase();
+  if (serviceKind === 'version') return true;
+  try {
+    return /(?:^|\/)version(?:\.js)?$/i.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
 function canLaunchInteractiveItem(item: WorldItem): boolean {
   if (item.type !== 'service_link') return false;
   if (stringParam(item, 'targetLocation')) return false;
@@ -2018,9 +2025,18 @@ function openInteractiveItem(item: WorldItem): boolean {
   if (!canLaunchInteractiveItem(item)) return false;
   const url = resolveInteractiveItemUrl(stringParam(item, 'url'));
   const serviceKind = stringParam(item, 'serviceKind').toLowerCase();
+  if (isWebUiVersionUrl(item, url)) {
+    const versionTab = window.open(url, '_blank', 'noopener,noreferrer');
+    updateStatus(
+      versionTab
+        ? `Opened ${item.title} in a new browser tab.`
+        : `Your browser blocked the ${item.title} tab. Allow pop-ups for Endiginous and try again.`,
+    );
+    audio.sfxUiConfirm();
+    return Boolean(versionTab);
+  }
   dom.interactiveItemTitle.textContent = item.title;
   dom.interactiveItemFrame.title = item.title;
-  dom.interactiveItemOpenLink.href = url;
   dom.interactiveItemFrame.src = interactiveItemFrameUrl(item, url);
   dom.interactiveItemPanel.classList.remove('hidden');
   dom.interactiveItemPanel.hidden = false;
@@ -3246,25 +3262,12 @@ function handleMovement(): void {
   }
 
   if (state.player.posture !== 'standing') {
-    state.player.lastMoveTime = now;
-    if (dx !== 0 && dy === 0) {
-      const nextOffset = Math.max(
-        -SEATED_BINAURAL_LIMIT,
-        Math.min(SEATED_BINAURAL_LIMIT, state.player.seatedOffset + dx * SEATED_BINAURAL_STEP),
-      );
-      state.player.seatedOffset = nextOffset;
-      void refreshAudioSubscriptions(true);
-      updateStatus(
-        dx < 0
-          ? 'You shift your listening position left on the couch.'
-          : 'You shift your listening position right on the couch.',
-      );
-      audio.sfxUiBlip();
-      return;
-    }
+    // Ordinary arrows must recover a seated reconnect. The server treats an
+    // update_position packet as both standing up and moving, while keeping
+    // horizontal arrows in a local offset mode made users appear stuck.
     signaling.send({ type: 'update_position', x: state.player.x + dx, y: state.player.y + dy });
-    updateStatus('Stand up before moving away from the furniture.');
-    audio.sfxUiCancel();
+    updateStatus('You stand up and move away from the furniture.');
+    audio.sfxUiBlip();
     return;
   }
 

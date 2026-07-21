@@ -30,11 +30,6 @@ body {
   margin-bottom: 0.2rem;
 }
 
-#appGithubLinkWrap {
-  display: block;
-  margin-bottom: 0.5rem;
-}
-
 #appFooter a {
   color: #93c5fd;
 }

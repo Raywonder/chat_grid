@@ -2,7 +2,7 @@ import hashlib
 
 import pytest
 
-from chat_grid_native.updater import UpdateManifest
+from chat_grid_native.updater import UpdateManifest, UpdateService
 
 
 def test_tcast_nested_windows_manifest() -> None:
@@ -38,3 +38,37 @@ def test_manifest_rejects_version_filename_mismatch() -> None:
     })
     with pytest.raises(ValueError, match="version"):
         manifest.validate()
+
+
+def test_verified_cached_installer_is_reused(tmp_path) -> None:
+    payload = b"installer"
+    checksum = hashlib.sha256(payload).hexdigest()
+    manifest = UpdateManifest.from_dict({
+        "version": "0.2.0",
+        "downloadUrl": "https://example.test/EndiginousSetup-0.2.0.exe",
+        "fileName": "EndiginousSetup-0.2.0.exe",
+        "sha256": checksum,
+    })
+    target = tmp_path / "updates" / manifest.file_name
+    target.parent.mkdir()
+    target.write_bytes(payload)
+    assert UpdateService("https://example.test/latest.json", "0.1.0", tmp_path).download(manifest) == target
+
+
+def test_cancel_dismissal_is_scoped_to_exact_manifest(tmp_path) -> None:
+    service = UpdateService("https://example.test/latest.json", "0.1.0", tmp_path)
+    checksum = hashlib.sha256(b"installer").hexdigest()
+    manifest = UpdateManifest.from_dict({
+        "version": "0.2.0",
+        "downloadUrl": "https://example.test/EndiginousSetup-0.2.0.exe",
+        "fileName": "EndiginousSetup-0.2.0.exe",
+        "sha256": checksum,
+    })
+    service.dismiss(manifest)
+    assert service.is_dismissed(manifest)
+    assert not service.is_dismissed(UpdateManifest.from_dict({
+        "version": "0.2.1",
+        "downloadUrl": "https://example.test/EndiginousSetup-0.2.1.exe",
+        "fileName": "EndiginousSetup-0.2.1.exe",
+        "sha256": checksum,
+    }))

@@ -554,6 +554,8 @@ class MainFrame(wx.Frame):
                     if interactive:
                         wx.CallAfter(self._announce, "Endiginous is up to date.")
                     return
+                if not interactive and service.is_dismissed(manifest):
+                    return
                 installer = service.download(manifest)
                 wx.CallAfter(self._prepare_update_install, service, installer, manifest)
             except Exception as error:
@@ -570,6 +572,7 @@ class MainFrame(wx.Frame):
         self._announce(f"Endiginous {version} is verified and ready to install.")
         with UpdateInstallCountdown(self, version) as dialog:
             if dialog.ShowModal() != wx.ID_OK:
+                service.dismiss(manifest)
                 self._announce("Update cancelled. Endiginous will keep running.")
                 return
         service.install_after_exit(installer, manifest)
