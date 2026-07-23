@@ -153,6 +153,12 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
 
   function isEditableElement(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) return false;
+    // A button can remain document.activeElement after the connect/focus
+    // control is hidden. Treat that stale focus as recoverable world focus;
+    // otherwise every world key is discarded before it can reach the canvas.
+    // Keep visible controls protected so typing/clicking through the UI stays
+    // predictable.
+    if (target.hidden || target.closest('.hidden,[hidden],[inert]')) return false;
     if (target.isContentEditable) return true;
     const tagName = target.tagName.toLowerCase();
     if (target instanceof HTMLMediaElement || tagName === 'button' || tagName === 'a') return true;
