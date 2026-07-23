@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 from pathlib import Path
+import subprocess
 import sys
 
 
@@ -48,9 +49,19 @@ class ScreenReaderSpeech:
         return bool(self.library and self.library.nvdaController_testIfRunning() == 0)
 
     def speak(self, text: str, interrupt: bool = False) -> bool:
-        """Speak bounded text through NVDA unless Windows is locked."""
+        """Speak bounded text through NVDA, macOS speech, or a safe fallback."""
         clean = " ".join(str(text).split())[:MAX_SPEECH_LENGTH]
-        if not clean or workstation_locked() or not self.available():
+        if not clean or workstation_locked():
+            return False
+        if sys.platform == "darwin":
+            try:
+                if interrupt:
+                    subprocess.run(["killall", "say"], check=False, capture_output=True)
+                subprocess.Popen(["say", clean], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return True
+            except OSError:
+                return False
+        if not self.available():
             return False
         if interrupt:
             self.library.nvdaController_cancelSpeech()

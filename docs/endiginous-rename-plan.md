@@ -14,13 +14,13 @@ Grid.
   Codex and other CLI workers to use Endiginous for new visible naming.
 - `scripts/endiginous_presence.py` is the preferred companion CLI entrypoint.
 
-## Staged User-Facing Alias
+## Completed Primary Route Migration
 
-The web client can be built with `VITE_BASE_PATH=/endiginous/` and served at
-`/endiginous/` while `/chatgrid/` remains the compatibility path. The alias
-must proxy WebSocket, session, and voice requests to the existing backend
-routes, and both paths must be checked from the public side before account
-links are switched.
+The web client is now built and published at `/endiginous/`. The signaling
+service, session routes, voice assets, desktop defaults, update feeds, and
+account auth links use `/endiginous/` as the primary path. `/chatgrid/` remains
+an active compatibility path and proxies to the same Endiginous backend so
+older installed clients and bookmarks continue to work.
 
 ## Compatibility Names To Keep For Now
 
@@ -37,16 +37,15 @@ auth callbacks, update feeds, systemd units, and rollback checks together:
 - Existing bundle identifiers, database filenames, backup names, logs, and old
   release artifacts.
 
-## Next Coordinated Cutover
+## Remaining Legacy Compatibility
 
-When Dominique approves a full compatibility-breaking migration, do it as one
-release:
+The remaining `chatgrid` identifiers are deliberately retained where removing
+them would strand an installed client or change a persistent contract: legacy
+deep links, old environment variables, Python import paths, service names,
+database/topic names, browser bridge events, bundle identifiers, and historical
+release artifacts. New installers register `endiginous://` and continue to
+accept `chatgrid://`.
 
-1. Add new `/endiginous/` routes while keeping `/chatgrid/` redirects or aliases.
-2. Add a new `endiginous://` protocol while preserving `chatgrid://` for older
-   installers.
-3. Add `ENDIGINOUS_*` environment aliases, then migrate services and deploy docs.
-4. Publish signed Windows/macOS updates that understand both old and new links.
-5. Verify public assets, WebSocket handshakes, auth returns, update feeds,
-   desktop install/update, companion presence, and rollback paths before removing
-   old compatibility names.
+The old path should only be retired after the active Windows/macOS population
+has updated and a separate removal release verifies auth returns, update feeds,
+companion presence, and rollback behavior.

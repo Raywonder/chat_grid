@@ -65,7 +65,7 @@ def summarize_access(path: Path, lines: int) -> list[str]:
         if not match:
             continue
         request_path = match.group("path")
-        if not request_path.startswith("/chatgrid"):
+        if not request_path.startswith(("/endiginous", "/chatgrid")):
             continue
         status = match.group("status")
         if int(status) < 400:
@@ -100,7 +100,7 @@ def summarize_error_log(path: Path, lines: int) -> list[str]:
     buckets: collections.Counter[str] = collections.Counter()
     examples: dict[str, str] = {}
     for line in tail_lines(path, lines):
-        if "/chatgrid" not in line:
+        if "/endiginous" not in line and "/chatgrid" not in line:
             continue
         normalized = re.sub(r"client: [^,]+", "client: <redacted>", line)
         normalized = re.sub(r'upstream: "[^"]+"', 'upstream: "<redacted>"', normalized)

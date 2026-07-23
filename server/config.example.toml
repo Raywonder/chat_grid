@@ -4,7 +4,7 @@ bind_ip = "127.0.0.1"
 # Listen port for signaling websocket server.
 port = 8765
 # Public base path for this grid instance. Examples: "/", "/chgrid/", "/ttgrid/".
-base_path = "/"
+base_path = "/endiginous/"
 # User-facing grid name shown in the web client.
 grid_name = "Endiginous"
 # User-facing pre-connect welcome text shown on the home screen.

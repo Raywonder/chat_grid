@@ -10,8 +10,8 @@ from pathlib import Path
 
 APP_NAME = "Endiginous"
 APP_ID = "fm.tappedin.chatgrid.wxpython"
-DEFAULT_URL = "https://blind.software/chatgrid/?desktop=1"
-DEFAULT_UPDATE_URL = "https://blind.software/chatgrid/updates/latest-windows.json"
+DEFAULT_URL = "https://blind.software/endiginous/?desktop=1"
+DEFAULT_UPDATE_URL = "https://blind.software/endiginous/updates/latest-windows.json"
 
 
 def app_data_dir() -> Path:
@@ -29,6 +29,19 @@ class Settings:
     start_minimized: bool = False
     auto_connect: bool = True
     auto_update: bool = True
+    keep_in_tray: bool = False
+    spatial_audio: bool = True
+    audio_output_mode: str = "stereo"
+    master_volume: int = 50
+    microphone_gain: float = 2.0
+    voice_layer: bool = True
+    item_layer: bool = True
+    media_layer: bool = True
+    world_layer: bool = True
+    announcement_mode: str = "full"
+    radio_announcement_mode: str = "full"
+    item_beacons: bool = True
+    movement_directions: bool = False
     update_url: str = DEFAULT_UPDATE_URL
     reconnect_initial_seconds: float = 2.0
     reconnect_max_seconds: float = 60.0

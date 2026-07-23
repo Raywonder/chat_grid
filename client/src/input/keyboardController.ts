@@ -18,6 +18,7 @@ type KeyboardControllerDeps = {
   closeInteractiveItem: () => boolean;
   hasBlockedArrowTeleport: (code: string) => boolean;
   handleModeInput: (input: ModeInput) => void;
+  runImmediateMovement: () => void;
   canOpenCommandPaletteInMode: (mode: GameMode) => boolean;
   openCommandPalette: () => void;
   getModeKeyUpTarget: (activeMode: GameMode) => GameMode | null;
@@ -77,6 +78,9 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
         shiftKey: Boolean(options.shiftKey),
         source: 'native',
       });
+      if (isArrow) {
+        deps.runImmediateMovement();
+      }
       const previousTimer = nativeArrowReleaseTimers.get(code);
       if (previousTimer !== undefined) window.clearTimeout(previousTimer);
       nativeArrowReleaseTimers.set(
@@ -151,6 +155,7 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     if (!(target instanceof HTMLElement)) return false;
     if (target.isContentEditable) return true;
     const tagName = target.tagName.toLowerCase();
+    if (target instanceof HTMLMediaElement || tagName === 'button' || tagName === 'a') return true;
     if (tagName === 'textarea' || tagName === 'select') return true;
     if (tagName !== 'input') return false;
     const input = target as HTMLInputElement;
@@ -268,6 +273,9 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     try {
       deps.handleModeInput(input);
       deps.state.keysPressed[code] = true;
+      if (code.startsWith('Arrow')) {
+        deps.runImmediateMovement();
+      }
     } catch (error) {
       recoverFromInputError(error);
     }

@@ -19,6 +19,7 @@ type BillboardState = {
   lastBannerIndex: number;
   wasInRange: boolean;
   playedIntro: boolean;
+  rotationCount: number;
 };
 
 export class BillboardRuntime {
@@ -54,7 +55,9 @@ export class BillboardRuntime {
       if (item.type !== 'billboard') continue;
       seenIds.add(item.id);
       const enabled = item.params.enabled !== false;
-      if (!enabled || item.carrierId) {
+      const expiresAtMs = Number(item.params.expiresAtMs ?? 0);
+      const maxRotations = Number(item.params.maxRotations ?? 0);
+      if (!enabled || item.carrierId || (expiresAtMs > 0 && nowMs >= expiresAtMs)) {
         this.markOutOfRange(item.id);
         continue;
       }
@@ -70,7 +73,13 @@ export class BillboardRuntime {
         lastBannerIndex: -1,
         wasInRange: false,
         playedIntro: false,
+        rotationCount: 0,
       };
+      if (maxRotations > 0 && state.rotationCount >= maxRotations) {
+        state.wasInRange = true;
+        this.stateByItemId.set(item.id, state);
+        continue;
+      }
       const rotationMs = resolveRotationMs(item);
       const shouldPlay =
         !state.wasInRange ||
@@ -116,6 +125,7 @@ export class BillboardRuntime {
       state.lastPlayedAtMs = nowMs;
       state.wasInRange = true;
       state.playedIntro = true;
+      state.rotationCount += 1;
       this.stateByItemId.set(item.id, state);
     }
 

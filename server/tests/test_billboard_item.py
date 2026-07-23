@@ -82,7 +82,7 @@ def test_billboard_validation_normalizes_modes_and_bounds() -> None:
             "itemVisibility": "HIDDEN",
             "headline": "  Announcements  ",
             "body": "  Walk to the billboard to choose a link.  ",
-            "url": "/chatgrid/",
+            "url": "/endiginous/",
             "announcementText": "  Spoken out by a voice.  ",
             "voiceName": "  Clawdia  ",
             "voiceAssetUrl": "  /sounds/billboards/clawdia-town.mp3  ",
@@ -99,14 +99,16 @@ def test_billboard_validation_normalizes_modes_and_bounds() -> None:
         "itemVisibility": "hidden",
         "headline": "Announcements",
         "body": "Walk to the billboard to choose a link.",
-        "url": "/chatgrid/",
+            "url": "/endiginous/",
         "announcementText": "Spoken out by a voice.",
         "voiceName": "Clawdia",
         "voiceAssetUrl": "sounds/billboards/clawdia-town.mp3",
         "bannerText": "One | Two",
-        "rotationSeconds": 20,
-        "emitRange": 18,
-    }
+            "rotationSeconds": 20,
+            "emitRange": 18,
+            "expiresAtMs": 0,
+            "maxRotations": 0,
+        }
 
 
 def test_billboard_validation_allows_public_voice_asset_url() -> None:
@@ -116,11 +118,11 @@ def test_billboard_validation_allows_public_voice_asset_url() -> None:
         item,
         {
             **item.params,
-            "voiceAssetUrl": "https://blind.software/chatgrid/sounds/billboards/test.mp3",
+            "voiceAssetUrl": "https://blind.software/endiginous/sounds/billboards/test.mp3",
         },
     )
 
     assert (
         normalized["voiceAssetUrl"]
-        == "https://blind.software/chatgrid/sounds/billboards/test.mp3"
+        == "https://blind.software/endiginous/sounds/billboards/test.mp3"
     )

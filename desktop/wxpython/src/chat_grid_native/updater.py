@@ -129,14 +129,29 @@ class UpdateService:
         """Launch a hidden tCast-style helper that waits, installs, and relaunches."""
         helper = self.root / "updates" / "install-update.ps1"
         helper.write_text(
-            "param([int]$Pid,[string]$Installer,[string]$Arguments,[string]$App)\n"
+            "param([int]$Pid,[string]$Installer,[string]$Arguments,[string]$App,[string]$InstallDirectory)\n"
+            "$Log = Join-Path (Split-Path -Parent $Installer) 'install-update.log'\n"
+            "function Write-UpdateLog([string]$Message){ Add-Content -LiteralPath $Log -Value ((Get-Date -Format o) + ' ' + $Message) }\n"
             "$mutex = New-Object System.Threading.Mutex($false, 'EndiginousUpdateInstall')\n"
             "if(-not $mutex.WaitOne(0)){ exit 0 }\n"
-            "Wait-Process -Id $Pid -ErrorAction SilentlyContinue\n"
             "try {\n"
-            "  $p=Start-Process -FilePath $Installer -ArgumentList $Arguments -Wait -PassThru\n"
-            "  if($p.ExitCode -eq 0){Start-Process -FilePath $App}\n"
-            "} finally { $mutex.ReleaseMutex(); $mutex.Dispose() }\n",
+            "  Write-UpdateLog \"handoff pid=$Pid installer=$Installer app=$App\"\n"
+            "  if(Get-Process -Id $Pid -ErrorAction SilentlyContinue){ Wait-Process -Id $Pid -Timeout 120 -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 800 }\n"
+            "  if(Get-Process -Id $Pid -ErrorAction SilentlyContinue){ Write-UpdateLog 'application did not exit before timeout'; exit 2 }\n"
+            "  if(-not (Test-Path -LiteralPath $Installer)){ Write-UpdateLog 'installer is missing'; exit 3 }\n"
+            "  $working = Split-Path -Parent $Installer\n"
+            "  $installerArguments = $Arguments + ' /DIR=\"' + $InstallDirectory + '\"'\n"
+            "  Write-UpdateLog \"install directory=$InstallDirectory\"\n"
+            "  $p=Start-Process -FilePath $Installer -ArgumentList $installerArguments -WorkingDirectory $working -WindowStyle Hidden -Wait -PassThru\n"
+            "  Write-UpdateLog \"installer exit=$($p.ExitCode)\"\n"
+            "  if($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010){ exit $p.ExitCode }\n"
+            "  if(-not (Test-Path -LiteralPath $App)){ Write-UpdateLog 'installed application is missing'; exit 4 }\n"
+            "  Start-Sleep -Milliseconds 800\n"
+            "  Start-Process -FilePath $App -WorkingDirectory (Split-Path -Parent $App)\n"
+            "  Write-UpdateLog 'application relaunched'\n"
+            "} catch { Write-UpdateLog (\"update failed: \" + $_.Exception.Message); exit 5 }\n"
+            "finally { $mutex.ReleaseMutex(); $mutex.Dispose() }\n"
+            ,
             encoding="utf-8-sig",
         )
         subprocess.Popen(
@@ -145,6 +160,7 @@ class UpdateService:
                 "-WindowStyle", "Hidden", "-File", str(helper), "-Pid", str(os_getpid()),
                 "-Installer", str(installer), "-Arguments", manifest.silent_args,
                 "-App", str(Path(sys.executable).resolve()),
+                "-InstallDirectory", str(Path(sys.executable).resolve().parent),
             ],
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             close_fds=True,

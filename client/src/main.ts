@@ -87,11 +87,15 @@ const MIC_CALIBRATION_ACTIVE_RMS_THRESHOLD = 0.003;
 const MIC_INPUT_GAIN_SCALE_MULTIPLIER = 2;
 const MIC_INPUT_GAIN_STEP = 0.05;
 
-/** Reads and removes a one-time external auth assertion from the URL. */
+const PENDING_EXTERNAL_AUTH_STORAGE_KEY = 'endiginousPendingExternalAuth';
+
+/** Reads a one-time external auth assertion and keeps it across a forced reload. */
 function consumeExternalAuthAssertion(): string {
   const url = new URL(window.location.href);
-  const assertion = String(url.searchParams.get('external_auth') || '').trim();
+  const assertion = String(url.searchParams.get('external_auth') || '').trim()
+    || String(sessionStorage.getItem(PENDING_EXTERNAL_AUTH_STORAGE_KEY) || '').trim();
   if (assertion) {
+    sessionStorage.setItem(PENDING_EXTERNAL_AUTH_STORAGE_KEY, assertion);
     url.searchParams.delete('external_auth');
     window.history.replaceState({}, document.title, url.toString());
   }
@@ -132,8 +136,8 @@ type Dom = {
   logoutButton: HTMLButtonElement;
   disconnectButton: HTMLButtonElement;
   focusGridButton: HTMLButtonElement;
+  openSettingsButton: HTMLButtonElement;
   midiButton: HTMLButtonElement;
-  settingsButton: HTMLButtonElement;
   closeSettingsButton: HTMLButtonElement;
   readGuideButton: HTMLButtonElement;
   settingsModal: HTMLDivElement;
@@ -159,6 +163,7 @@ type Dom = {
   gridPeople: HTMLSpanElement;
   gridItems: HTMLSpanElement;
   gridHere: HTMLSpanElement;
+  worldSummary: HTMLParagraphElement;
   canvas: HTMLCanvasElement;
   interactiveItemPanel: HTMLElement;
   interactiveItemTitle: HTMLHeadingElement;
@@ -184,8 +189,8 @@ const dom: Dom = {
   logoutButton: requiredById('logoutButton'),
   disconnectButton: requiredById('disconnectButton'),
   focusGridButton: requiredById('focusGridButton'),
+  openSettingsButton: requiredById('openSettingsButton'),
   midiButton: requiredById('midiButton'),
-  settingsButton: requiredById('settingsButton'),
   closeSettingsButton: requiredById('closeSettingsButton'),
   readGuideButton: requiredById('readGuideButton'),
   settingsModal: requiredById('settingsModal'),
@@ -211,6 +216,7 @@ const dom: Dom = {
   gridPeople: requiredById('gridPeople'),
   gridItems: requiredById('gridItems'),
   gridHere: requiredById('gridHere'),
+  worldSummary: requiredById('worldSummary'),
   canvas: requiredById('gameCanvas'),
   interactiveItemPanel: requiredById('interactiveItemPanel'),
   interactiveItemTitle: requiredById('interactiveItemTitle'),
@@ -396,7 +402,7 @@ dom.appVersion.textContent = APP_DISPLAY_VERSION
 const DEFAULT_GRID_NAME = 'Endiginous';
 const DEFAULT_WELCOME_MESSAGE =
   IS_NATIVE_CLIENT
-    ? 'Welcome to Endiginous, your immersive audio playground. Use the File menu for sign-in, audio setup, updates, and desktop settings.'
+    ? 'Welcome to Endiginous, your immersive audio playground. Use the File menu for sign-in, settings, updates, and desktop settings.'
     : 'Welcome to Endiginous, your immersive audio playground. Configure your audio, then sign in with blind.software to join the grid.';
 const APP_BASE_URL = import.meta.env.BASE_URL || '/';
 /** Resolves an app-relative path against the configured Vite base path. */
@@ -407,6 +413,13 @@ function withBase(path: string): string {
 /** Announces a newer client bundle and navigates through a cache-busted URL. */
 function scheduleClientUpdateReload(metadata: ClientVersionMetadata): void {
   if (reloadScheduledForVersionMismatch) return;
+  // An external-auth assertion is valid only for this sign-in attempt. Keep
+  // the current session alive long enough for auth_result to clear it instead
+  // of reloading halfway through the callback flow.
+  if (initialExternalAuthAssertion || sessionStorage.getItem(PENDING_EXTERNAL_AUTH_STORAGE_KEY)) {
+    setConnectionStatus('Sign-in is still completing. Update will wait.');
+    return;
+  }
   reloadScheduledForVersionMismatch = true;
   const label = [metadata.releaseVersion, metadata.clientRevision].filter((value) => value.length > 0).join(' ');
   const message = label
@@ -516,6 +529,17 @@ let focusedConversationPeerName: string | null = null;
 function conversationKey(peerName: string): string {
   return peerName.trim().toLocaleLowerCase();
 }
+
+/** Appends a bounded message without pulling an active history reader away. */
+function appendMessageKeepingCursor(buffer: string[], cursor: number, message: string): number {
+  const wasAtLatest = cursor < 0 || cursor >= buffer.length - 1;
+  buffer.push(message);
+  const removedOldest = buffer.length > 300;
+  if (removedOldest) buffer.shift();
+  if (wasAtLatest) return buffer.length - 1;
+  return removedOldest ? Math.max(0, cursor - 1) : cursor;
+}
+
 const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig, {
   onStationFailure: (itemId) => {
     updateStatus('Scanning stations.');
@@ -1283,11 +1307,8 @@ function setStatusText(message: string, announceViaLiveRegion: boolean): void {
   requestAnimationFrame(() => {
     dom.status.textContent = message;
   });
-  statusTimeout = window.setTimeout(() => {
-    if (dom.status.textContent === message) {
-      dom.status.textContent = '';
-    }
-  }, 4000);
+  // Keep the last status available for users who need time to review it with
+  // a screen reader. A new status replaces it; it is never cleared silently.
 }
 
 /** Announces status text with brief de-duplication and auto-clear timing. */
@@ -1370,7 +1391,7 @@ function persistAudioAnnouncementSettings(): void {
   settings.saveAudioAnnouncementSettings(audioAnnouncementSettings);
 }
 
-/** Syncs Audio setup controls from persisted TTS/beacon preferences. */
+/** Syncs settings controls from persisted TTS/beacon preferences. */
 function syncAnnouncementSettingsControls(): void {
   dom.announcementModeSelect.value = audioAnnouncementSettings.mode;
   dom.radioAnnouncementModeSelect.value = audioAnnouncementSettings.radioAnnouncementMode;
@@ -1757,11 +1778,7 @@ function refreshClientForConnectionRecovery(): boolean {
 
 /** Appends a chat/system line to the bounded status history buffer. */
 function pushChatMessage(message: string, announce = true): void {
-  messageBuffer.push(message);
-  if (messageBuffer.length > 300) {
-    messageBuffer.shift();
-  }
-  messageCursor = messageBuffer.length - 1;
+  messageCursor = appendMessageKeepingCursor(messageBuffer, messageCursor, message);
   const normalized = message.trim().toLowerCase();
   if (state.running && normalized.endsWith(' has logged in.')) {
     setConnectionStatus(`${message} Press Shift+L to find them or / to say hello.`);
@@ -1769,34 +1786,24 @@ function pushChatMessage(message: string, announce = true): void {
   if (announce) {
     updateStatus(message);
   }
-  systemMessageBuffer.push(message);
-  if (systemMessageBuffer.length > 300) systemMessageBuffer.shift();
-  systemMessageCursor = systemMessageBuffer.length - 1;
+  systemMessageCursor = appendMessageKeepingCursor(systemMessageBuffer, systemMessageCursor, message);
 }
 
 /** Stores one public-room message separately from system and direct traffic. */
 function pushPublicChatMessage(message: string): void {
-  messageBuffer.push(message);
-  if (messageBuffer.length > 300) messageBuffer.shift();
-  messageCursor = messageBuffer.length - 1;
-  publicMessageBuffer.push(message);
-  if (publicMessageBuffer.length > 300) publicMessageBuffer.shift();
-  publicMessageCursor = publicMessageBuffer.length - 1;
+  messageCursor = appendMessageKeepingCursor(messageBuffer, messageCursor, message);
+  publicMessageCursor = appendMessageKeepingCursor(publicMessageBuffer, publicMessageCursor, message);
   updateStatus(message);
 }
 
 /** Stores one direct message in the two-person conversation for its peer. */
 function pushDirectChatMessage(message: string, peerId: string, peerName: string): void {
-  messageBuffer.push(message);
-  if (messageBuffer.length > 300) messageBuffer.shift();
-  messageCursor = messageBuffer.length - 1;
+  messageCursor = appendMessageKeepingCursor(messageBuffer, messageCursor, message);
   const key = conversationKey(peerName);
   const existing = directConversationBuffers.get(key) ?? { peerId, peerName, messages: [], cursor: -1 };
   existing.peerId = peerId;
   existing.peerName = peerName;
-  existing.messages.push(message);
-  if (existing.messages.length > 300) existing.messages.shift();
-  existing.cursor = existing.messages.length - 1;
+  existing.cursor = appendMessageKeepingCursor(existing.messages, existing.cursor, message);
   directConversationBuffers.set(key, existing);
   if (!focusedConversationPeerId) {
     focusedConversationPeerId = peerId;
@@ -1936,6 +1943,7 @@ function updateGridDashboard(): void {
   dom.gridPeople.textContent = peerCount === 1 ? '1 other user' : `${peerCount} other users`;
   dom.gridItems.textContent = itemCount === 1 ? '1 item' : `${itemCount} items`;
   dom.gridHere.textContent = hereSummary;
+  dom.worldSummary.textContent = `You are at ${state.player.x}, ${state.player.y}. ${hereSummary}. ${dom.gridPeople.textContent}; ${dom.gridItems.textContent}.`;
 }
 
 /** Classifies a system chat line into a corresponding notification sound, when applicable. */
@@ -3729,7 +3737,7 @@ const onAppMessage = createOnMessageHandler({
       activeCastTargetByCaster.set(message.casterId, { itemId: message.targetItemId, mediaKind: message.mediaKind });
     } else {
       activeCastTargetByCaster.delete(message.casterId);
-      remoteCastMedia.get(message.casterId)?.remove();
+      remoteCastMedia.get(message.casterId)?.parentElement?.remove();
       remoteCastMedia.delete(message.casterId);
     }
     const target = state.items.get(message.targetItemId);
@@ -4162,42 +4170,107 @@ let activeCastStream: MediaStream | null = null;
 const activeCastTargetByCaster = new Map<string, { itemId: string; mediaKind: 'audio' | 'video' }>();
 const remoteCastMedia = new Map<string, HTMLMediaElement>();
 let localCastMedia: HTMLMediaElement | null = null;
+let localCastMetadata: {
+  targetItemId: string;
+  mediaKind: 'audio' | 'video';
+  deviceName: string;
+  stationCode: string;
+} | null = null;
+
+function createCastMediaSurface(
+  element: HTMLMediaElement,
+  label: string,
+  position: 'local' | 'remote',
+  onStop: () => void,
+): HTMLDivElement {
+  const surface = document.createElement('div');
+  surface.dataset.castSurface = 'true';
+  surface.setAttribute('role', 'region');
+  surface.setAttribute('aria-label', `${label} controls`);
+  Object.assign(surface.style, position === 'local'
+    ? {
+        position: 'fixed', left: '1rem', bottom: '1rem', width: 'min(24rem, calc(100vw - 2rem))',
+        zIndex: '18', background: 'var(--panel, #181818)', padding: '0.5rem',
+      }
+    : {
+        position: 'fixed', right: '1rem', bottom: '1rem', width: 'min(32rem, calc(100vw - 2rem))',
+        zIndex: '19', background: 'var(--panel, #181818)', padding: '0.5rem',
+      });
+  const heading = document.createElement('p');
+  heading.textContent = label;
+  heading.style.margin = '0 0 0.35rem';
+  const stop = document.createElement('button');
+  stop.type = 'button';
+  stop.textContent = 'Stop cast';
+  stop.setAttribute('aria-label', `Stop ${label}`);
+  stop.addEventListener('click', onStop);
+  element.controls = true;
+  element.setAttribute('aria-label', label);
+  surface.append(heading, element, stop);
+  return surface;
+}
 
 function handleRemoteCastStream(casterId: string, stream: MediaStream): void {
   const target = activeCastTargetByCaster.get(casterId);
   if (!target) return;
-  remoteCastMedia.get(casterId)?.remove();
+  remoteCastMedia.get(casterId)?.parentElement?.remove();
   const element = document.createElement(target.mediaKind === 'video' ? 'video' : 'audio');
   element.autoplay = true;
-  element.controls = target.mediaKind === 'video';
+  element.controls = true;
   element.muted = false;
   element.srcObject = stream;
-  element.setAttribute('aria-label', `Cast from ${casterId}`);
-  Object.assign(element.style, target.mediaKind === 'video'
-    ? { position: 'fixed', right: '1rem', bottom: '1rem', width: 'min(32rem, calc(100vw - 2rem))', zIndex: '19' }
-    : { display: 'none' });
-  document.body.append(element);
+  const label = `Cast from ${casterId}`;
+  const surface = createCastMediaSurface(element, label, 'remote', () => {
+    element.pause();
+    stream.getTracks().forEach((track) => track.stop());
+    surface.remove();
+    remoteCastMedia.delete(casterId);
+    updateStatus(`${label} stopped.`);
+  });
+  document.body.append(surface);
   remoteCastMedia.set(casterId, element);
   void element.play().catch(() => updateStatus(`Cast received. Press the cast media control to start playback if ${IS_NATIVE_CLIENT ? 'the desktop client' : 'the browser'} blocked autoplay.`));
 }
 
 function setLocalCastPlayback(stream: MediaStream | null): void {
-  localCastMedia?.remove();
+  localCastMedia?.parentElement?.remove();
   localCastMedia = null;
   if (!stream) return;
   const hasVideo = stream.getVideoTracks().length > 0;
   const element = document.createElement(hasVideo ? 'video' : 'audio');
   element.autoplay = true;
-  element.controls = hasVideo;
+  element.controls = true;
   element.muted = false;
   element.srcObject = stream;
-  element.setAttribute('aria-label', 'Local cast playback');
-  Object.assign(element.style, hasVideo
-    ? { position: 'fixed', left: '1rem', bottom: '1rem', width: 'min(24rem, calc(100vw - 2rem))', zIndex: '18' }
-    : { display: 'none' });
-  document.body.append(element);
+  const surface = createCastMediaSurface(element, 'Local cast playback', 'local', () => {
+    stopLocalCast();
+  });
+  document.body.append(surface);
   localCastMedia = element;
   void element.play().catch(() => updateStatus('Local cast is ready. Press the local cast playback control to start it.'));
+}
+
+function stopLocalCast(): void {
+  const metadata = localCastMetadata;
+  activeCastStream?.getTracks().forEach((track) => track.stop());
+  activeCastStream = null;
+  void peerManager.replaceCastStream(null);
+  setLocalCastPlayback(null);
+  localCastMetadata = null;
+  if (metadata) {
+    signaling.send({
+      type: 'media_cast',
+      targetItemId: metadata.targetItemId,
+      active: false,
+      mediaKind: metadata.mediaKind,
+      deviceName: metadata.deviceName,
+      stationCode: metadata.stationCode,
+      stationName: metadata.deviceName,
+      title: '',
+      artist: '',
+    });
+  }
+  updateStatus('Local cast stopped.');
 }
 
 /** Starts a user-approved local screen/window/tab/app cast and publishes its receiver metadata. */
@@ -4236,8 +4309,10 @@ async function castToNearestDevice(): Promise<void> {
   }
   const deviceName = String(activeCastStream.getVideoTracks()[0]?.label || activeCastStream.getAudioTracks()[0]?.label || 'Local media').slice(0, 80);
   const stationCode = `CAST-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  localCastMetadata = { targetItemId: target.id, mediaKind: target.type === 'radio_station' ? 'audio' : 'video', deviceName, stationCode };
   if (dom.castLocalOnlyToggle.checked) {
     await peerManager.replaceCastStream(null);
+    localCastMetadata = null;
     updateStatus(`Playing the cast locally from ${deviceName}; it is not being sent into the world.`);
     return;
   }
@@ -4253,10 +4328,7 @@ async function castToNearestDevice(): Promise<void> {
     artist: state.player.nickname,
   });
   activeCastStream.getTracks().forEach((track) => track.addEventListener('ended', () => {
-    signaling.send({ type: 'media_cast', targetItemId: target.id, active: false, mediaKind: target.type === 'radio_station' ? 'audio' : 'video', deviceName, stationCode, stationName: deviceName, title: '', artist: '' });
-    void peerManager.replaceCastStream(null);
-    setLocalCastPlayback(null);
-    activeCastStream = null;
+    stopLocalCast();
   }, { once: true }));
   updateStatus(`Casting to ${target.title} as ${stationCode}.`);
   audio.sfxUiConfirm();
@@ -5554,6 +5626,9 @@ async function populateAudioDevices(): Promise<void> {
 /** Opens settings modal and focuses device controls. */
 function openSettings(): void {
   lastFocusedElement = document.activeElement;
+  for (const child of Array.from(document.querySelector('main.app')?.children ?? [])) {
+    if (child !== dom.settingsModal && child instanceof HTMLElement) child.inert = true;
+  }
   dom.settingsModal.classList.remove('hidden');
   dom.settingsModal.hidden = false;
   syncAnnouncementSettingsControls();
@@ -5564,6 +5639,40 @@ function openSettings(): void {
     signaling.send({ type: 'flexpbx_dialing_preferences_get' });
   }
   dom.audioInputSelect.focus();
+}
+
+// Native desktop opens this same accessible dialog from its File menu. The
+// separate canvas button is intentionally omitted so device settings have one
+// clear home.
+if (IS_NATIVE_CLIENT) {
+  (window as Window & { chatGridNativeOpenSettings?: () => boolean }).chatGridNativeOpenSettings = () => {
+    openSettings();
+    return true;
+  };
+  (window as Window & { chatGridNativeApplyAudioSettings?: (value: unknown) => void }).chatGridNativeApplyAudioSettings = (value) => {
+    if (!value || typeof value !== 'object') return;
+    const next = value as Partial<{
+      outputMode: 'mono' | 'stereo'; masterVolume: number; microphoneGain: number;
+      layers: Partial<AudioLayerState>; announcementMode: string; radioAnnouncementMode: string;
+      itemBeacons: boolean; movementDirections: boolean;
+    }>;
+    if (next.outputMode === 'mono' || next.outputMode === 'stereo') {
+      outputMode = next.outputMode;
+      audio.setOutputMode(outputMode);
+      settings.saveOutputMode(outputMode);
+    }
+    if (Number.isFinite(next.masterVolume)) persistMasterVolume(audio.setMasterVolume(Number(next.masterVolume)));
+    if (Number.isFinite(next.microphoneGain)) persistMicInputGain(audio.setOutboundInputGain(Number(next.microphoneGain)));
+    if (next.layers) {
+      audioLayers = { ...audioLayers, ...next.layers };
+      persistAudioLayerState();
+      void applyAudioLayerState();
+    }
+    if (typeof next.announcementMode === 'string') setAnnouncementMode(next.announcementMode);
+    if (typeof next.radioAnnouncementMode === 'string') setRadioAnnouncementMode(next.radioAnnouncementMode);
+    if (typeof next.itemBeacons === 'boolean') setItemBeacons(next.itemBeacons);
+    if (typeof next.movementDirections === 'boolean') setMovementDirections(next.movementDirections);
+  };
 }
 
 dom.ntfyNotificationsToggle.addEventListener('change', () => {
@@ -5580,6 +5689,9 @@ dom.rotateNtfyTopicButton.addEventListener('click', () => {
 function closeSettings(): void {
   dom.settingsModal.classList.add('hidden');
   dom.settingsModal.hidden = true;
+  for (const child of Array.from(document.querySelector('main.app')?.children ?? [])) {
+    if (child !== dom.settingsModal && child instanceof HTMLElement) child.inert = false;
+  }
   if (lastFocusedElement instanceof HTMLElement) {
     lastFocusedElement.focus();
   } else {
@@ -5597,6 +5709,7 @@ setupKeyboardInputHandlers({
   closeSettings,
   hasBlockedArrowTeleport: (code) => Boolean(activeTeleport && code.startsWith('Arrow')),
   handleModeInput,
+  runImmediateMovement: handleMovement,
   canOpenCommandPaletteInMode,
   openCommandPalette,
   getModeKeyUpTarget: (activeMode) => itemBehaviorRegistry.getModeKeyUpTarget(activeMode, commandPaletteReturnMode),
@@ -5646,8 +5759,8 @@ setupDomUiHandlers({
   updateConnectAvailability,
   connect,
   disconnect,
-  openSettings,
   closeSettings,
+  openSettings,
   updateStatus,
   sfxUiBlip: () => audio.sfxUiBlip(),
   setupLocalMedia,

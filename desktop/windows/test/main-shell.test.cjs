@@ -16,3 +16,10 @@ test('window reveal refocuses the world after restore/show', () => {
   assert.match(source, /mainWindow\.on\('show', refocusWorldAfterWindowReveal\)/);
   assert.match(source, /mainWindow\.webContents\.send\('chat-grid-focus'\)/);
 });
+
+test('native shell uses the shared settings bridge and native client marker', () => {
+  assert.match(source, /native_client=electron/);
+  assert.match(source, /url\.searchParams\.set\('native_client', 'electron'\)/);
+  assert.match(source, /window\.chatGridNativeOpenSettings\?\.\(\)/);
+  assert.doesNotMatch(source, /settingsButton.*click/);
+});

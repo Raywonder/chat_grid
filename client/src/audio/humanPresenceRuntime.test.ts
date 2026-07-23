@@ -20,7 +20,7 @@ describe('HumanPresenceRuntime', () => {
 
   it('plays a subtle settle cue when a person lies down', () => {
     const playSpatialSample = vi.fn().mockResolvedValue(true);
-    const runtime = new HumanPresenceRuntime({ playSpatialSample, playUserBeacon: vi.fn() }, (path) => `/chatgrid/${path}`);
+  const runtime = new HumanPresenceRuntime({ playSpatialSample, playUserBeacon: vi.fn() }, (path) => `/endiginous/${path}`);
     runtime.update({ player: player('standing'), peers: [], currentLocationId: 'bedroom', listenerPosition: { x: 10, y: 12 }, nowMs: 0 });
     runtime.update({ player: player('lying'), peers: [], currentLocationId: 'bedroom', listenerPosition: { x: 10, y: 12 }, nowMs: 100 });
 

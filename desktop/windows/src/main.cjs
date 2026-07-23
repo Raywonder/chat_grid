@@ -2,7 +2,7 @@ const { app, BrowserWindow, Menu, Tray, desktopCapturer, dialog, nativeImage, sh
 const fs = require('fs');
 const path = require('path');
 
-const DEFAULT_ENDIGINOUS_URL = 'https://blind.software/chatgrid/?desktop=1';
+const DEFAULT_ENDIGINOUS_URL = 'https://blind.software/endiginous/?native_client=electron';
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:']);
 
 let mainWindow = null;
@@ -28,6 +28,10 @@ function normalizeEndiginousUrl(value) {
   if (!ALLOWED_PROTOCOLS.has(url.protocol)) {
     throw new Error('Endiginous URL must start with http:// or https://.');
   }
+  // Keep the shared client on its native-shell accessibility contract: the
+  // browser sign-in link and duplicate canvas chrome stay out of the desktop
+  // accessibility tree, while auth still uses the normal token flow.
+  url.searchParams.set('native_client', 'electron');
   return url.toString();
 }
 
@@ -170,6 +174,7 @@ function createApplicationMenu() {
         { label: 'Reload', click: () => mainWindow?.reload() },
         { label: 'Recover Frozen View', accelerator: 'Ctrl+Shift+R', click: recoverEndiginousView },
         { label: 'Focus Grid', accelerator: 'Ctrl+G', click: () => mainWindow?.webContents.send('chat-grid-focus') },
+        { label: 'Settings...', accelerator: 'Ctrl+,', click: () => mainWindow?.webContents.executeJavaScript('window.chatGridNativeOpenSettings?.()') },
         { label: 'Endiginous URL...', accelerator: 'Ctrl+Shift+U', click: promptForEndiginousUrl },
         { label: 'Cast to device...', accelerator: 'Ctrl+Shift+C', click: () => mainWindow?.webContents.executeJavaScript("window.dispatchEvent(new Event('chatgrid-cast-to-device'));") },
         { type: 'separator' },
@@ -181,11 +186,6 @@ function createApplicationMenu() {
     {
       label: 'Audio',
       submenu: [
-        {
-          label: 'Audio Setup',
-          accelerator: 'Ctrl+,',
-          click: () => mainWindow?.webContents.executeJavaScript("document.getElementById('settingsButton')?.click();"),
-        },
         {
           label: 'Connect',
           accelerator: 'Ctrl+Enter',

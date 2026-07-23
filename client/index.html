@@ -19,7 +19,7 @@
       <section id="loginView" class="auth-panel">
         <h2>Sign in</h2>
         <p class="auth-hint">
-          <a class="button-link" href="/?route=chatgrid_auth_start">Sign in to Endiginous with blind.software</a>
+          <a class="button-link" href="/?route=endiginous_auth_start">Sign in to Endiginous with blind.software</a>
         </p>
         <p class="auth-hint">Use the normal blind.software account sign-in, then return here to join Endiginous.</p>
       </section>
@@ -30,9 +30,9 @@
       <div class="controls auth-required" id="button-container">
         <button id="connectButton" type="button">Connect</button>
         <button id="logoutButton" class="hidden" type="button">Log out</button>
-        <button id="settingsButton" type="button">Audio setup</button>
         <button id="disconnectButton" class="hidden" type="button">Disconnect</button>
         <button id="focusGridButton" class="hidden" type="button" aria-controls="gameCanvas">Endiginous</button>
+        <button id="openSettingsButton" type="button" aria-haspopup="dialog" aria-controls="settingsModal">Open settings and audio</button>
         <button id="midiButton" class="hidden" type="button" hidden>Enable MIDI</button>
       </div>
       <div id="deviceSummary" class="auth-required">
@@ -41,7 +41,7 @@
       </div>
       <section id="joinGuide" class="join-guide auth-required" aria-labelledby="joinGuideTitle">
         <div class="join-guide-header">
-          <h2 id="joinGuideTitle">Join the grid</h2>
+          <h2 id="joinGuideTitle">Join Endiginous</h2>
           <button id="readGuideButton" type="button" aria-controls="status" aria-pressed="false">Read guide</button>
         </div>
         <div class="join-guide-grid">
@@ -51,7 +51,7 @@
           <p><b>Use things:</b> press I to find items, Enter to use one, and ? for full help.</p>
         </div>
       </section>
-      <div id="status" class="auth-required" role="region" aria-live="polite"></div>
+      <div id="status" class="auth-required" role="status" aria-live="polite" aria-atomic="true"></div>
       <section id="gridDashboard" class="grid-dashboard auth-required hidden" hidden aria-label="Current grid state">
         <p><b>Position</b> <span id="gridPosition">--</span></p>
         <p><b>People</b> <span id="gridPeople">--</span></p>
@@ -74,9 +74,13 @@
         tabindex="0"
         role="application"
         aria-roledescription="interactive audio world"
+        aria-describedby="worldSummary"
         class="auth-required hidden"
         aria-label="Endiginous, press question mark for help."
       ></canvas>
+      <p id="worldSummary" class="visually-hidden" aria-live="polite" aria-atomic="true">
+        World state will appear here after connecting.
+      </p>
       <section
         id="interactiveItemPanel"
         class="interactive-item-panel auth-required hidden"
@@ -102,7 +106,7 @@
           <button id="helpToggle" type="button" aria-expanded="false" aria-controls="instructions">Show help</button>
           <div id="instructions" class="hidden" hidden></div>
         </section>
-        <small id="appVersion">Raywonder/TappedIn version. Original Chat Grid by Jage. Version</small>
+        <small id="appVersion">Raywonder/TappedIn Endiginous edition. Based on the original Jage9 project. Version</small>
       </footer>
 
       <div id="settingsModal" class="hidden" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">

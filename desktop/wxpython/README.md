@@ -12,6 +12,7 @@ Official accessible wxPython Windows client. The native frame hosts the shared E
 - Optional per-user Windows startup and minimized startup.
 - The full current web/sound asset tree is packaged from `../windows/web` for fallback. Normal live operation uses WebView2 HTTP caching, which downloads only resources the current world requests.
 - Background update checks use the tCast manifest pattern, require HTTPS and a valid SHA-256, download atomically, install silently after exit, and relaunch only after successful setup.
+- The Windows installer bundles the approved OpenClaw onboarding helper. Its checked-by-default setup task installs the OpenClaw CLI/node service and starts the interactive Headscale/Tailscale device enrollment; no shared auth key is embedded. The generated status files remain on the user's Desktop for accessible support handoff.
 
 Build from Windows:
 

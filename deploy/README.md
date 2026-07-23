@@ -11,7 +11,7 @@ Example values:
 ```bash
 REPO_ROOT=/srv/chgrid
 PUBLISH_DIR=/var/www/html/chgrid
-BASE_PATH=/chgrid/
+BASE_PATH=/endiginous/
 UNIT_NAME=chat-grid.service
 ```
 
@@ -87,10 +87,10 @@ cd "$REPO_ROOT"
 Expected proxy endpoints:
 
 ```apache
-ProxyPass        /chgrid/ws  ws://127.0.0.1:8765/chgrid/ws
-ProxyPassReverse /chgrid/ws  ws://127.0.0.1:8765/chgrid/ws
-ProxyPass        /chgrid/auth/session/  http://127.0.0.1:8765/chgrid/auth/session/
-ProxyPassReverse /chgrid/auth/session/  http://127.0.0.1:8765/chgrid/auth/session/
+ProxyPass        /endiginous/ws  ws://127.0.0.1:8765/endiginous/ws
+ProxyPassReverse /endiginous/ws  ws://127.0.0.1:8765/endiginous/ws
+ProxyPass        /endiginous/auth/session/  http://127.0.0.1:8765/endiginous/auth/session/
+ProxyPassReverse /endiginous/auth/session/  http://127.0.0.1:8765/endiginous/auth/session/
 ```
 
 The websocket server enforces browser origin matching against `CHGRID_HOST_ORIGIN`, so the public site origin must match that env var exactly.

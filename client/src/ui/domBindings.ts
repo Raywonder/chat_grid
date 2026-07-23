@@ -5,7 +5,7 @@ type UiDom = {
   connectButton: HTMLButtonElement;
   disconnectButton: HTMLButtonElement;
   focusGridButton: HTMLButtonElement;
-  settingsButton: HTMLButtonElement;
+  openSettingsButton: HTMLButtonElement;
   closeSettingsButton: HTMLButtonElement;
   audioInputSelect: HTMLSelectElement;
   audioOutputSelect: HTMLSelectElement;
@@ -27,8 +27,8 @@ type UiBindingsDeps = {
   updateConnectAvailability: () => void;
   connect: () => Promise<void>;
   disconnect: () => void;
-  openSettings: () => void;
   closeSettings: () => void;
+  openSettings: () => void;
   updateStatus: (message: string) => void;
   getGridName: () => string;
   sfxUiBlip: () => void;
@@ -62,12 +62,12 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
     deps.sfxUiBlip();
   });
 
-  deps.dom.settingsButton.addEventListener('click', () => {
-    deps.openSettings();
-  });
-
   deps.dom.closeSettingsButton.addEventListener('click', () => {
     deps.closeSettings();
+  });
+
+  deps.dom.openSettingsButton.addEventListener('click', () => {
+    deps.openSettings();
   });
 
   deps.dom.audioInputSelect.addEventListener('change', (event) => {

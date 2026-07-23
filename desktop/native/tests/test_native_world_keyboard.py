@@ -16,6 +16,9 @@ def test_native_world_exposes_application_role_and_bridges_arrows() -> None:
     assert "wx.WXK_UP" in source
     assert "wx.WXK_DOWN" in source
     assert "window.chatGridNativeKey" in source
+    assert "self.web.Bind(wx.EVT_KEY_DOWN, self._on_world_key_down)" in source
+    assert "Catch arrows at the WebView boundary" in source
+    assert "runImmediateMovement" in (Path(__file__).parents[3] / "client/src/input/keyboardController.ts").read_text(encoding="utf-8")
     assert "ctrlKey" in source
     assert "wx.AcceleratorTable" in source
     assert "Focus world\\tF6" in source

@@ -1,5 +1,7 @@
 import type { IncomingMessage, OutgoingMessage } from '../network/protocol';
 
+const PENDING_EXTERNAL_AUTH_STORAGE_KEY = 'endiginousPendingExternalAuth';
+
 export type AuthPolicy = {
   usernameMinLength: number;
   usernameMaxLength: number;
@@ -275,6 +277,7 @@ export function createAuthController(deps: AuthControllerDeps): {
     applyAuthPolicy(message.authPolicy);
     if (!message.ok) {
       externalAuthAssertion = '';
+      sessionStorage.removeItem(PENDING_EXTERNAL_AUTH_STORAGE_KEY);
       authUserId = '';
       if (message.message.toLowerCase().includes('session')) {
         resetSavedSessionHint();
@@ -290,6 +293,7 @@ export function createAuthController(deps: AuthControllerDeps): {
     }
 
     externalAuthAssertion = '';
+    sessionStorage.removeItem(PENDING_EXTERNAL_AUTH_STORAGE_KEY);
     if (message.sessionToken) {
       // Complete the cookie write before the connection flow can be torn down
       // or a recovery reload can happen.  A fire-and-forget write could lose

@@ -75,13 +75,38 @@ class SettingsDialog(wx.Dialog):
         self.updates = wx.CheckBox(panel, label="Check for and install verified updates automatically")
         self.updates.SetValue(settings.auto_update)
         layout.Add(self.updates, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+        self.keep_tray = wx.CheckBox(panel, label="Keep Endiginous running in the background when I close the window")
+        self.keep_tray.SetValue(getattr(settings, "keep_in_tray", False))
+        layout.Add(self.keep_tray, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+        self.spatial_audio = wx.CheckBox(panel, label="Use binaural spatial audio for world sounds")
+        self.spatial_audio.SetValue(getattr(settings, "spatial_audio", True))
+        layout.Add(self.spatial_audio, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+        self.audio_summary = wx.StaticText(panel, label="Audio device selection and detailed audio controls are available in File > Settings.")
+        self.audio_summary.SetName("Audio settings guidance")
+        layout.Add(self.audio_summary, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         buttons = self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL)
         layout.Add(buttons, 0, wx.EXPAND | wx.ALL, 8)
         panel.SetSizer(layout)
+        self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)
+        self.Bind(wx.EVT_BUTTON, self._on_cancel, id=wx.ID_CANCEL)
+        self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
         outer = wx.BoxSizer(wx.VERTICAL)
         outer.Add(panel, 1, wx.EXPAND)
         self.SetSizerAndFit(outer)
         self.startup.SetFocus()
+
+    def _on_ok(self, _event: wx.CommandEvent) -> None:
+        self.apply()
+        self.EndModal(wx.ID_OK)
+
+    def _on_cancel(self, _event: wx.CommandEvent) -> None:
+        self.EndModal(wx.ID_CANCEL)
+
+    def _on_char_hook(self, event: wx.KeyEvent) -> None:
+        if event.GetKeyCode() == wx.WXK_ESCAPE:
+            self.EndModal(wx.ID_CANCEL)
+            return
+        event.Skip()
 
     def apply(self) -> None:
         """Copy control state into settings."""
@@ -89,6 +114,8 @@ class SettingsDialog(wx.Dialog):
         self.settings.start_minimized = self.minimized.GetValue()
         self.settings.auto_connect = self.connect.GetValue()
         self.settings.auto_update = self.updates.GetValue()
+        self.settings.keep_in_tray = self.keep_tray.GetValue()
+        self.settings.spatial_audio = self.spatial_audio.GetValue()
 
 
 class UpdateInstallCountdown(wx.Dialog):
@@ -339,6 +366,18 @@ class MainFrame(wx.Frame):
             dialog.apply()
             self.store.save(self.settings)
             set_start_with_windows(self.settings.start_with_windows)
+            self.web.RunScript(
+                "window.chatGridNativeApplyAudioSettings?.(" + json.dumps({
+                    "outputMode": self.settings.audio_output_mode,
+                    "masterVolume": self.settings.master_volume,
+                    "microphoneGain": self.settings.microphone_gain,
+                    "layers": {"voice": self.settings.voice_layer, "item": self.settings.item_layer, "media": self.settings.media_layer, "world": self.settings.world_layer},
+                    "announcementMode": self.settings.announcement_mode,
+                    "radioAnnouncementMode": self.settings.radio_announcement_mode,
+                    "itemBeacons": self.settings.item_beacons,
+                    "movementDirections": self.settings.movement_directions,
+                }) + ");"
+            )
             self._announce("Desktop settings saved.")
 
     def _check_updates_background(self, interactive: bool = False) -> None:

@@ -1,5 +1,5 @@
 #define MyAppName "Endiginous"
-#define MyAppVersion "0.4.2"
+#define MyAppVersion "0.4.4"
 #define MyAppPublisher "Raywonder / TappedIn"
 #define MyAppExeName "Endiginous.exe"
 
@@ -11,7 +11,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\Endiginous
 DefaultGroupName=Endiginous
 OutputDir=..\release
-OutputBaseFilename=EndiginousSetup-0.4.2
+OutputBaseFilename=EndiginousSetup-0.4.4
 Compression=lzma2
 SolidCompression=yes
 PrivilegesRequired=lowest
@@ -23,6 +23,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Files]
 Source: "..\dist\Endiginous\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\..\..\..\..\scripts\installers\openclaw-join-windows.ps1"; DestDir: "{app}\OpenClaw"; Flags: ignoreversion
 
 [InstallDelete]
 Type: files; Name: "{autodesktop}\Endiginous.lnk"
@@ -33,6 +34,10 @@ Name: "{group}\Endiginous"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\Endiginous"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
+Root: HKCU; Subkey: "Software\Classes\endiginous"; ValueType: string; ValueName: ""; ValueData: "URL:Endiginous Protocol"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\endiginous"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\endiginous\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
+Root: HKCU; Subkey: "Software\Classes\endiginous\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
 Root: HKCU; Subkey: "Software\Classes\chatgrid"; ValueType: string; ValueName: ""; ValueData: "URL:Endiginous Protocol"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\chatgrid"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
 Root: HKCU; Subkey: "Software\Classes\chatgrid\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
@@ -40,6 +45,8 @@ Root: HKCU; Subkey: "Software\Classes\chatgrid\shell\open\command"; ValueType: s
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"
+Name: "openclaw"; Description: "Install and configure OpenClaw and join the approved network"; GroupDescription: "OpenClaw device setup:"; Flags: checkedonce
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch Endiginous"; Flags: nowait postinstall skipifsilent
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\OpenClaw\openclaw-join-windows.ps1"" -InstallTailscale -OpenDashboardOnSuccess $true"; Description: "Install and configure OpenClaw on this device"; Flags: postinstall waituntilterminated skipifsilent; Verb: runas; Tasks: openclaw

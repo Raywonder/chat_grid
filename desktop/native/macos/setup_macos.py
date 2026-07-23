@@ -9,12 +9,12 @@ OPTIONS = {
         "CFBundleName": "Endiginous",
         "CFBundleDisplayName": "Endiginous",
         "CFBundleIdentifier": "fm.tappedin.chatgrid",
-        "CFBundleShortVersionString": "0.4.3",
-        "CFBundleVersion": "0.4.3",
+        "CFBundleShortVersionString": "0.4.4",
+        "CFBundleVersion": "0.4.4",
         "LSMinimumSystemVersion": "12.0",
         "CFBundleURLTypes": [{
             "CFBundleURLName": "Endiginous Connect",
-            "CFBundleURLSchemes": ["chatgrid"],
+        "CFBundleURLSchemes": ["endiginous", "chatgrid"],
         }],
         "NSHighResolutionCapable": True,
     },
@@ -23,7 +23,7 @@ OPTIONS = {
 setup(
     app=["macos/macos_entry.py"],
     name="Endiginous",
-        version="0.4.3",
+        version="0.4.4",
     options={"py2app": OPTIONS},
     setup_requires=["py2app"],
 )

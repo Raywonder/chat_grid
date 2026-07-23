@@ -1,9 +1,18 @@
 import hashlib
+import inspect
 import sys
 
 import pytest
 
 from chat_grid_native.updater import UpdateManifest, UpdateService
+import chat_grid_native.updater as updater_module
+
+
+def test_windows_handoff_forces_current_install_directory() -> None:
+    source = inspect.getsource(updater_module.UpdateService.install_after_exit)
+    assert "InstallDirectory" in source
+    assert "/DIR=" in source
+    assert "install-update.log" in source
 
 
 def test_tcast_nested_platform_manifest() -> None:
@@ -48,10 +57,15 @@ def test_manifest_rejects_version_filename_mismatch() -> None:
 def test_verified_cached_installer_is_reused(tmp_path) -> None:
     payload = b"installer"
     checksum = hashlib.sha256(payload).hexdigest()
+    file_name = (
+        "Endiginous-0.2.0-macOS.zip"
+        if sys.platform == "darwin"
+        else "EndiginousSetup-0.2.0.exe"
+    )
     manifest = UpdateManifest.from_dict({
         "version": "0.2.0",
-        "downloadUrl": "https://example.test/EndiginousSetup-0.2.0.exe",
-        "fileName": "EndiginousSetup-0.2.0.exe",
+        "downloadUrl": f"https://example.test/{file_name}",
+        "fileName": file_name,
         "sha256": checksum,
     })
     target = tmp_path / "updates" / manifest.file_name

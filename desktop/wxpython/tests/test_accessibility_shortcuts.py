@@ -19,3 +19,10 @@ def test_update_install_has_visible_countdown_and_cancel_path():
     assert "service.install_after_exit(installer, manifest)" in SOURCE
     assert "self._prepare_exit()" in SOURCE
     assert "Exit cancelled. Endiginous will keep running." in SOURCE
+
+
+def test_settings_ok_and_cancel_explicitly_close_modal():
+    assert "self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)" in SOURCE
+    assert "self.Bind(wx.EVT_BUTTON, self._on_cancel, id=wx.ID_CANCEL)" in SOURCE
+    assert "self.EndModal(wx.ID_OK)" in SOURCE
+    assert "self.EndModal(wx.ID_CANCEL)" in SOURCE

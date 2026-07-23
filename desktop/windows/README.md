@@ -5,7 +5,7 @@ This is the first official Windows desktop shell for Endiginous. It wraps the ex
 The app defaults to the live Endiginous at:
 
 ```text
-https://blind.software/chatgrid/
+https://blind.software/endiginous/
 ```
 
 ## Development
@@ -56,7 +56,7 @@ relative asset paths and copies it to `desktop/windows/web/`, including the full
 
 - `Ctrl+Enter`: connect
 - `Ctrl+Shift+Enter`: disconnect
-- `Ctrl+,`: audio setup
+- `Ctrl+,`: settings, including microphone and speaker selection
 - `Ctrl+G`: focus the grid
 - `Ctrl+R`: open in-world reactions and user actions
 - `Ctrl+Shift+U`: switch between live and local Endiginous URL

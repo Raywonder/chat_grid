@@ -42,7 +42,7 @@ except ModuleNotFoundError:
 
 DEFAULT_COMMAND_FILE = Path("runtime/companion.commands.jsonl")
 DEFAULT_STATE_FILE = Path("runtime/companion.state.json")
-PUBLIC_VOICE_DIR = Path("/home/blindsoft/public_html/chatgrid/voice")
+PUBLIC_VOICE_DIR = Path("/home/blindsoft/public_html/endiginous/voice")
 AUTO_SIT_IDLE_SECONDS = 10.0
 AUTO_SIT_RETRY_SECONDS = 60.0
 AUTO_REACTION_COOLDOWN_SECONDS = 7.0
@@ -905,7 +905,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--url",
-        default=os.getenv("CHGRID_COMPANION_URL", "ws://127.0.0.1:18765/chatgrid/ws"),
+        default=os.getenv("CHGRID_COMPANION_URL", "ws://127.0.0.1:18765/endiginous/ws"),
     )
     parser.add_argument(
         "--origin", default=os.getenv("CHGRID_COMPANION_ORIGIN", "https://blind.software")

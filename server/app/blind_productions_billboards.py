@@ -31,6 +31,9 @@ class BlindProductionsMessage:
     author: str
     preview: str
     updated: str = ""
+    expires_at_ms: int = 0
+    max_rotations: int = 0
+    location_id: str = "town"
 
 
 class _ForumBoardParser(HTMLParser):
@@ -205,8 +208,8 @@ def upsert_blind_productions_billboards(
             continue
         updated = False
         target_x, target_y = _billboard_position(index)
-        if existing.locationId != "town":
-            existing.locationId = "town"
+        if existing.locationId != message.location_id:
+            existing.locationId = message.location_id
             updated = True
         if existing.x != target_x or existing.y != target_y:
             existing.x = target_x
@@ -256,7 +259,7 @@ def _build_billboard_item(
         id=item_id,
         type="billboard",
         title=_item_title(message),
-        locationId="town",
+        locationId=message.location_id,
         x=x,
         y=y,
         createdBy=SYSTEM_USER_ID,
@@ -280,9 +283,15 @@ def _message_params(message: BlindProductionsMessage) -> dict[str, str | int | b
         f"New public {message.source} update from Blind Productions."
     )
     author_text = f" Posted by {message.author}." if message.author else ""
-    body = _truncate(f"{body_source}{author_text}", 360)
+    body = _truncate(
+        f"{body_source}{author_text} Come a little closer if you'd like more details.",
+        360,
+    )
     announcement = _truncate(
-        f"Blind Productions {message.source}: {message.title}. {body_source}", 500
+        f"Hey, passerby! Here's something interesting from {message.source}: "
+        f"{message.title}. Come a little closer if you'd like more details. "
+        f"{body_source}",
+        500,
     )
     banner = " | ".join(
         part
@@ -305,6 +314,8 @@ def _message_params(message: BlindProductionsMessage) -> dict[str, str | int | b
         "bannerText": _truncate(banner, 500),
         "rotationSeconds": 18,
         "emitRange": 14,
+        "expiresAtMs": message.expires_at_ms,
+        "maxRotations": message.max_rotations,
     }
 
 

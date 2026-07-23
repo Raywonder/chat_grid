@@ -7,6 +7,7 @@ import json
 import os
 import ctypes
 from pathlib import Path
+import subprocess
 import sys
 import threading
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -75,6 +76,55 @@ class SettingsDialog(wx.Dialog):
         self.spatial_audio = wx.CheckBox(panel, label="Use binaural spatial audio for world sounds")
         self.spatial_audio.SetValue(settings.spatial_audio)
         layout.Add(self.spatial_audio, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+
+        audio_box = wx.StaticBoxSizer(wx.StaticBox(panel, label="Audio"), wx.VERTICAL)
+        output_row = wx.BoxSizer(wx.HORIZONTAL)
+        output_row.Add(wx.StaticText(panel, label="Output mode:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
+        self.output_mode = wx.RadioBox(panel, choices=["Stereo", "Mono"], majorDimension=2, style=wx.RA_SPECIFY_COLS)
+        self.output_mode.SetName("Audio output mode")
+        self.output_mode.SetSelection(1 if settings.audio_output_mode == "mono" else 0)
+        output_row.Add(self.output_mode, 1, wx.EXPAND)
+        audio_box.Add(output_row, 0, wx.EXPAND | wx.ALL, 6)
+        volume_row = wx.BoxSizer(wx.HORIZONTAL)
+        volume_row.Add(wx.StaticText(panel, label="Master volume:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
+        self.master_volume = wx.Slider(panel, minValue=0, maxValue=100, value=max(0, min(100, settings.master_volume)), style=wx.SL_HORIZONTAL | wx.SL_LABELS)
+        self.master_volume.SetName("Master volume")
+        volume_row.Add(self.master_volume, 1, wx.EXPAND)
+        audio_box.Add(volume_row, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 6)
+        mic_row = wx.BoxSizer(wx.HORIZONTAL)
+        mic_row.Add(wx.StaticText(panel, label="Microphone gain:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
+        self.microphone_gain = wx.SpinCtrlDouble(panel, min=0.25, max=4.0, inc=0.25, initial=max(0.25, min(4.0, settings.microphone_gain)))
+        self.microphone_gain.SetName("Microphone gain")
+        self.microphone_gain.SetDigits(2)
+        mic_row.Add(self.microphone_gain, 1, wx.EXPAND)
+        audio_box.Add(mic_row, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 6)
+        for attr, label, value in (
+            ("voice_layer", "Voice layer", settings.voice_layer),
+            ("item_layer", "Item sounds layer", settings.item_layer),
+            ("media_layer", "Media/radio layer", settings.media_layer),
+            ("world_layer", "World ambience layer", settings.world_layer),
+            ("item_beacons", "Item beacons", settings.item_beacons),
+            ("movement_directions", "Speak movement directions", settings.movement_directions),
+        ):
+            checkbox = wx.CheckBox(panel, label=label)
+            checkbox.SetValue(value)
+            setattr(self, attr, checkbox)
+            audio_box.Add(checkbox, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 6)
+        announcement_row = wx.BoxSizer(wx.HORIZONTAL)
+        announcement_row.Add(wx.StaticText(panel, label="Announcements:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
+        self.announcement_mode = wx.Choice(panel, choices=["Full", "Sounds only", "Required only"])
+        self.announcement_mode.SetName("Announcements")
+        self.announcement_mode.SetSelection({"full": 0, "sounds_only": 1, "required_only": 2}.get(settings.announcement_mode, 0))
+        announcement_row.Add(self.announcement_mode, 1, wx.EXPAND)
+        audio_box.Add(announcement_row, 0, wx.EXPAND | wx.ALL, 6)
+        radio_row = wx.BoxSizer(wx.HORIZONTAL)
+        radio_row.Add(wx.StaticText(panel, label="Radio readouts:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
+        self.radio_announcement_mode = wx.Choice(panel, choices=["Full", "Sounds only", "Off"])
+        self.radio_announcement_mode.SetName("Radio readouts")
+        self.radio_announcement_mode.SetSelection({"full": 0, "sounds_only": 1, "off": 2}.get(settings.radio_announcement_mode, 0))
+        radio_row.Add(self.radio_announcement_mode, 1, wx.EXPAND)
+        audio_box.Add(radio_row, 0, wx.EXPAND | wx.ALL, 6)
+        layout.Add(audio_box, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         panel.SetSizer(layout)
 
         outer = wx.BoxSizer(wx.VERTICAL)
@@ -109,6 +159,13 @@ class SettingsDialog(wx.Dialog):
         self.settings.auto_connect = self.connect.GetValue()
         self.settings.keep_in_tray = self.tray.GetValue()
         self.settings.spatial_audio = self.spatial_audio.GetValue()
+        self.settings.audio_output_mode = "mono" if self.output_mode.GetSelection() == 1 else "stereo"
+        self.settings.master_volume = self.master_volume.GetValue()
+        self.settings.microphone_gain = self.microphone_gain.GetValue()
+        for attr in ("voice_layer", "item_layer", "media_layer", "world_layer", "item_beacons", "movement_directions"):
+            setattr(self.settings, attr, getattr(self, attr).GetValue())
+        self.settings.announcement_mode = ("full", "sounds_only", "required_only")[self.announcement_mode.GetSelection()]
+        self.settings.radio_announcement_mode = ("full", "sounds_only", "off")[self.radio_announcement_mode.GetSelection()]
 
 
 class UpdateInstallCountdown(wx.Dialog):
@@ -167,6 +224,7 @@ class MainFrame(wx.Frame):
         self.screen_reader = ScreenReaderSpeech()
         self.world_hotkeys_registered = False
         self.signed_in = False
+        self.auto_browser_auth_call: wx.CallLater | None = None
 
         panel = wx.Panel(self)
         layout = wx.BoxSizer(wx.VERTICAL)
@@ -183,7 +241,11 @@ class MainFrame(wx.Frame):
         self.domain_login = wx.Button(self.login_panel, label="Sign in to this &server")
         login_layout.Add(self.domain_login, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.login_panel.SetSizer(login_layout)
-        layout.Add(self.login_panel, 0, wx.EXPAND | wx.ALL, 12)
+        # Authentication is a desktop command, not content in the world window.
+        # Keep this fallback panel available for programmatic compatibility, but
+        # never present it as a second sign-in surface to the user.
+        self.login_panel.Hide()
+        layout.Add(self.login_panel, 0, wx.EXPAND | wx.ALL, 0)
 
         if sys.platform == "win32":
             self.web = wx.html2.WebView.New(panel, backend=wx.html2.WebViewBackendEdge)
@@ -203,8 +265,11 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_TIMER, self._on_reconnect_timer, self.reconnect_timer)
         self.Bind(wx.EVT_CLOSE, self._on_close)
         self.Bind(wx.EVT_ACTIVATE, self._on_activate)
+        self.Bind(wx.EVT_MENU_OPEN, self._on_menu_open)
+        self.Bind(wx.EVT_MENU_CLOSE, self._on_menu_close)
         self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
         self.web.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
+        self.web.Bind(wx.EVT_KEY_DOWN, self._on_world_key_down)
         self.default_login.Bind(wx.EVT_BUTTON, self._login_default)
         self.domain_login.Bind(wx.EVT_BUTTON, self._login_domain)
         self.domain.Bind(wx.EVT_TEXT_ENTER, self._login_domain)
@@ -213,7 +278,10 @@ class MainFrame(wx.Frame):
             self._open_grid(launch_url)
         else:
             self._announce("Choose an Endiginous server and sign in.")
-            self.default_login.SetFocus()
+            # The fallback login panel is deliberately hidden. Keep focus on
+            # the frame/menu so VoiceOver/NVDA never lands on an unavailable
+            # control; File > Sign in is the visible first-run path.
+            self.SetFocus()
         if autostart and self.settings.start_minimized:
             self.Iconize(True)
         else:
@@ -229,26 +297,29 @@ class MainFrame(wx.Frame):
         self.browser_sign_in_item = file_menu.Append(
             self.browser_sign_in_id, "Sign in to &server\tCtrl+Shift+S"
         )
+        self.browser_server_sign_in_id = wx.NewIdRef()
+        file_menu.Append(self.browser_server_sign_in_id, "Sign in to another &server...")
         file_menu.Append(wx.ID_REFRESH, "&Reconnect")
         self.focus_world_id = wx.NewIdRef()
         file_menu.Append(self.focus_world_id, "&Focus world\tF6")
         file_menu.AppendSeparator()
+        self.app_settings_id = wx.NewIdRef()
         settings_shortcut = "Cmd+," if sys.platform == "darwin" else "Ctrl+,"
-        file_menu.Append(wx.ID_PREFERENCES, f"&Desktop settings...\t{settings_shortcut}")
-        self.audio_settings_id = wx.NewIdRef()
-        file_menu.Append(self.audio_settings_id, "&Audio setup...\tCtrl+Shift+A")
+        file_menu.Append(self.app_settings_id, f"&Settings...\t{settings_shortcut}")
+        file_menu.Append(wx.ID_PREFERENCES, "&Desktop settings...")
         self.cast_device_id = wx.NewIdRef()
         file_menu.Append(self.cast_device_id, "Cast to &device...\tCtrl+Shift+C")
         file_menu.AppendSeparator()
-        file_menu.Append(wx.ID_ABOUT, "&Credits and version\tCtrl+Shift+C")
+        file_menu.Append(wx.ID_ABOUT, "&Credits and version")
         file_menu.Append(wx.ID_EXIT, "E&xit\tAlt+F4")
         menu_bar.Append(file_menu, "&File")
         self.SetMenuBar(menu_bar)
         self.Bind(wx.EVT_MENU, self._login_default, id=self.browser_sign_in_id)
+        self.Bind(wx.EVT_MENU, self._prompt_server_sign_in, id=self.browser_server_sign_in_id)
         self.Bind(wx.EVT_MENU, lambda _event: self._reload(), id=wx.ID_REFRESH)
         self.Bind(wx.EVT_MENU, lambda _event: self._focus_world(), id=self.focus_world_id)
+        self.Bind(wx.EVT_MENU, self._show_app_settings, id=self.app_settings_id)
         self.Bind(wx.EVT_MENU, self._show_settings, id=wx.ID_PREFERENCES)
-        self.Bind(wx.EVT_MENU, self._show_audio_settings, id=self.audio_settings_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.web.RunScript("window.dispatchEvent(new Event('chatgrid-cast-to-device'));"), id=self.cast_device_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.exit_application(), id=wx.ID_EXIT)
         self.Bind(wx.EVT_MENU, self._show_about, id=wx.ID_ABOUT)
@@ -316,8 +387,18 @@ class MainFrame(wx.Frame):
         self._set_world_hotkeys_active(event.GetActive())
         event.Skip()
 
-    def _announce(self, text: str) -> None:
+    def _on_menu_open(self, _event: wx.MenuEvent) -> None:
+        """Keep native menu navigation from moving the world underneath it."""
+        self._set_world_hotkeys_active(False)
+
+    def _on_menu_close(self, _event: wx.MenuEvent) -> None:
+        """Restore world movement after the native menu closes."""
+        self._set_world_hotkeys_active(True)
+
+    def _announce(self, text: str, *, speak: bool = False) -> None:
         self.SetStatusText(text)
+        if speak:
+            self.screen_reader.speak(text, interrupt=True)
 
     @staticmethod
     def _server_url(value: str) -> str:
@@ -331,7 +412,7 @@ class MainFrame(wx.Frame):
         if parsed.scheme.lower() != "https" or not parsed.hostname or parsed.username or parsed.password:
             raise ValueError("Enter a valid HTTPS server domain.")
         port = f":{parsed.port}" if parsed.port else ""
-        return urlunsplit(("https", f"{parsed.hostname}{port}", "/chatgrid/", "", ""))
+        return urlunsplit(("https", f"{parsed.hostname}{port}", "/endiginous/", "", ""))
 
     def _open_grid(self, url: str) -> None:
         parsed = urlsplit(url)
@@ -363,7 +444,23 @@ class MainFrame(wx.Frame):
         if self.signed_in:
             self.web.RunScript("document.getElementById('logoutButton')?.click();")
             return
-        self._start_browser_auth("https://blind.software", "https://blind.software/chatgrid/")
+        self._start_browser_auth("https://blind.software", "https://blind.software/endiginous/")
+
+    def _prompt_server_sign_in(self, _event: wx.CommandEvent) -> None:
+        """Collect an alternate HTTPS server without putting auth controls in the world window."""
+        dialog = wx.TextEntryDialog(
+            self,
+            "Enter the HTTPS domain for the Endiginous server.",
+            "Sign in to another server",
+            value=urlsplit(self.settings.grid_url).hostname or "",
+        )
+        dialog.SetTextSelection(-1, -1)
+        try:
+            if dialog.ShowModal() == wx.ID_OK:
+                self.domain.SetValue(dialog.GetValue())
+                self._login_domain(_event)
+        finally:
+            dialog.Destroy()
 
     def _login_domain(self, _event: wx.CommandEvent) -> None:
         try:
@@ -377,6 +474,9 @@ class MainFrame(wx.Frame):
 
     def _start_browser_auth(self, server_origin: str, grid_url: str) -> None:
         """Authenticate through the system browser and return to this running client."""
+        if self.auto_browser_auth_call is not None:
+            self.auto_browser_auth_call.Stop()
+            self.auto_browser_auth_call = None
         if self.browser_auth_flow is not None:
             self._announce("Browser sign-in is already waiting for completion.")
             return
@@ -393,9 +493,46 @@ class MainFrame(wx.Frame):
             lambda message: wx.CallAfter(self._browser_auth_failed, message),
         )
         self._announce("Complete sign-in in the opened sign-in window. Endiginous will continue automatically.")
-        if not webbrowser.open(flow.authorization_url, new=1):
+        opened = False
+        if sys.platform == "darwin":
+            try:
+                subprocess.Popen(["open", "-g", flow.authorization_url])
+                opened = True
+            except OSError:
+                opened = False
+        else:
+            opened = webbrowser.open_new_tab(flow.authorization_url)
+        if not opened:
             flow.close()
             self._browser_auth_failed("The system browser could not be opened. Try signing in again.")
+
+    def _schedule_automatic_browser_auth(self) -> None:
+        """Offer saved-session users a spoken, delayed token-URL browser handoff."""
+        if self.signed_in or self.browser_auth_flow is not None or not self.web.IsShown():
+            return
+        current = urlsplit(self.web.GetCurrentURL())
+        if parse_qsl(current.query, keep_blank_values=True) and any(
+            key == "external_auth" for key, _value in parse_qsl(current.query, keep_blank_values=True)
+        ):
+            return
+        if self.auto_browser_auth_call is not None and self.auto_browser_auth_call.IsRunning():
+            return
+        self._announce(
+            "You are not signed in. Secure browser sign-in will start in 5 seconds.",
+            speak=True,
+        )
+        self.auto_browser_auth_call = wx.CallLater(5000, self._begin_automatic_browser_auth)
+
+    def _begin_automatic_browser_auth(self) -> None:
+        self.auto_browser_auth_call = None
+        if self.signed_in or self.browser_auth_flow is not None or not self.web.IsShown():
+            return
+        parsed = urlsplit(self.settings.grid_url)
+        if parsed.scheme != "https" or not parsed.hostname:
+            self._announce("Open File, then choose Sign in to another server to continue.", speak=True)
+            return
+        origin = urlunsplit(("https", parsed.netloc, "", "", ""))
+        self._start_browser_auth(origin, self.settings.grid_url)
 
     def _finish_browser_auth(self, grid_url: str, assertion: str) -> None:
         """Load the one-use assertion into the embedded world client."""
@@ -416,6 +553,16 @@ class MainFrame(wx.Frame):
         self.reconnect_timer.Stop()
         self.backoff.reset()
         self._announce("Endiginous loaded. Session and reconnect monitoring are active.")
+        # Browser sign-in returns a one-use external_auth assertion. The
+        # embedded client hides its connect controls in native mode, so make
+        # the callback deterministic and submit the assertion after the page
+        # has finished wiring its shared auth controller.
+        self.web.RunScript(
+            "(() => {"
+            "const hasExternalAuth = new URL(window.location.href).searchParams.has('external_auth');"
+            "if (hasExternalAuth) setTimeout(() => document.getElementById('connectButton')?.click(), 150);"
+            "})();"
+        )
         # The shared web client owns saved-session auto-connect. Injecting a
         # second Connect click races its cookie/auth startup and can create a
         # storm of short-lived websocket sessions.
@@ -427,7 +574,7 @@ class MainFrame(wx.Frame):
             "(()=>{document.documentElement.classList.add('chatgrid-native');"
             "let style=document.getElementById('chatgridNativeChrome');"
             "if(!style){style=document.createElement('style');style.id='chatgridNativeChrome';"
-            "style.textContent='#gridTitle,#connectionStatus,#authSessionView,#button-container,"
+            "style.textContent='#gridTitle,#connectionStatus,#loginView,#authSessionView,#button-container,"
             "#deviceSummary,#joinGuide,#appFooter{display:none!important}';"
             "document.head.appendChild(style);}"
             "const canvas=document.getElementById('gameCanvas');"
@@ -444,6 +591,7 @@ class MainFrame(wx.Frame):
         )
         self.web.RunScript(spatial_audio_script(self.settings.spatial_audio))
         self._set_world_hotkeys_active(True)
+        wx.CallLater(250, self._schedule_automatic_browser_auth)
 
     def _on_script_message(self, event: wx.html2.WebViewEvent) -> None:
         """Accept bounded native integration messages from the approved origin."""
@@ -467,6 +615,11 @@ class MainFrame(wx.Frame):
         self.signed_in = signed_in
         label = "Sign &out\tCtrl+Shift+S" if signed_in else "Sign in to &server\tCtrl+Shift+S"
         self.browser_sign_in_item.SetItemLabel(label)
+        if signed_in and self.auto_browser_auth_call is not None:
+            self.auto_browser_auth_call.Stop()
+            self.auto_browser_auth_call = None
+        elif not signed_in:
+            self._schedule_automatic_browser_auth()
 
     def _on_error(self, event: wx.html2.WebViewEvent) -> None:
         LOGGER.warning("WebView load error: %s", event.GetString())
@@ -491,20 +644,37 @@ class MainFrame(wx.Frame):
         if saved:
             self.store.save(self.settings)
             set_start_with_windows(self.settings.start_with_windows)
+            self._apply_audio_settings_to_world()
             self._announce("Desktop settings saved.")
         if self.web.IsShown():
             self.web.SetFocus()
         else:
             self.default_login.SetFocus()
 
-    def _show_audio_settings(self, _event: wx.CommandEvent) -> None:
-        """Open the shared audio dialog from the native File menu."""
+    def _apply_audio_settings_to_world(self) -> None:
+        """Apply native audio choices to the shared client without a reload."""
         if not self.web.IsShown():
-            self._announce("Sign in to an Endiginous server before opening audio setup.")
+            return
+        payload = json.dumps({
+            "outputMode": self.settings.audio_output_mode,
+            "masterVolume": self.settings.master_volume,
+            "microphoneGain": self.settings.microphone_gain,
+            "layers": {"voice": self.settings.voice_layer, "item": self.settings.item_layer, "media": self.settings.media_layer, "world": self.settings.world_layer},
+            "announcementMode": self.settings.announcement_mode,
+            "radioAnnouncementMode": self.settings.radio_announcement_mode,
+            "itemBeacons": self.settings.item_beacons,
+            "movementDirections": self.settings.movement_directions,
+        })
+        self.web.RunScript(f"window.chatGridNativeApplyAudioSettings?.({payload});")
+
+    def _show_app_settings(self, _event: wx.CommandEvent) -> None:
+        """Open the shared accessible app settings dialog from File."""
+        if not self.web.IsShown():
+            self._announce("Sign in to an Endiginous server before opening settings.")
             self.default_login.SetFocus()
             return
-        self.web.RunScript("document.getElementById('settingsButton')?.click();")
-        self.web.SetFocus()
+        self.web.RunScript("window.chatGridNativeOpenSettings?.();")
+        wx.CallLater(100, self.web.SetFocus)
 
     def _focus_world(self) -> None:
         """Place browser and DOM focus on the interactive world surface."""
@@ -569,14 +739,19 @@ class MainFrame(wx.Frame):
     def _prepare_update_install(self, service: UpdateService, installer: Path, manifest: object) -> None:
         """Show the countdown on the UI thread before closing for installation."""
         version = str(getattr(manifest, "version", "the update"))
-        self._announce(f"Endiginous {version} is verified and ready to install.")
+        self._announce(f"Endiginous {version} is verified and ready to install.", speak=True)
         with UpdateInstallCountdown(self, version) as dialog:
             if dialog.ShowModal() != wx.ID_OK:
                 service.dismiss(manifest)
-                self._announce("Update cancelled. Endiginous will keep running.")
+                self._announce("Update cancelled. Endiginous will keep running.", speak=True)
                 return
         service.install_after_exit(installer, manifest)
-        self.exit_application()
+        # The update dialog is already the user's approval/countdown. Do not
+        # open the generic exit dialog a second time: the helper is waiting
+        # for this process to end before it can install and relaunch.
+        self._announce("Endiginous is closing to install the verified update.", speak=True)
+        self.force_exit = True
+        self.Close(force=True)
 
     def _show_about(self, _event: wx.CommandEvent) -> None:
         wx.MessageBox(
@@ -592,7 +767,7 @@ class MainFrame(wx.Frame):
         key = event.GetKeyCode()
         unicode_key = event.GetUnicodeKey()
         if (event.ControlDown() or event.MetaDown()) and (key == ord(",") or unicode_key == ord(",")):
-            self._show_settings(event)
+            self._show_app_settings(event)
             return
         if (event.ControlDown() or event.MetaDown()) and not event.AltDown() and (
             key == ord("R") or key == ord("r") or unicode_key == ord("R") or unicode_key == ord("r")
@@ -624,6 +799,16 @@ class MainFrame(wx.Frame):
         menu_bar = self.GetMenuBar()
         if menu_bar is not None:
             menu_bar.SetFocus()
+
+    def _on_world_key_down(self, event: wx.KeyEvent) -> None:
+        """Catch arrows at the WebView boundary when the embedded browser consumes them."""
+        key = event.GetKeyCode()
+        if key in self.world_key_ids and not (
+            event.ControlDown() or event.AltDown() or event.MetaDown()
+        ):
+            self._dispatch_world_arrow(key)
+            return
+        event.Skip()
 
     def _on_close(self, event: wx.CloseEvent) -> None:
         if self.settings.keep_in_tray and not self.force_exit and event.CanVeto():

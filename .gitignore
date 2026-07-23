@@ -17,11 +17,24 @@ server/*.egg-info/
 # Node/Vite
 client/node_modules/
 client/dist/
+desktop/windows/node_modules/
+desktop/windows/release/
 
 # OS/editor/log noise
 .DS_Store
 *.log
 *.bak
+
+# Desktop build output and local test artifacts
+desktop/**/build/
+desktop/**/dist/
+desktop/**/release/
+desktop/**/.pytest_cache/
+desktop/**/pytest-of-*/
+desktop/**/src/*.egg-info/
+
+# Recovery copies are retained locally but never committed into source history.
+recovery/
 
 # Local planning scratch
 plans/

@@ -110,4 +110,20 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
         raise ValueError("emitRange must be between 1 and 20.")
     next_params["emitRange"] = emit_range
 
+    try:
+        expires_at_ms = int(next_params.get("expiresAtMs", item.params.get("expiresAtMs", 0)))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("expiresAtMs must be a UTC millisecond timestamp or 0.") from exc
+    if expires_at_ms < 0:
+        raise ValueError("expiresAtMs must be 0 or a positive UTC millisecond timestamp.")
+    next_params["expiresAtMs"] = expires_at_ms
+
+    try:
+        max_rotations = int(next_params.get("maxRotations", item.params.get("maxRotations", 0)))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("maxRotations must be an integer between 0 and 1000.") from exc
+    if not (0 <= max_rotations <= 1000):
+        raise ValueError("maxRotations must be between 0 and 1000.")
+    next_params["maxRotations"] = max_rotations
+
     return keep_only_known_params(next_params, PARAM_KEYS)

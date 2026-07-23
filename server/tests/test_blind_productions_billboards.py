@@ -72,7 +72,29 @@ def test_upsert_blind_productions_messages_as_billboards() -> None:
     assert item.params["headline"] == "Creator update"
     assert item.params["url"] == messages[0].url
     assert "A public forum update" in item.params["body"]
+    assert "Come a little closer" in item.params["body"]
+    assert item.params["announcementText"].startswith("Hey, passerby!")
+    assert "more details" in item.params["announcementText"]
     assert item.id in items
 
     changed_again = upsert_blind_productions_billboards(items, messages, now_ms=2234)
     assert changed_again == []
+
+
+def test_curated_billboard_carries_expiry_rotation_and_location() -> None:
+    message = BlindProductionsMessage(
+        title="Shaftfall",
+        url="https://applevis.com/forum/ios-ipados-gaming/shaftfall",
+        source="Games",
+        author="AppleVis community",
+        preview="Accessible iOS game discussion.",
+        expires_at_ms=9999,
+        max_rotations=6,
+        location_id="arcade",
+    )
+    items = {}
+    changed = upsert_blind_productions_billboards(items, [message], now_ms=1234)
+    item = changed[0]
+    assert item.locationId == "arcade"
+    assert item.params["expiresAtMs"] == 9999
+    assert item.params["maxRotations"] == 6

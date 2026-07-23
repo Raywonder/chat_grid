@@ -21,6 +21,8 @@ EDITABLE_PROPERTIES: tuple[str, ...] = (
     "bannerText",
     "rotationSeconds",
     "emitRange",
+    "expiresAtMs",
+    "maxRotations",
 )
 CAPABILITIES: tuple[str, ...] = ("editable", "carryable", "deletable", "usable")
 USE_SOUND: str | None = None
@@ -42,6 +44,8 @@ DEFAULT_PARAMS: dict = {
     "bannerText": "",
     "rotationSeconds": 12,
     "emitRange": 12,
+    "expiresAtMs": 0,
+    "maxRotations": 0,
 }
 PARAM_KEYS: tuple[str, ...] = (
     "enabled",
@@ -56,6 +60,8 @@ PARAM_KEYS: tuple[str, ...] = (
     "bannerText",
     "rotationSeconds",
     "emitRange",
+    "expiresAtMs",
+    "maxRotations",
 )
 
 BILLBOARD_MODE_OPTIONS: tuple[str, ...] = (
@@ -132,5 +138,15 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "valueType": "number",
         "tooltip": "Maximum distance in squares where this billboard announcement can be heard.",
         "range": {"min": 1, "max": 20, "step": 1},
+    },
+    "expiresAtMs": {
+        "valueType": "number",
+        "tooltip": "Optional UTC time after which this billboard is no longer active.",
+        "range": {"min": 0, "max": 4102444800000, "step": 1000},
+    },
+    "maxRotations": {
+        "valueType": "number",
+        "tooltip": "Optional maximum number of announcements per listener; zero means unlimited.",
+        "range": {"min": 0, "max": 1000, "step": 1},
     },
 }

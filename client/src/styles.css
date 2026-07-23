@@ -12,6 +12,20 @@ body {
   color: #e5e7eb;
 }
 
+/* Native shells expose sign-in and settings through their own accessible
+   menus. Keep browser users' normal page intact while removing duplicate
+   canvas chrome from the native accessibility tree. */
+html.chatgrid-native #gridTitle,
+html.chatgrid-native #connectionStatus,
+html.chatgrid-native #loginView,
+html.chatgrid-native #authSessionView,
+html.chatgrid-native #button-container,
+html.chatgrid-native #deviceSummary,
+html.chatgrid-native #joinGuide,
+html.chatgrid-native #appFooter {
+  display: none !important;
+}
+
 .app {
   width: min(860px, 100%);
   padding: 1rem;
@@ -338,6 +352,8 @@ canvas {
   background: rgb(0 0 0 / 70%);
   display: grid;
   place-items: center;
+  overflow: auto;
+  padding: 1rem;
 }
 
 .modal-content {
@@ -348,6 +364,9 @@ canvas {
   padding: 1rem;
   display: grid;
   gap: 0.5rem;
+  width: min(42rem, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
 }
 
 @media (max-width: 720px) {

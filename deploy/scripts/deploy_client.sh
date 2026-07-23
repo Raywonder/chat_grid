@@ -3,8 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${1:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
-PUBLISH_DIR="${2:-$REPO_ROOT/deploy/publish/chgrid}"
-BASE_PATH="${3:-/chgrid/}"
+PUBLISH_DIR="${2:-$REPO_ROOT/deploy/publish/endiginous}"
+BASE_PATH="${3:-/endiginous/}"
 SERVER_CONFIG_PATH="${4:-$REPO_ROOT/server/config.toml}"
 CLIENT_DIR="$REPO_ROOT/client"
 PHP_PROXY_DIR="$REPO_ROOT/deploy/php"

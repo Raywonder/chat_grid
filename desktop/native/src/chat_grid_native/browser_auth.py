@@ -33,7 +33,7 @@ class BrowserAuthFlow:
         self.callback_url = f"http://127.0.0.1:{port}{CALLBACK_PATH}"
         self.authorization_url = self.server_origin + "/?" + urlencode(
             {
-                "route": "chatgrid_client_auth_start",
+                "route": "endiginous_client_auth_start",
                 "callback": self.callback_url,
                 "state": self.state,
             }

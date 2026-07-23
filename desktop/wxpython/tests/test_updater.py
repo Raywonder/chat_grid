@@ -1,8 +1,17 @@
 import hashlib
+import inspect
 
 import pytest
 
 from chat_grid_native.updater import UpdateManifest, UpdateService
+import chat_grid_native.updater as updater_module
+
+
+def test_windows_handoff_forces_current_install_directory() -> None:
+    source = inspect.getsource(updater_module.UpdateService.install_after_exit)
+    assert "InstallDirectory" in source
+    assert "/DIR=" in source
+    assert "install-update.log" in source
 
 
 def test_tcast_nested_windows_manifest() -> None:

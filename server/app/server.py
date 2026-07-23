@@ -37,6 +37,7 @@ from .blind_productions_billboards import (
     fetch_public_messages as fetch_blind_productions_messages,
     upsert_blind_productions_billboards,
 )
+from .curated_billboards import current_curated_billboards
 from .world_cup_live import (
     fetch_world_cup_status,
     upsert_world_cup_cafe_status,
@@ -1959,7 +1960,7 @@ class SignalingServer:
                     topic=str(preferences["topic"]),
                     title=record.title,
                     message=record.message,
-                    click=f"{self.host_origin}/chatgrid/",
+                    click=f"{self.host_origin}{self.base_path}",
                 )
         for active in self.clients.values():
             if not active.user_id:
@@ -6609,6 +6610,9 @@ class SignalingServer:
 
         try:
             messages = await asyncio.to_thread(fetch_blind_productions_messages)
+            messages.extend(
+                current_curated_billboards(now_ms=self.item_service.now_ms())
+            )
         except Exception as exc:
             LOGGER.warning("Blind Productions billboard sync failed: %s", exc)
             return []
