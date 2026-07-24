@@ -26,6 +26,15 @@ def test_native_world_exposes_application_role_and_bridges_arrows() -> None:
     assert 'navigation_query.append(("native_client", __version__))' in source
 
 
+def test_windows_world_movement_falls_back_when_global_hotkeys_are_unavailable() -> None:
+    source = APP_SOURCE.read_text(encoding="utf-8")
+
+    assert "WindowsWorldKeyHook" in source
+    assert "using foreground keyboard hook" in source
+    assert "self.world_key_hook = WindowsWorldKeyHook(self._dispatch_world_arrow)" in source
+    assert "self.world_key_hook.close()" in source
+
+
 def test_windows_hook_is_foreground_only_and_preserves_modified_arrows() -> None:
     source = HOOK_SOURCE.read_text(encoding="utf-8")
 

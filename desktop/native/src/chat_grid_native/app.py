@@ -27,6 +27,7 @@ from .spatial_audio import spatial_audio_script
 from .startup import set_start_with_windows
 from .updater import UpdateService
 from .migration import migrate_legacy_state
+from .windows_keyboard import WindowsWorldKeyHook
 
 
 LOGGER = logging.getLogger(__name__)
@@ -224,6 +225,7 @@ class MainFrame(wx.Frame):
         self.force_exit = False
         self.screen_reader = ScreenReaderSpeech()
         self.world_hotkeys_registered = False
+        self.world_key_hook: WindowsWorldKeyHook | None = None
         self.signed_in = False
         self.auto_browser_auth_call: wx.CallLater | None = None
 
@@ -376,13 +378,21 @@ class MainFrame(wx.Frame):
                     continue
                 for registered_id in registered:
                     ctypes.windll.user32.UnregisterHotKey(int(self.GetHandle()), registered_id)
-                LOGGER.warning("Unable to register native world arrow hotkeys")
+                LOGGER.warning("Unable to register native world arrow hotkeys; using foreground keyboard hook")
+                try:
+                    self.world_key_hook = WindowsWorldKeyHook(self._dispatch_world_arrow)
+                except (AttributeError, OSError):
+                    self.world_key_hook = None
+                    LOGGER.exception("Unable to install foreground keyboard hook for world movement")
                 return
             self.world_hotkeys_registered = True
             return
         for command_id in self.world_key_ids.values():
             ctypes.windll.user32.UnregisterHotKey(int(self.GetHandle()), int(command_id))
         self.world_hotkeys_registered = False
+        if self.world_key_hook is not None:
+            self.world_key_hook.close()
+            self.world_key_hook = None
 
     def _on_activate(self, event: wx.ActivateEvent) -> None:
         self._set_world_hotkeys_active(event.GetActive())
