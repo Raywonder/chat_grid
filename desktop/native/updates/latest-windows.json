@@ -1,12 +1,12 @@
 {
   "version": "0.4.4",
-  "revision": "R516",
-  "releaseNotes": "Endiginous Windows 0.4.4 bundles web runtime R516 with the current movement, authentication, audio, and accessibility updates.",
+  "revision": "R517",
+  "releaseNotes": "Endiginous Windows 0.4.4 removes bundled agent onboarding, migrates legacy Chat Grid state, and bundles web runtime R517.",
   "platforms": {
     "windows": {
       "url": "https://blind.software/endiginous/downloads/EndiginousSetup-0.4.4.exe",
       "fileName": "EndiginousSetup-0.4.4.exe",
-      "sha256": "732a7aee35018a0cfdb1b091e2bbf8425206bcbcc7196eb61a3e6e505b2ec32a",
+      "sha256": "1c2084baab07b8cdf006a4b2eadb4331c340dfcd8d85dea695a5585bde5344bb",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }
   }

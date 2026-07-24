@@ -9,6 +9,7 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\Endiginous
+UsePreviousAppDir=no
 DefaultGroupName=Endiginous
 OutputDir=..\release
 OutputBaseFilename=EndiginousSetup-0.4.4
@@ -23,11 +24,16 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Files]
 Source: "..\dist\Endiginous\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\..\..\..\..\..\scripts\installers\openclaw-join-windows.ps1"; DestDir: "{app}\OpenClaw"; Flags: ignoreversion
 
 [InstallDelete]
 Type: files; Name: "{autodesktop}\Endiginous.lnk"
 Type: files; Name: "{group}\Endiginous.lnk"
+Type: filesandordirs; Name: "{localappdata}\Programs\Chat Grid"
+Type: filesandordirs; Name: "{localappdata}\Programs\ChatGrid"
+Type: files; Name: "{autodesktop}\Chat Grid.lnk"
+Type: files; Name: "{autodesktop}\ChatGrid.lnk"
+Type: files; Name: "{group}\Chat Grid.lnk"
+Type: files; Name: "{group}\ChatGrid.lnk"
 
 [Icons]
 Name: "{group}\Endiginous"; Filename: "{app}\{#MyAppExeName}"
@@ -45,8 +51,6 @@ Root: HKCU; Subkey: "Software\Classes\chatgrid\shell\open\command"; ValueType: s
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"
-Name: "openclaw"; Description: "Install and configure OpenClaw and join the approved network"; GroupDescription: "OpenClaw device setup:"; Flags: checkedonce
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch Endiginous"; Flags: nowait postinstall skipifsilent
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\OpenClaw\openclaw-join-windows.ps1"" -InstallTailscale -OpenDashboardOnSuccess $true"; Description: "Install and configure OpenClaw on this device"; Flags: postinstall waituntilterminated skipifsilent; Verb: runas; Tasks: openclaw

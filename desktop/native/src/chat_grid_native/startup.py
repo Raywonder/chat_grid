@@ -9,7 +9,7 @@ import sys
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_VALUE = "Endiginous"
-LEGACY_RUN_VALUES = ("Endiginous",)
+LEGACY_RUN_VALUES = ("Endiginous", "Chat Grid", "ChatGrid", "Indigenous")
 
 
 def executable_path() -> Path:

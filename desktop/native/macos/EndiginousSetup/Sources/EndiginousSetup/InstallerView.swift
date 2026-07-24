@@ -27,9 +27,9 @@ struct InstallerView: View {
         VStack(alignment: .leading, spacing: 6) {
             Label("Endiginous", systemImage: "network")
                 .font(.largeTitle.bold())
-            Text("Native macOS setup for OpenClaw gateway devices")
+            Text("Native macOS setup for Endiginous")
                 .font(.title3)
-            Text("This app uses the approved Tailscale/Headscale and OpenClaw configuration without embedding keys or making the world client web-based.")
+            Text("Connect this Mac to Endiginous without bundling another agent or gateway service.")
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
@@ -45,7 +45,7 @@ struct InstallerView: View {
         .onChange(of: configuration.mode) { _, mode in
             if mode == .recommended { configuration.components = .recommended }
         }
-        .accessibilityHint("Recommended selects the normal OpenClaw gateway setup. Custom lets you choose individual components.")
+        .accessibilityHint("Recommended selects the normal Endiginous setup. Custom lets you choose individual components.")
     }
 
     private var components: some View {
@@ -77,8 +77,6 @@ struct InstallerView: View {
                 TextField("Device name", text: $configuration.deviceName)
                     .textContentType(.name)
                 TextField("Headscale login server", text: $configuration.headscaleURL)
-                    .textContentType(.URL)
-                TextField("OpenClaw installer URL", text: $configuration.openClawInstallerURL)
                     .textContentType(.URL)
             }
             .padding(.top, 4)

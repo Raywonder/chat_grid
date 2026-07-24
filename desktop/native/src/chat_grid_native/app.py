@@ -26,6 +26,7 @@ from .screen_reader import ScreenReaderSpeech
 from .spatial_audio import spatial_audio_script
 from .startup import set_start_with_windows
 from .updater import UpdateService
+from .migration import migrate_legacy_state
 
 
 LOGGER = logging.getLogger(__name__)
@@ -867,6 +868,7 @@ def main() -> int:
     """Start the GUI."""
     root = app_data_dir()
     root.mkdir(parents=True, exist_ok=True)
+    migrate_legacy_state()
     logging.basicConfig(
         filename=root / "chat-grid.log", level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
