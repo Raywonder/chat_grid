@@ -53,7 +53,7 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `Shift+D`: Pick up/drop the selected item with attached or linked parts. Furniture already includes its supported contents with normal `D`.
 - `J`: Take the last focused grabbable item from a table, shelf, counter, or other surface. Fixed, wall-mounted, ceiling-mounted, window-mounted, and fixture items cannot be grabbed.
 - `Shift+J`: Announce what is on the focused table, shelf, counter, or other surface. With no surface focused, announce loose items on the floor at the current square.
-- `Tab` / `Shift+Tab`: Refocus held remote controls with `Tab`; `Shift+Tab` switches to another held item and focuses its controls. Without a held remote, cycle carried and nearby usable items. The server currently allows up to 4 carried items at once.
+- `Tab` / `Shift+Tab`: Movement remains the default, even while carrying a remote. Press `Tab` to explicitly focus held remote controls; `Shift+Tab` switches to another held item and focuses its controls. Press `Escape` to release remote focus so arrows move again. Without a held remote, cycle carried and nearby usable items. The server currently allows up to 4 carried items at once.
 - `Z`: Item management menu (delete/transfer when permitted)
 - `Space` in item management menu: Read tooltip/help for the selected action
 - `Enter` or `Space`: Use the focused/current item, doorway, portal, chair, couch, or bed; beds support sitting, then lying down, then getting up when used again. When several items are available, selection starts on the item you last focused or used

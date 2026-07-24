@@ -167,7 +167,11 @@ export function createInitialState(): GameState {
     peers: new Map(),
     items: new Map(),
     carriedItemId: null,
-    remoteControlsFocused: true,
+    // Movement is the safe default after joining or reconnecting. A carried
+    // radio/TV remote only owns the arrow keys after the user explicitly
+    // focuses it with Tab; otherwise an item in hand must not make the player
+    // appear trapped in place.
+    remoteControlsFocused: false,
   };
 }
 
