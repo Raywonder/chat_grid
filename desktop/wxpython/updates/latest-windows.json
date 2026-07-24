@@ -1,12 +1,12 @@
 {
-  "version": "0.4.4",
+  "version": "0.4.5",
   "revision": "R517",
-  "releaseNotes": "Endiginous Windows 0.4.4 removes bundled agent onboarding, migrates legacy Chat Grid state, and bundles web runtime R517.",
+  "releaseNotes": "Endiginous Windows 0.4.5 replaces the complete installed app payload during updates, removes stale legacy app files and shortcuts, and preserves user data in the current app-data folder.",
   "platforms": {
     "windows": {
-      "url": "https://blind.software/endiginous/downloads/EndiginousSetup-0.4.4.exe",
-      "fileName": "EndiginousSetup-0.4.4.exe",
-      "sha256": "1c2084baab07b8cdf006a4b2eadb4331c340dfcd8d85dea695a5585bde5344bb",
+      "url": "https://blind.software/endiginous/downloads/EndiginousSetup-0.4.5.exe",
+      "fileName": "EndiginousSetup-0.4.5.exe",
+      "sha256": "96f70c6c30d937ce9acdc7c64fd8d5243f5f709cea79f313b10e8ef7633fcae8",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }
   }

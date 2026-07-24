@@ -42,3 +42,23 @@ def test_legacy_state_is_migrated_and_old_shortcut_removed(tmp_path: Path, monke
     assert not shortcut.exists()
     assert (destination / "settings.json").exists()
     assert str(legacy) in receipt["migrated"]
+
+
+def test_legacy_install_roots_are_removed_when_accessible(tmp_path: Path, monkeypatch) -> None:
+    local = tmp_path / "local"
+    roaming = tmp_path / "roaming"
+    program_files = tmp_path / "Program Files"
+    old_install = program_files / "Chat Grid"
+    old_install.mkdir(parents=True)
+    (old_install / "old.exe").write_bytes(b"old")
+    monkeypatch.setenv("LOCALAPPDATA", str(local))
+    monkeypatch.setenv("APPDATA", str(roaming))
+    monkeypatch.setenv("ProgramFiles", str(program_files))
+    monkeypatch.setenv("ProgramW6432", "")
+    monkeypatch.setenv("ProgramFiles(x86)", "")
+    destination = local / "TappedIn" / "Endiginous"
+    monkeypatch.setattr(migration, "app_data_dir", lambda: destination)
+    _, installs, _ = migration._paths()
+    receipt = migration.migrate_legacy_state()
+    assert not old_install.exists()
+    assert str(old_install) in receipt["removed"]

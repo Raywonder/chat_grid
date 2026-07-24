@@ -137,9 +137,16 @@ class UpdateService:
                 [
                     "/bin/sh", "-c",
                     'while kill -0 "$1" 2>/dev/null; do sleep 1; done; '
-                    'tmp=$(mktemp -d); /usr/bin/ditto -x -k "$2" "$tmp" && '
-                    '/usr/bin/ditto "$tmp/Endiginous.app" "$3/Endiginous.app" && '
-                    '/usr/bin/open "$3/Endiginous.app"; /bin/rm -rf "$tmp"',
+                    'tmp=$(mktemp -d); backup="$3/.Endiginous.app.previous"; '
+                    'trap "/bin/rm -rf \\\"$tmp\\\"" EXIT; '
+                    '/usr/bin/ditto -x -k "$2" "$tmp" || exit 3; '
+                    '[ -d "$tmp/Endiginous.app" ] || exit 4; '
+                    '/bin/rm -rf "$3/.Endiginous.app.previous"; '
+                    'if [ -e "$3/Endiginous.app" ]; then /bin/mv "$3/Endiginous.app" "$backup" || exit 5; fi; '
+                    'if ! /usr/bin/ditto "$tmp/Endiginous.app" "$3/Endiginous.app"; then '
+                    '  /bin/rm -rf "$3/Endiginous.app"; '
+                    '  [ -e "$backup" ] && /bin/mv "$backup" "$3/Endiginous.app"; exit 6; '
+                    'fi; /bin/rm -rf "$backup"; /usr/bin/open "$3/Endiginous.app"',
                     "chatgrid-update", str(os_getpid()), str(installer), str(destination),
                 ],
                 start_new_session=True,

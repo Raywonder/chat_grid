@@ -18,14 +18,25 @@ def _paths() -> tuple[list[Path], list[Path], list[Path]]:
     if sys.platform == "darwin":
         base = home / "Library" / "Application Support"
         return ([base / name for name in LEGACY_APP_NAMES],
-                [home / "Applications" / f"{name}.app" for name in LEGACY_APP_NAMES],
+                [home / "Applications" / f"{name}.app" for name in LEGACY_APP_NAMES]
+                + [Path("/Applications") / f"{name}.app" for name in LEGACY_APP_NAMES],
                 [home / "Desktop" / f"{name}.app" for name in LEGACY_APP_NAMES])
     local = Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local"))
     roaming = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
+    program_files = [
+        Path(value)
+        for value in (
+            os.environ.get("ProgramFiles"),
+            os.environ.get("ProgramW6432"),
+            os.environ.get("ProgramFiles(x86)"),
+        )
+        if value
+    ]
     data = [local / "TappedIn" / name for name in LEGACY_APP_NAMES]
     data += [local / name for name in LEGACY_APP_NAMES]
     data += [roaming / name for name in LEGACY_APP_NAMES]
     installs = [local / "Programs" / name for name in LEGACY_APP_NAMES]
+    installs += [root / name for root in program_files for name in LEGACY_APP_NAMES]
     names = [f"{name}.lnk" for name in LEGACY_APP_NAMES]
     shortcut_dirs = [home / "Desktop", roaming / "Microsoft" / "Windows" / "Start Menu" / "Programs"]
     shortcuts = [directory / name for directory in shortcut_dirs for name in names]

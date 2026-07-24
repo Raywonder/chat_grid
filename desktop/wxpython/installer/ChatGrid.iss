@@ -1,5 +1,5 @@
 #define MyAppName "Endiginous"
-#define MyAppVersion "0.4.4"
+#define MyAppVersion "0.4.5"
 #define MyAppPublisher "Raywonder / TappedIn"
 #define MyAppExeName "Endiginous.exe"
 
@@ -12,7 +12,7 @@ DefaultDirName={localappdata}\Programs\Endiginous
 UsePreviousAppDir=no
 DefaultGroupName=Endiginous
 OutputDir=..\release
-OutputBaseFilename=EndiginousSetup-0.4.4
+OutputBaseFilename=EndiginousSetup-0.4.5
 Compression=lzma2
 SolidCompression=yes
 PrivilegesRequired=lowest
@@ -27,6 +27,9 @@ LicenseFile=..\..\..\LICENSE
 Source: "..\dist\Endiginous\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [InstallDelete]
+; Replace the complete application payload so renamed/removed files from an
+; older Endiginous build cannot survive in the current install directory.
+Type: filesandordirs; Name: "{app}\*"
 Type: files; Name: "{autodesktop}\Endiginous.lnk"
 Type: files; Name: "{group}\Endiginous.lnk"
 Type: filesandordirs; Name: "{localappdata}\Programs\Chat Grid"

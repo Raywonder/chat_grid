@@ -1,5 +1,5 @@
 {
-  "releaseVersion": "0.4.4",
+  "releaseVersion": "0.4.5",
   "clientRevision": "R517",
   "framework": "wxpython",
   "bundleIdentifier": "fm.tappedin.chatgrid"

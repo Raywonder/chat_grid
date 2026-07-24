@@ -1,15 +1,15 @@
 {
-  "version": "0.4.4",
+  "version": "0.4.5",
   "revision": "R517",
-  "releaseNotes": "Endiginous macOS 0.4.4 removes bundled agent onboarding, migrates legacy Chat Grid state, and bundles web runtime R517. The DMG is unsigned; the app inside the ZIP passes local deep code-sign verification.",
+  "releaseNotes": "Endiginous macOS 0.4.5 replaces the complete installed app bundle during updates, removes stale legacy app files and shortcuts, and preserves user data in the current app-data folder. The DMG is unsigned.",
   "platforms": {
     "macos": {
-      "url": "https://blind.software/endiginous/downloads/Endiginous-0.4.4.dmg",
-      "fileName": "Endiginous-0.4.4.dmg",
-      "sha256": "cd15510fd277dcfb4438d6d279a70d3ee82aa1dbb0a27075824619137fdc49b1",
-      "zipUrl": "https://blind.software/endiginous/downloads/Endiginous-0.4.4-macOS.zip",
-      "zipFileName": "Endiginous-0.4.4-macOS.zip",
-      "zipSha256": "7516965bee7cc10416f991226772b217c22388bb7325e2b9009d10fcea7d5e28"
+      "url": "https://blind.software/endiginous/downloads/Endiginous-0.4.5.dmg",
+      "fileName": "Endiginous-0.4.5.dmg",
+      "sha256": "d9ef2f92589c6bb43a193ae21bb8c5d7a6873a1fed58c24ea1181b8a94afb370",
+      "zipUrl": "https://blind.software/endiginous/downloads/Endiginous-0.4.5-macOS.zip",
+      "zipFileName": "Endiginous-0.4.5-macOS.zip",
+      "zipSha256": "81a52a914fb9c4f2e2514a0bf50b8d10621dc12efcba0710fb9c13d2d9a44839"
     }
   }
 }

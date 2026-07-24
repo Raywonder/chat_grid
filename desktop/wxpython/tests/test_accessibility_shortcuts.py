@@ -21,6 +21,12 @@ def test_update_install_has_visible_countdown_and_cancel_path():
     assert "Exit cancelled. Endiginous will keep running." in SOURCE
 
 
+def test_windows_installer_replaces_orphaned_files():
+    installer = Path(__file__).parents[1] / "installer" / "ChatGrid.iss"
+    source = installer.read_text(encoding="utf-8")
+    assert 'Type: filesandordirs; Name: "{app}\\*"' in source
+
+
 def test_settings_ok_and_cancel_explicitly_close_modal():
     assert "self.Bind(wx.EVT_BUTTON, self._on_ok, id=wx.ID_OK)" in SOURCE
     assert "self.Bind(wx.EVT_BUTTON, self._on_cancel, id=wx.ID_CANCEL)" in SOURCE

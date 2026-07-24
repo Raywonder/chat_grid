@@ -20,14 +20,26 @@ def migrate_legacy_state() -> dict[str, list[str]]:
     home = Path.home()
     if sys.platform == "darwin":
         data_dirs = [home / "Library" / "Application Support" / name for name in names]
-        install_dirs = [home / "Applications" / f"{name}.app" for name in names]
+        install_dirs = [
+            home / "Applications" / f"{name}.app" for name in names
+        ] + [Path("/Applications") / f"{name}.app" for name in names]
         shortcuts = [home / "Desktop" / f"{name}.app" for name in names]
     else:
         local = Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local"))
         roaming = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
+        program_files = [
+            Path(value)
+            for value in (
+                os.environ.get("ProgramFiles"),
+                os.environ.get("ProgramW6432"),
+                os.environ.get("ProgramFiles(x86)"),
+            )
+            if value
+        ]
         data_dirs = [local / "TappedIn" / name for name in names]
         data_dirs += [local / name for name in names] + [roaming / name for name in names]
         install_dirs = [local / "Programs" / name for name in names]
+        install_dirs += [root / name for root in program_files for name in names]
         shortcuts = [directory / f"{name}.lnk" for directory in (home / "Desktop", roaming / "Microsoft" / "Windows" / "Start Menu" / "Programs") for name in names]
     destination = app_data_dir()
     destination.mkdir(parents=True, exist_ok=True)

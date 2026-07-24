@@ -24,3 +24,9 @@ def test_update_install_has_visible_countdown_and_cancel_path():
     assert "self.exit_application()" not in SOURCE[SOURCE.index("def _prepare_update_install"):SOURCE.index("def _show_about")]
     assert "self._prepare_exit()" in SOURCE
     assert "Exit cancelled. Endiginous will keep running." in SOURCE
+
+
+def test_windows_installer_replaces_orphaned_files():
+    installer = Path(__file__).parents[1] / "windows" / "installer" / "ChatGrid.iss"
+    source = installer.read_text(encoding="utf-8")
+    assert 'Type: filesandordirs; Name: "{app}\\*"' in source
