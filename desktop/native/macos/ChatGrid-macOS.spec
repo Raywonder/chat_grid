@@ -33,10 +33,10 @@ app = BUNDLE(
     coll,
     name="Endiginous.app",
     bundle_identifier="fm.tappedin.chatgrid",
-    version="0.4.5",
+    version="0.4.6",
     info_plist={
         "CFBundleDisplayName": "Endiginous",
-        "CFBundleShortVersionString": "0.4.5",
+        "CFBundleShortVersionString": "0.4.6",
         "CFBundleVersion": "0.4.5",
         "LSMinimumSystemVersion": "14.0",
         "NSHighResolutionCapable": True,

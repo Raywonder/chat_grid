@@ -1,5 +1,5 @@
 #define MyAppName "Endiginous"
-#define MyAppVersion "0.4.5"
+#define MyAppVersion "0.4.6"
 #define MyAppPublisher "Raywonder / TappedIn"
 #define MyAppExeName "Endiginous.exe"
 
@@ -12,7 +12,7 @@ DefaultDirName={localappdata}\Programs\Endiginous
 UsePreviousAppDir=no
 DefaultGroupName=Endiginous
 OutputDir=..\release
-OutputBaseFilename=EndiginousSetup-0.4.5
+OutputBaseFilename=IndigenousSetup-0.4.6
 Compression=lzma2
 SolidCompression=yes
 PrivilegesRequired=lowest
