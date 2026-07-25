@@ -121,9 +121,16 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
 
   deps.dom.settingsModal.addEventListener('keydown', (event) => {
     if (event.key !== 'Tab') return;
-    const focusable = Array.from(deps.dom.settingsModal.querySelectorAll<HTMLElement>('select, input, button')).filter(
-      (element) => !element.hidden && !element.hasAttribute('hidden') && !(element as HTMLButtonElement | HTMLInputElement).disabled,
-    );
+    const focusable = Array.from(
+      deps.dom.settingsModal.querySelectorAll<HTMLElement>(
+        'a[href], select, input, textarea, button, [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((element) => {
+      const control = element as HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+      // `hidden` is also represented by the shared `.hidden` class in this UI.
+      // Checking layout keeps hidden controls and links out of the tab loop.
+      return !element.hidden && !element.hasAttribute('hidden') && !control.disabled && element.getClientRects().length > 0;
+    });
     if (focusable.length === 0) return;
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
