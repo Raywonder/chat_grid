@@ -510,6 +510,17 @@ class MainFrame(wx.Frame):
         self.status.SetLabel(text)
         self.SetStatusText(text)
 
+    def _run_script(self, script: str, label: str) -> tuple[bool, str] | None:
+        """Run renderer JavaScript without surfacing an opaque native error dialog."""
+        try:
+            result = self.web.RunScript(script)
+        except Exception:
+            LOGGER.exception("JavaScript bridge call failed: %s", label)
+            return None
+        if isinstance(result, tuple) and len(result) >= 2 and not result[0]:
+            LOGGER.warning("JavaScript bridge call failed (%s): %s", label, result[1])
+        return result
+
     def _on_loaded(self, _event: wx.html2.WebViewEvent) -> None:
         self.reconnect_timer.Stop()
         self.backoff.reset()
@@ -517,26 +528,30 @@ class MainFrame(wx.Frame):
         # Desktop users get the native File/Help menus; keep the web surface
         # focused on the world and never show product links or legacy branding
         # in the startup window.
-        self.web.RunScript(
+        self._run_script(
             "(() => {"
+            "const oldStyle = document.getElementById('indiginous-native-shell-style');"
+            "if (oldStyle) oldStyle.remove();"
             "const style = document.createElement('style');"
             "style.id='indiginous-native-shell-style';"
             "style.textContent='#gridTitle,#connectionStatus,#loginView,#authSessionView,#button-container,#deviceSummary,#joinGuide,#appFooter,#openSettingsButton,#settingsModal{display:none!important}';"
             "document.head.appendChild(style);"
-            "const send = () => { const logout = document.getElementById('logoutButton'); const signedIn = !!logout && !logout.hidden && !logout.classList.contains('hidden'); window.chrome?.webview?.postMessage(JSON.stringify({type:'authState', signedIn})); };"
-            "const devices = async () => { try { let stream=null; try { stream=await navigator.mediaDevices?.getUserMedia({audio:true}); } catch (_) {} const list=await navigator.mediaDevices?.enumerateDevices?.() || []; window.chrome?.webview?.postMessage(JSON.stringify({type:'audioDevices',inputs:list.filter(d=>d.kind==='audioinput').map(d=>({id:d.deviceId,label:d.label})),outputs:list.filter(d=>d.kind==='audiooutput').map(d=>({id:d.deviceId,label:d.label}))})); stream?.getTracks().forEach(t=>t.stop()); } catch (_) {} };"
+            "const post = (value) => { if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) window.chrome.webview.postMessage(JSON.stringify(value)); };"
+            "const send = () => { const logout = document.getElementById('logoutButton'); const signedIn = !!logout && !logout.hidden && !logout.classList.contains('hidden'); post({type:'authState', signedIn}); };"
+            "const devices = async () => { try { const media = navigator.mediaDevices; let stream=null; if (media && media.getUserMedia) { try { stream=await media.getUserMedia({audio:true}); } catch (_) {} } const list=media && media.enumerateDevices ? await media.enumerateDevices() : []; post({type:'audioDevices',inputs:list.filter(d=>d.kind==='audioinput').map(d=>({id:d.deviceId,label:d.label})),outputs:list.filter(d=>d.kind==='audiooutput').map(d=>({id:d.deviceId,label:d.label}))}); if (stream) stream.getTracks().forEach(t=>t.stop()); } catch (error) { console.warn('Indiginous audio device refresh failed', error); } };"
             "window.indiginousNativeRefreshAudioDevices = devices; devices();"
-            "send(); new MutationObserver(send).observe(document.body,{subtree:true,childList:true,attributes:true});"
-            "})();"
-        )
+            "send(); if (document.body && window.MutationObserver) new MutationObserver(send).observe(document.body,{subtree:true,childList:true,attributes:true});"
+            "return 'ok';"
+            "})()"
+            "", "on-loaded-shell")
         if self.pending_external_auth or self.settings.auto_connect:
             self.pending_external_auth = False
-            self.web.RunScript("setTimeout(() => document.getElementById('connectButton')?.click(), 500);")
+            self._run_script("setTimeout(() => { const button = document.getElementById('connectButton'); if (button) button.click(); }, 500);", "on-loaded-connect")
         # Native WebView focus alone does not activate the web world's
         # application-level keyboard contract.  Activate the same accessible
         # control that browser users select so movement, chat, and item keys
         # are ready when the desktop world receives focus.
-        self.web.RunScript(
+        self._run_script(
             "(() => {"
             "let attempts = 0;"
             "const activate = () => {"
@@ -545,13 +560,17 @@ class MainFrame(wx.Frame):
             "if (++attempts < 80) setTimeout(activate, 250);"
             "};"
             "activate();"
-            "})();"
-        )
+            "return 'ok';"
+            "})()", "on-loaded-focus")
         self._queue_world_focus(800)
 
     def _focus_world(self) -> None:
         """Activate web world controls and move native focus into the renderer."""
-        self.web.RunScript("document.getElementById('focusGridButton')?.click();")
+        # The page-load focus path already activates the renderer when its
+        # control exists.  Re-clicking that DOM control from a delayed native
+        # callback can race a WebView2 navigation and surface wx's opaque
+        # "Error running JavaScript" dialog.  Native focus is sufficient for
+        # Alt+Tab/minimize restoration and is safe during every page state.
         self.web.SetFocus()
 
     def _queue_world_focus(self, delay_ms: int = 100) -> None:
@@ -563,7 +582,7 @@ class MainFrame(wx.Frame):
     def _dispatch_world_shortcut(self, code: str, *, ctrl: bool = False, shift: bool = False) -> None:
         """Forward a native-only shortcut into the embedded world command profile."""
         options = json.dumps({"ctrlKey": ctrl, "shiftKey": shift})
-        self.web.RunScript(f"window.chatGridNativeKey?.({json.dumps(code)}, {options});")
+        self._run_script(f"if (window.chatGridNativeKey) window.chatGridNativeKey({json.dumps(code)}, {options});", "world-shortcut")
 
     def _on_error(self, event: wx.html2.WebViewEvent) -> None:
         LOGGER.warning("WebView load error: %s", event.GetString())
@@ -644,14 +663,14 @@ class MainFrame(wx.Frame):
         self._activate_window()
         dialog = SettingsDialog(self, self.settings, self.audio_devices)
         self.settings_dialog = dialog
-        self.web.RunScript("window.indiginousNativeRefreshAudioDevices?.();")
+        self._run_script("if (window.indiginousNativeRefreshAudioDevices) window.indiginousNativeRefreshAudioDevices();", "refresh-audio-devices")
         try:
             if dialog.ShowModal() != wx.ID_OK:
                 return
             dialog.apply()
             self.store.save(self.settings)
             set_start_with_windows(self.settings.start_with_windows)
-            self.web.RunScript(
+            self._run_script(
                 "window.chatGridNativeApplyAudioSettings?.(" + json.dumps({
                     "outputMode": self.settings.audio_output_mode,
                     "masterVolume": self.settings.master_volume,
@@ -663,7 +682,7 @@ class MainFrame(wx.Frame):
                     "radioAnnouncementMode": self.settings.radio_announcement_mode,
                     "itemBeacons": self.settings.item_beacons,
                     "movementDirections": self.settings.movement_directions,
-                }) + ");"
+                }) + ");", "apply-audio-settings"
             )
             self._announce("Desktop settings saved.")
         finally:

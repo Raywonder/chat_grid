@@ -8,7 +8,7 @@ def test_browser_callback_always_continues_to_connect() -> None:
     assert "self.pending_external_auth = False" in SOURCE
     assert "self.pending_external_auth = True" in SOURCE
     assert "if self.pending_external_auth or self.settings.auto_connect:" in SOURCE
-    assert "connectButton')?.click()" in SOURCE
+    assert "const button = document.getElementById('connectButton'); if (button) button.click();" in SOURCE
 
 
 def test_callback_completion_does_not_depend_on_browser_query_visibility() -> None:

@@ -1,3 +1,3 @@
 """Official Indiginous Windows native shell."""
 
-__version__ = "0.4.14"
+__version__ = "0.4.16"

@@ -1,7 +1,7 @@
 {
-  "version": "0.4.14",
-  "revision": "R537",
-  "releaseNotes": "Indiginous Windows 0.4.14 restores world focus after Alt+Tab and minimize/restore, hides sign-in for authenticated users, fixes tray Settings, and brings microphone and speaker device selection into the native Audio settings.",
+  "version": "0.4.16",
+  "revision": "R539",
+  "releaseNotes": "Indiginous Windows 0.4.15 hardens the native JavaScript bridge so startup and focus recovery cannot surface an opaque JavaScript error dialog.",
   "platforms": {
     "windows": {
       "url": "https://blind.software/downloads/public/7Kp3mN8vQ2xL5rT9cW6yH1/windows",
