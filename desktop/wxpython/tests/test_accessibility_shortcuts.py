@@ -85,3 +85,22 @@ def test_native_menu_highlight_is_spoken():
     assert "EVT_MENU_HIGHLIGHT" in SOURCE
     assert "GetMenuItem" in SOURCE
     assert "self._announce(label)" in SOURCE
+
+
+def test_activation_rearms_world_focus_after_restore_and_alt_tab():
+    assert 'self.Bind(wx.EVT_ACTIVATE, self._on_activate)' in SOURCE
+    assert 'def _queue_world_focus' in SOURCE
+    assert 'self._queue_world_focus(120)' in SOURCE
+
+
+def test_signed_in_users_do_not_get_a_sign_in_menu_action():
+    assert 'self.signin_menu_item.Show(not self.is_signed_in)' in SOURCE
+    assert 'if not self.frame.is_signed_in:' in SOURCE
+
+
+def test_native_settings_includes_real_input_and_output_device_choices():
+    assert 'self.audio_input = wx.Choice' in SOURCE
+    assert 'self.audio_output = wx.Choice' in SOURCE
+    assert 'window.indiginousNativeRefreshAudioDevices' in SOURCE
+    assert 'inputDeviceId' in SOURCE
+    assert 'outputDeviceId' in SOURCE

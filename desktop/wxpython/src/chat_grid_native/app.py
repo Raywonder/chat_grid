@@ -56,7 +56,9 @@ class IndiginousTrayIcon(wx.adv.TaskBarIcon):
         menu.Append(reconnect_id, "&Reconnect Indiginous")
         menu.AppendSeparator()
         menu.Append(settings_id, "&Settings...")
-        menu.Append(signin_id, "Sign in to &Indiginous")
+        if not self.frame.is_signed_in:
+            signin_id = wx.NewIdRef()
+            menu.Append(signin_id, "Sign in to &Indiginous")
         menu.Append(updates_id, "Check for &updates")
         menu.AppendSeparator()
         menu.Append(website_id, "Open Indiginous &website")
@@ -69,7 +71,8 @@ class IndiginousTrayIcon(wx.adv.TaskBarIcon):
         menu.Bind(wx.EVT_MENU, lambda _event: self.frame.show_from_tray(), id=open_id)
         menu.Bind(wx.EVT_MENU, lambda _event: self.frame.reload_from_tray(), id=reconnect_id)
         menu.Bind(wx.EVT_MENU, lambda _event: self.frame._show_settings(_event), id=settings_id)
-        menu.Bind(wx.EVT_MENU, lambda _event: self.frame._login_default(), id=signin_id)
+        if not self.frame.is_signed_in:
+            menu.Bind(wx.EVT_MENU, lambda _event: self.frame._login_default(), id=signin_id)
         menu.Bind(wx.EVT_MENU, lambda _event: self.frame._check_updates_background(interactive=True), id=updates_id)
         menu.Bind(wx.EVT_MENU, lambda _event: self.frame._open_external_url("https://blind.software/indiginous/"), id=website_id)
         menu.Bind(wx.EVT_MENU, lambda _event: self.frame._show_about(_event), id=about_id)
@@ -80,7 +83,7 @@ class IndiginousTrayIcon(wx.adv.TaskBarIcon):
 class SettingsDialog(wx.Dialog):
     """Accessible desktop behavior settings."""
 
-    def __init__(self, parent: wx.Window, settings: Settings) -> None:
+    def __init__(self, parent: wx.Window, settings: Settings, audio_devices: dict[str, list[tuple[str, str]]] | None = None) -> None:
         super().__init__(parent, title="Indiginous desktop settings")
         self.settings = settings
         panel = wx.Panel(self)
@@ -105,6 +108,14 @@ class SettingsDialog(wx.Dialog):
         self.spatial_audio.SetValue(getattr(settings, "spatial_audio", True))
         layout.Add(self.spatial_audio, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         audio_box = wx.StaticBoxSizer(wx.VERTICAL, panel, "Audio")
+        self.audio_input = wx.Choice(panel, choices=["Default microphone"])
+        self.audio_input.SetName("Microphone input device")
+        self.audio_output = wx.Choice(panel, choices=["Default speakers"])
+        self.audio_output.SetName("Speakers output device")
+        audio_box.Add(wx.StaticText(panel, label="Microphone (input device)"), 0, wx.LEFT | wx.RIGHT | wx.TOP, 6)
+        audio_box.Add(self.audio_input, 0, wx.EXPAND | wx.ALL, 6)
+        audio_box.Add(wx.StaticText(panel, label="Speakers (output device)"), 0, wx.LEFT | wx.RIGHT | wx.TOP, 6)
+        audio_box.Add(self.audio_output, 0, wx.EXPAND | wx.ALL, 6)
         self.output_mode = wx.Choice(panel, choices=["Stereo", "Mono"])
         self.output_mode.SetName("Audio output mode")
         self.output_mode.SetSelection(0 if settings.audio_output_mode != "mono" else 1)
@@ -151,7 +162,23 @@ class SettingsDialog(wx.Dialog):
         outer = wx.BoxSizer(wx.VERTICAL)
         outer.Add(panel, 1, wx.EXPAND)
         self.SetSizerAndFit(outer)
+        self.set_audio_devices(audio_devices or {})
         self.startup.SetFocus()
+
+    def set_audio_devices(self, devices: dict[str, list[tuple[str, str]]]) -> None:
+        """Refresh native input/output choices from the embedded browser."""
+        for control, key, default_label, saved_id in (
+            (self.audio_input, "inputs", "Default microphone", self.settings.audio_input_device_id),
+            (self.audio_output, "outputs", "Default speakers", self.settings.audio_output_device_id),
+        ):
+            control.Freeze()
+            control.Clear()
+            control.Append(default_label, "")
+            for device_id, label in devices.get(key, []):
+                control.Append(label or default_label, device_id)
+            index = next((i for i in range(control.GetCount()) if control.GetClientData(i) == saved_id), 0)
+            control.SetSelection(index)
+            control.Thaw()
 
     def _on_ok(self, _event: wx.CommandEvent) -> None:
         self.apply()
@@ -176,6 +203,12 @@ class SettingsDialog(wx.Dialog):
         self.settings.keep_in_tray = self.keep_tray.GetValue()
         self.settings.spatial_audio = self.spatial_audio.GetValue()
         self.settings.audio_output_mode = "mono" if self.output_mode.GetSelection() == 1 else "stereo"
+        input_index = self.audio_input.GetSelection()
+        output_index = self.audio_output.GetSelection()
+        self.settings.audio_input_device_id = str(self.audio_input.GetClientData(input_index) or "") if input_index != wx.NOT_FOUND else ""
+        self.settings.audio_input_device_name = self.audio_input.GetString(input_index) if input_index != wx.NOT_FOUND else ""
+        self.settings.audio_output_device_id = str(self.audio_output.GetClientData(output_index) or "") if output_index != wx.NOT_FOUND else ""
+        self.settings.audio_output_device_name = self.audio_output.GetString(output_index) if output_index != wx.NOT_FOUND else ""
         self.settings.master_volume = self.master_volume.GetValue()
         self.settings.microphone_gain = self.microphone_gain.GetValue() / 100.0
         self.settings.voice_layer = self.voice_layer.GetValue()
@@ -243,6 +276,10 @@ class MainFrame(wx.Frame):
         self.browser_auth_flow: BrowserAuthFlow | None = None
         self.auto_browser_auth_call: wx.CallLater | None = None
         self.pending_external_auth = False
+        self.is_signed_in = False
+        self.settings_dialog: SettingsDialog | None = None
+        self.audio_devices: dict[str, list[tuple[str, str]]] = {"inputs": [], "outputs": []}
+        self.world_focus_restore: wx.CallLater | None = None
         self.force_quit = False
         self.panel: wx.Panel | None = None
         self.layout: wx.BoxSizer | None = None
@@ -262,6 +299,7 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_TIMER, self._on_reconnect_timer, self.reconnect_timer)
         self.Bind(wx.EVT_CLOSE, self._on_close)
         self.Bind(wx.EVT_ICONIZE, self._on_iconize)
+        self.Bind(wx.EVT_ACTIVATE, self._on_activate)
         self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
 
         self._load_grid(self.settings.grid_url)
@@ -285,7 +323,7 @@ class MainFrame(wx.Frame):
         file_menu.Append(restart_world_id, "&Restart frozen world view\tCtrl+Shift+R", "Replace only the embedded world view")
         file_menu.Append(focus_world_id, "&Focus world\tCtrl+L", "Move keyboard focus into the world")
         file_menu.AppendSeparator()
-        file_menu.Append(signin_id, "Sign in to &Indiginous\tCtrl+Shift+S", "Open the Indiginous sign-in page")
+        self.signin_menu_item = file_menu.Append(signin_id, "Sign in to &Indiginous\tCtrl+Shift+S", "Open the Indiginous sign-in page")
         settings_shortcut = "Cmd+Alt+," if sys.platform == "darwin" else "Ctrl+Alt+,"
         file_menu.Append(wx.ID_PREFERENCES, f"&Settings...\t{settings_shortcut}")
         cast_id = wx.NewIdRef()
@@ -412,8 +450,21 @@ class MainFrame(wx.Frame):
             message = json.loads(event.GetString())
         except (TypeError, ValueError):
             return
-        if message.get("type") == "authState" and not message.get("signedIn"):
-            self._schedule_automatic_browser_auth()
+        if message.get("type") == "authState":
+            self.is_signed_in = bool(message.get("signedIn"))
+            if hasattr(self, "signin_menu_item"):
+                self.signin_menu_item.Show(not self.is_signed_in)
+            if self.GetMenuBar() is not None:
+                self.GetMenuBar().Refresh()
+            if not self.is_signed_in:
+                self._schedule_automatic_browser_auth()
+        elif message.get("type") == "audioDevices":
+            self.audio_devices = {
+                "inputs": [(str(item.get("id", "")), str(item.get("label", ""))) for item in message.get("inputs", []) if item.get("id") is not None],
+                "outputs": [(str(item.get("id", "")), str(item.get("label", ""))) for item in message.get("outputs", []) if item.get("id") is not None],
+            }
+            if self.settings_dialog is not None:
+                self.settings_dialog.set_audio_devices(self.audio_devices)
 
     def _create_webview(self) -> wx.html2.WebView:
         """Create and bind one replaceable Edge WebView world surface."""
@@ -473,6 +524,8 @@ class MainFrame(wx.Frame):
             "style.textContent='#gridTitle,#connectionStatus,#loginView,#authSessionView,#button-container,#deviceSummary,#joinGuide,#appFooter,#openSettingsButton,#settingsModal{display:none!important}';"
             "document.head.appendChild(style);"
             "const send = () => { const logout = document.getElementById('logoutButton'); const signedIn = !!logout && !logout.hidden && !logout.classList.contains('hidden'); window.chrome?.webview?.postMessage(JSON.stringify({type:'authState', signedIn})); };"
+            "const devices = async () => { try { let stream=null; try { stream=await navigator.mediaDevices?.getUserMedia({audio:true}); } catch (_) {} const list=await navigator.mediaDevices?.enumerateDevices?.() || []; window.chrome?.webview?.postMessage(JSON.stringify({type:'audioDevices',inputs:list.filter(d=>d.kind==='audioinput').map(d=>({id:d.deviceId,label:d.label})),outputs:list.filter(d=>d.kind==='audiooutput').map(d=>({id:d.deviceId,label:d.label}))})); stream?.getTracks().forEach(t=>t.stop()); } catch (_) {} };"
+            "window.indiginousNativeRefreshAudioDevices = devices; devices();"
             "send(); new MutationObserver(send).observe(document.body,{subtree:true,childList:true,attributes:true});"
             "})();"
         )
@@ -494,12 +547,18 @@ class MainFrame(wx.Frame):
             "activate();"
             "})();"
         )
-        wx.CallLater(1000, self.web.SetFocus)
+        self._queue_world_focus(800)
 
     def _focus_world(self) -> None:
         """Activate web world controls and move native focus into the renderer."""
         self.web.RunScript("document.getElementById('focusGridButton')?.click();")
         self.web.SetFocus()
+
+    def _queue_world_focus(self, delay_ms: int = 100) -> None:
+        """Restore renderer focus after Windows has finished activating the frame."""
+        if self.world_focus_restore is not None:
+            self.world_focus_restore.Stop()
+        self.world_focus_restore = wx.CallLater(delay_ms, self._focus_world)
 
     def _dispatch_world_shortcut(self, code: str, *, ctrl: bool = False, shift: bool = False) -> None:
         """Forward a native-only shortcut into the embedded world command profile."""
@@ -529,7 +588,7 @@ class MainFrame(wx.Frame):
     def show_from_tray(self) -> None:
         """Restore, raise, and focus the existing accessible window."""
         self._activate_window()
-        self._focus_world()
+        self._queue_world_focus(150)
         self.RequestUserAttention(wx.USER_ATTENTION_INFO)
 
     def _activate_window(self) -> None:
@@ -548,7 +607,7 @@ class MainFrame(wx.Frame):
             except (AttributeError, OSError, TypeError, ValueError):
                 LOGGER.debug("Windows foreground activation was unavailable", exc_info=True)
         self.SetFocus()
-        self.web.SetFocus()
+        self._queue_world_focus(120)
 
     def reload_from_tray(self) -> None:
         """Recover the existing WebView without launching another application."""
@@ -575,8 +634,18 @@ class MainFrame(wx.Frame):
             wx.CallAfter(self.Hide)
         event.Skip()
 
+    def _on_activate(self, event: wx.ActivateEvent) -> None:
+        """Re-arm world keyboard focus after Alt+Tab, restore, or tray reopen."""
+        if event.GetActive() and self.settings_dialog is None:
+            self._queue_world_focus(120)
+        event.Skip()
+
     def _show_settings(self, _event: wx.CommandEvent) -> None:
-        with SettingsDialog(self, self.settings) as dialog:
+        self._activate_window()
+        dialog = SettingsDialog(self, self.settings, self.audio_devices)
+        self.settings_dialog = dialog
+        self.web.RunScript("window.indiginousNativeRefreshAudioDevices?.();")
+        try:
             if dialog.ShowModal() != wx.ID_OK:
                 return
             dialog.apply()
@@ -587,6 +656,8 @@ class MainFrame(wx.Frame):
                     "outputMode": self.settings.audio_output_mode,
                     "masterVolume": self.settings.master_volume,
                     "microphoneGain": self.settings.microphone_gain,
+                    "inputDeviceId": self.settings.audio_input_device_id,
+                    "outputDeviceId": self.settings.audio_output_device_id,
                     "layers": {"voice": self.settings.voice_layer, "item": self.settings.item_layer, "media": self.settings.media_layer, "world": self.settings.world_layer},
                     "announcementMode": self.settings.announcement_mode,
                     "radioAnnouncementMode": self.settings.radio_announcement_mode,
@@ -595,6 +666,9 @@ class MainFrame(wx.Frame):
                 }) + ");"
             )
             self._announce("Desktop settings saved.")
+        finally:
+            self.settings_dialog = None
+            dialog.Destroy()
 
     def _check_updates_background(self, interactive: bool = False) -> None:
         if self.update_thread and self.update_thread.is_alive():

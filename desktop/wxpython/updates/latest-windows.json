@@ -1,12 +1,12 @@
 {
-  "version": "0.4.13",
-  "revision": "R536",
-  "releaseNotes": "Indiginous Windows 0.4.13 fixes browser sign-in return so the desktop client connects even when automatic-connect preference is off.",
+  "version": "0.4.14",
+  "revision": "R537",
+  "releaseNotes": "Indiginous Windows 0.4.14 restores world focus after Alt+Tab and minimize/restore, hides sign-in for authenticated users, fixes tray Settings, and brings microphone and speaker device selection into the native Audio settings.",
   "platforms": {
     "windows": {
       "url": "https://blind.software/downloads/public/7Kp3mN8vQ2xL5rT9cW6yH1/windows",
       "fileName": "Indiginous_Setup.exe",
-      "sha256": "9b02ecaedba3f6d3b09d9c4b5c952d602ccfd93c74896bf3bb3766995e01b409",
+      "sha256": "b75cd73b0e2a995a612cc749e0a8c6f5054cc69e8594840467ab143e912cb9c9",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }
   }

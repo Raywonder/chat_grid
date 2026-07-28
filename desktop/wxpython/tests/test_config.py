@@ -17,6 +17,13 @@ def test_settings_round_trip(tmp_path: Path) -> None:
     assert store.load() == expected
 
 
+def test_audio_device_settings_round_trip(tmp_path: Path) -> None:
+    store = SettingsStore(tmp_path)
+    expected = Settings(audio_input_device_id="mic-1", audio_input_device_name="USB microphone", audio_output_device_id="speaker-1", audio_output_device_name="Headphones")
+    store.save(expected)
+    assert store.load() == expected
+
+
 def test_invalid_settings_fall_back(tmp_path: Path) -> None:
     (tmp_path / "settings.json").write_text("not json", encoding="utf-8")
     assert store_defaults(SettingsStore(tmp_path))

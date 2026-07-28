@@ -5896,6 +5896,7 @@ if (IS_NATIVE_CLIENT) {
     if (!value || typeof value !== 'object') return;
     const next = value as Partial<{
       outputMode: 'mono' | 'stereo'; masterVolume: number; microphoneGain: number;
+      inputDeviceId: string; outputDeviceId: string;
       layers: Partial<AudioLayerState>; announcementMode: string; radioAnnouncementMode: string;
       itemBeacons: boolean; movementDirections: boolean;
     }>;
@@ -5906,6 +5907,16 @@ if (IS_NATIVE_CLIENT) {
     }
     if (Number.isFinite(next.masterVolume)) persistMasterVolume(audio.setMasterVolume(Number(next.masterVolume)));
     if (Number.isFinite(next.microphoneGain)) persistMicInputGain(audio.setOutboundInputGain(Number(next.microphoneGain)));
+    if (typeof next.inputDeviceId === 'string') {
+      const option = Array.from(dom.audioInputSelect.options).find((item) => item.value === next.inputDeviceId);
+      mediaSession.setPreferredInput(next.inputDeviceId, option?.text || '');
+      if (next.inputDeviceId) void setupLocalMedia(next.inputDeviceId);
+    }
+    if (typeof next.outputDeviceId === 'string') {
+      const option = Array.from(dom.audioOutputSelect.options).find((item) => item.value === next.outputDeviceId);
+      mediaSession.setPreferredOutput(next.outputDeviceId, option?.text || '');
+      void peerManager.setOutputDevice(next.outputDeviceId);
+    }
     if (next.layers) {
       audioLayers = { ...audioLayers, ...next.layers };
       persistAudioLayerState();

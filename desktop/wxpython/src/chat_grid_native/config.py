@@ -32,6 +32,10 @@ class Settings:
     keep_in_tray: bool = False
     spatial_audio: bool = True
     audio_output_mode: str = "stereo"
+    audio_input_device_id: str = ""
+    audio_input_device_name: str = ""
+    audio_output_device_id: str = ""
+    audio_output_device_name: str = ""
     master_volume: int = 50
     microphone_gain: float = 2.0
     voice_layer: bool = True
