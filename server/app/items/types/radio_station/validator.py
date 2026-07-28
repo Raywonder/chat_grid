@@ -113,6 +113,13 @@ def _normalize_station_presets(raw_value: object) -> list[dict[str, str]]:
                     switch_sound, field_name="stationPresets.switchSound"
                 )
             preset["switchSound"] = switch_sound
+        category = enforce_max_length(
+            str(entry.get("category") or "").strip(),
+            max_length=80,
+            field_name="stationPresets.category",
+        )
+        if category:
+            preset["category"] = category
         presets.append(preset)
     return presets
 
@@ -258,6 +265,16 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     if not (0 <= effect_value <= 100):
         raise ValueError("mediaEffectValue must be between 0 and 100.")
     next_params["mediaEffectValue"] = round(effect_value, 1)
+    next_params["roomImpulseUrl"] = enforce_max_length(
+        normalize_media_reference(param_value("roomImpulseUrl", "")),
+        max_length=2048,
+        field_name="roomImpulseUrl",
+    )
+    next_params["speakerProfile"] = enforce_max_length(
+        str(param_value("speakerProfile", "default") or "default").strip(),
+        max_length=80,
+        field_name="speakerProfile",
+    )
     # Read-only metadata fields are server-managed and cannot be client-edited.
     if presets:
         next_params["stationName"] = presets[station_index]["title"][:160]

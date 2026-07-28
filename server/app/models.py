@@ -353,6 +353,7 @@ class ItemRemoteControlPacket(BasePacket):
         "station_previous",
         "station_first",
         "station_last",
+        "guide",
         "volume_up",
         "volume_down",
         "power_toggle",
@@ -788,6 +789,7 @@ class ItemActionResultPacket(BasePacket):
         "secondary_use",
         "interact",
         "update",
+        "guide",
     ]
     message: str
     itemId: str | None = None

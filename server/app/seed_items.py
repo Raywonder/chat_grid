@@ -106,6 +106,30 @@ RADIO_STATION_PRESETS: tuple[dict[str, str], ...] = (
         "streamUrl": "https://streaming.live365.com/a85327",
         "switchSound": "sounds/radio/station-switch/acb-media-10.mp3",
     },
+    {
+        "title": "Radio Paradise",
+        "streamUrl": "https://stream.radioparadise.com/aac-320",
+        "switchSound": "sounds/radio/station-switch/current.mp3",
+        "category": "Eclectic",
+    },
+    {
+        "title": "SomaFM Groove Salad",
+        "streamUrl": "https://ice1.somafm.com/groovesalad-128-mp3",
+        "switchSound": "sounds/radio/station-switch/acb-media-4.mp3",
+        "category": "Chill",
+    },
+    {
+        "title": "KEXP 90.3 FM",
+        "streamUrl": "https://kexp-mp3-128.streamguys1.com/kexp128.mp3",
+        "switchSound": "sounds/radio/station-switch/acb-media-5.mp3",
+        "category": "Music",
+    },
+    {
+        "title": "WWOZ New Orleans",
+        "streamUrl": "https://streams.kedm.org:8443/wwoz",
+        "switchSound": "sounds/radio/station-switch/acb-media-6.mp3",
+        "category": "Jazz and Blues",
+    },
 )
 
 # Public live TV channels from the 2.onj.me programme guide.  Keep these as
@@ -113,20 +137,20 @@ RADIO_STATION_PRESETS: tuple[dict[str, str], ...] = (
 # and so every TV receives the same server-managed channel set.
 TV_GUIDE_URL = "https://2.onj.me/guide.html"
 TV_CHANNEL_PRESETS: tuple[dict[str, str], ...] = (
-    {"title": "BBC ONE Lon", "streamUrl": "https://2.onj.me/bbc1", "sourceType": "tv", "provider": "2.onj.me"},
-    {"title": "BBC TWO", "streamUrl": "https://2.onj.me/bbc2", "sourceType": "tv", "provider": "2.onj.me"},
-    {"title": "BBC NEWS", "streamUrl": "https://2.onj.me/bbcnews", "sourceType": "tv", "provider": "2.onj.me"},
-    {"title": "ITV1", "streamUrl": "https://2.onj.me/itv", "sourceType": "tv", "provider": "2.onj.me"},
-    {"title": "ITV2", "streamUrl": "https://2.onj.me/itv2", "sourceType": "tv", "provider": "2.onj.me"},
-    {"title": "ITV4", "streamUrl": "https://2.onj.me/itv4", "sourceType": "tv", "provider": "2.onj.me"},
-    {"title": "ITV Quiz", "streamUrl": "https://2.onj.me/itvquiz", "sourceType": "tv", "provider": "2.onj.me"},
-    {"title": "Channel 4", "streamUrl": "https://2.onj.me/channel4", "sourceType": "tv", "provider": "2.onj.me"},
-    {"title": "E4", "streamUrl": "https://2.onj.me/e4", "sourceType": "tv", "provider": "2.onj.me"},
-    {"title": "More 4", "streamUrl": "https://2.onj.me/more4", "sourceType": "tv", "provider": "2.onj.me"},
-    {"title": "Film4", "streamUrl": "https://2.onj.me/film4", "sourceType": "tv", "provider": "2.onj.me"},
-    {"title": "4seven", "streamUrl": "https://2.onj.me/4seven", "sourceType": "tv", "provider": "2.onj.me"},
-    {"title": "5", "streamUrl": "https://2.onj.me/channel5", "sourceType": "tv", "provider": "2.onj.me"},
-    {"title": "That's 20th Century", "streamUrl": "https://2.onj.me/thatstv3", "sourceType": "tv", "provider": "2.onj.me"},
+    {"title": "BBC ONE Lon", "streamUrl": "https://2.onj.me/bbc1", "sourceType": "tv", "provider": "2.onj.me", "category": "General"},
+    {"title": "BBC TWO", "streamUrl": "https://2.onj.me/bbc2", "sourceType": "tv", "provider": "2.onj.me", "category": "General"},
+    {"title": "BBC NEWS", "streamUrl": "https://2.onj.me/bbcnews", "sourceType": "tv", "provider": "2.onj.me", "category": "News"},
+    {"title": "ITV1", "streamUrl": "https://2.onj.me/itv", "sourceType": "tv", "provider": "2.onj.me", "category": "General"},
+    {"title": "ITV2", "streamUrl": "https://2.onj.me/itv2", "sourceType": "tv", "provider": "2.onj.me", "category": "Entertainment"},
+    {"title": "ITV4", "streamUrl": "https://2.onj.me/itv4", "sourceType": "tv", "provider": "2.onj.me", "category": "Entertainment"},
+    {"title": "ITV Quiz", "streamUrl": "https://2.onj.me/itvquiz", "sourceType": "tv", "provider": "2.onj.me", "category": "Entertainment"},
+    {"title": "Channel 4", "streamUrl": "https://2.onj.me/channel4", "sourceType": "tv", "provider": "2.onj.me", "category": "General"},
+    {"title": "E4", "streamUrl": "https://2.onj.me/e4", "sourceType": "tv", "provider": "2.onj.me", "category": "Entertainment"},
+    {"title": "More 4", "streamUrl": "https://2.onj.me/more4", "sourceType": "tv", "provider": "2.onj.me", "category": "Documentary"},
+    {"title": "Film4", "streamUrl": "https://2.onj.me/film4", "sourceType": "tv", "provider": "2.onj.me", "category": "Movies"},
+    {"title": "4seven", "streamUrl": "https://2.onj.me/4seven", "sourceType": "tv", "provider": "2.onj.me", "category": "Entertainment"},
+    {"title": "5", "streamUrl": "https://2.onj.me/channel5", "sourceType": "tv", "provider": "2.onj.me", "category": "General"},
+    {"title": "That's 20th Century", "streamUrl": "https://2.onj.me/thatstv3", "sourceType": "tv", "provider": "2.onj.me", "category": "Movies"},
 )
 TV_PROVIDER_SOURCES: tuple[dict[str, str], ...] = (
     {

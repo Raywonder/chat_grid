@@ -28,6 +28,7 @@ export type MainModeCommand =
   | 'radioRemoteStationPrevious'
   | 'radioRemoteStationFirst'
   | 'radioRemoteStationLast'
+  | 'radioRemoteGuide'
   | 'radioRemoteVolumeUp'
   | 'radioRemoteVolumeDown'
   | 'radioRemotePowerToggle'

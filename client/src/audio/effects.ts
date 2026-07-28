@@ -15,11 +15,13 @@ export const EFFECT_IDS = new Set<EffectId>(EFFECT_SEQUENCE.map((effect) => effe
 
 export type EffectRuntime = {
   nodes: AudioNode[];
+  convolver: ConvolverNode | null;
   flangerLfo: OscillatorNode | null;
   flangerLfoGain: GainNode | null;
 };
 
 const reverbImpulseCache = new WeakMap<AudioContext, Map<string, AudioBuffer>>();
+const externalImpulseCache = new WeakMap<AudioContext, Map<string, Promise<AudioBuffer | null>>>();
 
 export function clampEffectLevel(value: number): number {
   const clamped = Math.max(0, Math.min(100, value));
@@ -47,6 +49,7 @@ export function connectEffectChain(
 ): EffectRuntime {
   const runtime: EffectRuntime = {
     nodes: [],
+    convolver: null,
     flangerLfo: null,
     flangerLfoGain: null,
   };
@@ -99,6 +102,7 @@ export function connectEffectChain(
   if (effect === 'reverb') {
     const convolver = audioCtx.createConvolver();
     convolver.buffer = getCachedImpulseResponse(audioCtx, clampEffectLevel(effectValue));
+    runtime.convolver = convolver;
     const wetGain = audioCtx.createGain();
     wetGain.gain.value = 0.06 + effectMix * 0.94;
     const dryGain = audioCtx.createGain();
@@ -145,6 +149,30 @@ export function connectEffectChain(
   runtime.flangerLfoGain = lfoGain;
   runtime.nodes.push(delay, feedback, wetGain, lfoGain, dryGain);
   return runtime;
+}
+
+/** Replaces the generated fallback with a reviewed Remote Speaker impulse when available. */
+export async function loadExternalImpulseResponse(
+  audioCtx: AudioContext,
+  runtime: EffectRuntime | null,
+  url: string,
+): Promise<void> {
+  if (!runtime?.convolver || !url.trim()) return;
+  let cache = externalImpulseCache.get(audioCtx);
+  if (!cache) {
+    cache = new Map();
+    externalImpulseCache.set(audioCtx, cache);
+  }
+  let pending = cache.get(url);
+  if (!pending) {
+    pending = fetch(url, { credentials: 'same-origin' })
+      .then((response) => (response.ok ? response.arrayBuffer() : null))
+      .then((bytes) => (bytes ? audioCtx.decodeAudioData(bytes) : null))
+      .catch(() => null);
+    cache.set(url, pending);
+  }
+  const buffer = await pending;
+  if (buffer && runtime.convolver) runtime.convolver.buffer = buffer;
 }
 
 /** Returns a cached impulse response for a reverb amount bucket and sample rate. */

@@ -4392,7 +4392,7 @@ function radioRemoteControlCommand(action: 'station_next' | 'station_previous' |
 }
 
 function radioRemoteButtonCommand(
-  action: 'station_first' | 'station_last' | 'power_toggle' | 'info',
+  action: 'station_first' | 'station_last' | 'guide' | 'power_toggle' | 'info',
 ): void {
   const remote = getCarriedMediaRemote();
   if (!remote || !state.remoteControlsFocused) {
@@ -5035,6 +5035,7 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   radioRemoteStationPrevious: () => radioRemoteControlCommand('station_previous'),
   radioRemoteStationFirst: () => radioRemoteButtonCommand('station_first'),
   radioRemoteStationLast: () => radioRemoteButtonCommand('station_last'),
+  radioRemoteGuide: () => radioRemoteButtonCommand('guide'),
   radioRemoteVolumeUp: () => radioRemoteControlCommand('volume_up'),
   radioRemoteVolumeDown: () => radioRemoteControlCommand('volume_down'),
   radioRemotePowerToggle: () => radioRemoteButtonCommand('power_toggle'),
@@ -5192,6 +5193,10 @@ function handleNormalModeInput(input: ModeInput): void {
       }
       if (code === 'KeyI') {
         radioRemoteButtonCommand('info');
+        return;
+      }
+      if (code === 'KeyG') {
+        radioRemoteButtonCommand('guide');
         return;
       }
       if (code === 'KeyC' || (shiftKey && code === 'KeyK')) {

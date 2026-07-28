@@ -368,7 +368,7 @@ export const itemRemoveSchema = z.object({
 export const itemActionResultSchema = z.object({
   type: z.literal('item_action_result'),
   ok: z.boolean(),
-  action: z.enum(['add', 'pickup', 'drop', 'delete', 'transfer', 'use', 'secondary_use', 'interact', 'update']),
+  action: z.enum(['add', 'pickup', 'drop', 'delete', 'transfer', 'use', 'secondary_use', 'interact', 'update', 'guide']),
   message: z.string(),
   itemId: z.string().optional(),
 });
@@ -775,7 +775,7 @@ export type OutgoingMessage =
   | {
       type: 'item_remote_control';
       itemId: string;
-      action: 'station_next' | 'station_previous' | 'station_first' | 'station_last' | 'volume_up' | 'volume_down' | 'power_toggle' | 'info';
+      action: 'station_next' | 'station_previous' | 'station_first' | 'station_last' | 'guide' | 'volume_up' | 'volume_down' | 'power_toggle' | 'info';
     }
   | {
       type: 'item_interact';

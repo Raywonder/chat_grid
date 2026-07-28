@@ -116,6 +116,8 @@ def _normalize_station_presets(raw_value: object) -> list[dict[str, str]]:
             "sourceLabel",
             "playMode",
             "provider",
+            "category",
+            "guideNumber",
         ):
             value = _bounded_text(
                 entry.get(key), max_length=240, field_name=f"stationPresets.{key}"
@@ -538,6 +540,16 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
         "mediaEffectValue",
         minimum=0,
         maximum=100,
+    )
+    next_params["roomImpulseUrl"] = enforce_max_length(
+        normalize_media_reference(param_value("roomImpulseUrl", "")),
+        max_length=2048,
+        field_name="roomImpulseUrl",
+    )
+    next_params["speakerProfile"] = enforce_max_length(
+        str(param_value("speakerProfile", "default") or "default").strip(),
+        max_length=80,
+        field_name="speakerProfile",
     )
     try:
         facing = float(param_value("facing", 0))

@@ -243,6 +243,14 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
     isAvailable: (context) => context.hasCarriedRadioRemote,
   },
   {
+    id: 'radioRemoteGuide',
+    label: 'Open media guide',
+    shortcut: 'G while remote focused',
+    tooltip: 'Read the available radio stations or TV channels, grouped by category, while holding a media remote.',
+    section: 'Media',
+    isAvailable: (context) => context.hasCarriedRadioRemote,
+  },
+  {
     id: 'radioRemoteVolumeUp',
     label: 'Media remote volume up',
     shortcut: 'Up / Ctrl+Shift+Up / Ctrl+Shift+U',

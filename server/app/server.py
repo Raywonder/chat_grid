@@ -3651,6 +3651,9 @@ class SignalingServer:
             ).strip()
             if switch_sound:
                 preset["switchSound"] = switch_sound
+            category = str(entry.get("category") or "").strip()
+            if category:
+                preset["category"] = category
             presets.append(preset)
         return presets
 
@@ -3665,6 +3668,32 @@ class SignalingServer:
         if preset_count <= 0:
             return 0
         return station_index % preset_count
+
+    @staticmethod
+    def _media_guide_message(item: WorldItem, *, tv: bool) -> str:
+        """Build a compact, screen-reader-friendly guide for a media remote."""
+
+        presets = SignalingServer._radio_presets(item)
+        if not presets:
+            return f"{item.title} has no guide entries."
+        groups: dict[str, list[str]] = {}
+        for number, preset in enumerate(presets, start=1):
+            category = str(preset.get("category") or ("General" if tv else "Stations")).strip()
+            groups.setdefault(category, []).append(f"{number} {preset['title']}")
+        parts = [f"{'TV guide' if tv else 'Radio guide'} for {item.title}."]
+        for category, entries in groups.items():
+            parts.append(f"{category}: " + "; ".join(entries))
+        if tv:
+            sources = item.params.get("tvProviderSources")
+            if isinstance(sources, list):
+                source_titles = [
+                    str(source.get("title") or "").strip()
+                    for source in sources
+                    if isinstance(source, dict) and str(source.get("title") or "").strip()
+                ]
+                if source_titles:
+                    parts.append("Guide sources: " + ", ".join(source_titles))
+        return " ".join(parts)
 
     @staticmethod
     def _is_tv_media_item(item: WorldItem) -> bool:
@@ -4325,6 +4354,7 @@ class SignalingServer:
             "station_previous",
             "station_first",
             "station_last",
+            "guide",
             "volume_up",
             "volume_down",
             "power_toggle",
@@ -4358,6 +4388,11 @@ class SignalingServer:
         targets = self._radio_targets_for_remote(
             remote, target, require_presets=False
         )
+        if action == "guide":
+            await self._send_item_result(
+                client, True, "guide", self._media_guide_message(target, tv=False), remote.id
+            )
+            return True
         if action == "info":
             station_name = str(target.params.get("stationName") or target.title).strip()
             now_playing = str(target.params.get("nowPlaying") or "").strip()
@@ -4537,6 +4572,7 @@ class SignalingServer:
             "station_previous",
             "station_first",
             "station_last",
+            "guide",
             "volume_up",
             "volume_down",
             "power_toggle",
@@ -4577,6 +4613,11 @@ class SignalingServer:
             return True
 
         targets = self._tv_targets_for_remote(remote, target, require_presets=False)
+        if action == "guide":
+            await self._send_item_result(
+                client, True, "guide", self._media_guide_message(target, tv=True), remote.id
+            )
+            return True
         if action == "info":
             channel_name = str(target.params.get("stationName") or target.title).strip()
             now_playing = str(target.params.get("nowPlaying") or "").strip()
@@ -6326,6 +6367,7 @@ class SignalingServer:
             "secondary_use",
             "interact",
             "update",
+            "guide",
         ],
         message: str,
         item_id: str | None = None,

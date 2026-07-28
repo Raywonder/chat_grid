@@ -1,5 +1,5 @@
 import { HEARING_RADIUS, type WorldItem } from '../state/gameState';
-import { EFFECT_IDS, clampEffectLevel, connectEffectChain, disconnectEffectRuntime, type EffectId, type EffectRuntime } from './effects';
+import { EFFECT_IDS, clampEffectLevel, connectEffectChain, disconnectEffectRuntime, loadExternalImpulseResponse, type EffectId, type EffectRuntime } from './effects';
 import { AudioEngine } from './audioEngine';
 import {
   connectDistanceReflections,
@@ -59,6 +59,7 @@ type ItemRadioOutput = {
   radioBodyInput: GainNode;
   radioBodyFilters: RadioBodyFilters;
   radioToneProfile: RadioToneProfile | null;
+  roomImpulseUrl: string;
   gain: GainNode;
   panner: StereoPannerNode | null;
   reflections: DistanceReflectionRuntime;
@@ -75,6 +76,7 @@ type EffectiveRadioItem = {
   mediaEffectValue: unknown;
   speakerRole: RadioSpeakerRole;
   playStartedAt: number;
+  roomImpulseUrl: string;
 };
 
 export function normalizeRadioEffect(effect: unknown): EffectId {
@@ -541,6 +543,10 @@ export class RadioStationRuntime {
       const effect = normalizeRadioEffect(effective.mediaEffect);
       const effectValue = normalizeRadioEffectValue(effective.mediaEffectValue);
       this.applyEffect(output, audioCtx, effect, effectValue);
+      if (effect === 'reverb' && effective.roomImpulseUrl !== output.roomImpulseUrl) {
+        output.roomImpulseUrl = effective.roomImpulseUrl;
+        void loadExternalImpulseResponse(audioCtx, output.effectRuntime, effective.roomImpulseUrl);
+      }
       this.applySpeakerRole(output, audioCtx, effective.speakerRole);
       if (!streamUrl || !enabled) {
         output.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + RADIO_SPEAKER_MUTE_FADE_SECONDS);
@@ -624,6 +630,7 @@ export class RadioStationRuntime {
       mediaEffect: item.params.mediaEffect,
       mediaEffectValue: item.params.mediaEffectValue,
       speakerRole: normalizeRadioSpeakerRole(item.params.speakerRole),
+      roomImpulseUrl: String(item.params.roomImpulseUrl || primary?.params.roomImpulseUrl || '').trim(),
       playStartedAt: primary
         ? normalizePlayStartedAt(primary.params.playStartedAt)
         : normalizePlayStartedAt(item.params.playStartedAt),
@@ -644,6 +651,7 @@ export class RadioStationRuntime {
     output.effectRuntime = connectEffectChain(audioCtx, output.effectInput, output.speakerFilterInput, effect, effectValue);
     output.effect = effect;
     output.effectValue = effectValue;
+    output.roomImpulseUrl = '';
   }
 
   private applySpeakerRole(
@@ -664,6 +672,7 @@ export class RadioStationRuntime {
     output.speakerFilterInput = filterChain.input;
     output.speakerFilterNodes = filterChain.filters;
     output.effectRuntime = connectEffectChain(audioCtx, output.effectInput, output.speakerFilterInput, output.effect, output.effectValue);
+    output.roomImpulseUrl = '';
     output.speakerRole = speakerRole;
   }
 
@@ -990,6 +999,9 @@ export class RadioStationRuntime {
     const radioBody = connectRadioBodyEq(audioCtx, gain);
     const speakerFilter = connectSpeakerRoleFilter(audioCtx, radioBody.input, speakerRole);
     const effectRuntime = connectEffectChain(audioCtx, effectInput, speakerFilter.input, effect, effectValue);
+    if (effect === 'reverb' && effective.roomImpulseUrl) {
+      void loadExternalImpulseResponse(audioCtx, effectRuntime, effective.roomImpulseUrl);
+    }
     const destination = this.audio.getOutputDestinationNode() ?? audioCtx.destination;
     let panner: StereoPannerNode | null = null;
     if (this.audio.supportsStereoPanner()) {
@@ -1018,6 +1030,7 @@ export class RadioStationRuntime {
       radioBodyInput: radioBody.input,
       radioBodyFilters: radioBody.filters,
       radioToneProfile: null,
+      roomImpulseUrl: effective.roomImpulseUrl,
       gain,
       panner,
       reflections,
