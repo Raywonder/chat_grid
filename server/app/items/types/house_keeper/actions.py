@@ -36,6 +36,7 @@ def secondary_use_item(
     repair_mode = str(item.params.get("repairMode") or "auto_repair").strip()
     target_kinds = str(item.params.get("targetKinds") or "radio, object").strip()
     description = str(item.params.get("description") or "").strip()
+    held_key_count = len(item.params.get("heldKeyIds", [])) if isinstance(item.params.get("heldKeyIds"), list) else 0
     parts = [
         f"{label} looks after {house_name}.",
         f"Mode: {repair_mode}.",
@@ -43,5 +44,6 @@ def secondary_use_item(
     ]
     if description:
         parts.append(description)
+    if held_key_count:
+        parts.append(f"It is holding {held_key_count} room key{'s' if held_key_count != 1 else ''} for later use.")
     return ItemUseResult(self_message=" ".join(parts), others_message="")
-

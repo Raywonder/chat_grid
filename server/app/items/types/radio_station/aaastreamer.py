@@ -104,7 +104,7 @@ def resolve_aaastreamer_playback(
     try:
         with open_validated_public_url(
             station_url,
-            headers={"User-Agent": "Endiginous"},
+            headers={"User-Agent": "Indiginous"},
             timeout=timeout,
         ) as response:
             html_text = response.read(STATION_PAGE_MAX_BYTES).decode(
@@ -117,7 +117,7 @@ def resolve_aaastreamer_playback(
             try:
                 with open_validated_public_url(
                     api_url,
-                    headers={"Accept": "application/json", "User-Agent": "Endiginous"},
+                    headers={"Accept": "application/json", "User-Agent": "Indiginous"},
                     timeout=timeout,
                 ) as response:
                     payload = json.loads(

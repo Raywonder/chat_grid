@@ -20,6 +20,8 @@ type MessageHandlerDeps = {
       spawnY: number;
       ambienceKey?: string;
       ambienceName?: string;
+      roomLayout?: string;
+      footstepSurface?: string;
     }>,
     currentLocationId?: string,
   ) => void;
@@ -39,6 +41,8 @@ type MessageHandlerDeps = {
       seatedItemId?: string | null;
       seatedOffset?: number;
       handHeldById?: string | null;
+      gender?: string;
+      wornClothing?: string[];
     };
     running: boolean;
     peers: Map<
@@ -69,6 +73,7 @@ type MessageHandlerDeps = {
     focusGridButton: HTMLElement;
     canvas: HTMLCanvasElement;
     instructions: HTMLElement;
+    movementControls: HTMLElement;
   };
   signalingSend: (message: unknown) => void;
   peerManager: {
@@ -211,16 +216,22 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.state.player.userId = message.player.userId ?? message.auth?.userId ?? null;
         deps.state.running = true;
         deps.setConnecting(false);
-        deps.state.player.x = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.x));
-        deps.state.player.y = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.y));
+        const welcomeWidth = message.worldConfig?.gridWidth ?? message.worldConfig?.gridSize ?? deps.getWorldGridSize();
+        const welcomeHeight = message.worldConfig?.gridHeight ?? message.worldConfig?.gridSize ?? deps.getWorldGridSize();
+        deps.state.player.x = Math.max(0, Math.min(welcomeWidth - 1, message.player.x));
+        deps.state.player.y = Math.max(0, Math.min(welcomeHeight - 1, message.player.y));
         deps.state.player.posture = message.player.posture ?? 'standing';
         deps.state.player.seatedItemId = message.player.seatedItemId ?? null;
         deps.state.player.seatedOffset = message.player.seatedOffset ?? 0;
         deps.state.player.handHeldById = message.player.handHeldById ?? null;
+        deps.state.player.gender = message.player.gender ?? '';
+        deps.state.player.wornClothing = message.player.wornClothing ?? [];
         deps.dom.connectButton.classList.add('hidden');
         deps.dom.disconnectButton.classList.remove('hidden');
         deps.dom.focusGridButton.classList.remove('hidden');
         deps.dom.canvas.classList.remove('hidden');
+        deps.dom.movementControls.classList.remove('hidden');
+        deps.dom.movementControls.removeAttribute('hidden');
         deps.dom.instructions.classList.remove('hidden');
         document.getElementById('joinGuide')?.classList.add('hidden');
         const dashboard = document.getElementById('gridDashboard');
@@ -269,8 +280,14 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
 
       case 'location_changed': {
         if (message.id === deps.state.player.id) {
-          deps.state.player.x = message.x;
-          deps.state.player.y = message.y;
+          deps.setWorldGridDimensions(
+            message.width ?? deps.getWorldGridSize(),
+            message.height ?? deps.getWorldGridSize(),
+          );
+          const width = message.width ?? deps.getWorldGridSize();
+          const height = message.height ?? deps.getWorldGridSize();
+          deps.state.player.x = Math.max(0, Math.min(width - 1, message.x));
+          deps.state.player.y = Math.max(0, Math.min(height - 1, message.y));
           deps.state.player.posture = 'standing';
           deps.state.player.seatedItemId = null;
           deps.state.player.seatedOffset = 0;
@@ -297,6 +314,8 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           seatedItemId: null,
           seatedOffset: 0,
           handHeldById: null,
+          gender: message.gender ?? '',
+          wornClothing: message.wornClothing ?? [],
         });
         break;
       }
@@ -332,8 +351,8 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
 
       case 'update_position': {
         if (message.id === deps.state.player.id) {
-          deps.state.player.x = message.x;
-          deps.state.player.y = message.y;
+          deps.state.player.x = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.x));
+          deps.state.player.y = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.y));
           deps.state.player.posture = message.posture ?? 'standing';
           deps.state.player.seatedItemId = message.seatedItemId ?? null;
           deps.state.player.seatedOffset = message.seatedOffset ?? 0;
@@ -382,6 +401,20 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
             );
           }
           deps.narrateRemoteMovement(peer.nickname, prevX, prevY, peer.x, peer.y);
+        }
+        break;
+      }
+
+      case 'update_avatar': {
+        if (message.id === deps.state.player.id) {
+          deps.state.player.gender = message.gender ?? '';
+          deps.state.player.wornClothing = message.wornClothing ?? [];
+        } else {
+          const peer = deps.state.peers.get(message.id);
+          if (peer) {
+            peer.gender = message.gender ?? '';
+            peer.wornClothing = message.wornClothing ?? [];
+          }
         }
         break;
       }

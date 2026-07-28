@@ -24,7 +24,7 @@ QString ProtocolClient::stateText() const {
 void ProtocolClient::connectToServer(const QString& endpoint) {
     endpoint_ = endpoint.trimmed();
     if (endpoint_.isEmpty()) {
-        emit statusMessage(QStringLiteral("Enter an Endiginous endpoint first."));
+        emit statusMessage(QStringLiteral("Enter an Indiginous endpoint first."));
         return;
     }
     setState(ConnectionState::Connecting);

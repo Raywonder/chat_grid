@@ -147,6 +147,18 @@ def _normalize_tv_sources(raw_value: object, *, field_name: str) -> list[dict[st
     return sources
 
 
+def _normalize_note_index(raw_value: object) -> list[str]:
+    """Keep a bounded, safe list of mirrored Journal/Letters filenames."""
+
+    if not isinstance(raw_value, list):
+        return []
+    return [
+        str(entry).strip()[:512]
+        for entry in raw_value[:500]
+        if str(entry).strip() and "/" not in str(entry) and "\\" not in str(entry)
+    ]
+
+
 def _option(raw: object, fallback: str, options: tuple[str, ...], field_name: str) -> str:
     """Normalize one list option field."""
 
@@ -204,6 +216,7 @@ def _validate_location_fit(item: WorldItem, params: dict) -> None:
     indoor_only = {
         "tv",
         "remote",
+        "computer",
         "bed",
         "fridge",
         "sink",
@@ -221,12 +234,14 @@ def _validate_location_fit(item: WorldItem, params: dict) -> None:
         raise ValueError(
             f"{object_kind} should be modeled as furniture, not a house object."
         )
-    if location.id in outdoor_locations and object_kind in indoor_only and not outdoor_ok:
+    if location.id in outdoor_locations and object_kind in indoor_only and not outdoor_ok and not str(params.get("roomId") or "").strip():
         raise ValueError(
             f"{object_kind} belongs indoors here unless the object description or replacement hint clearly says outdoor, patio, porch, garden, or picnic."
         )
     if object_kind == "tv" and placement not in {"wall", "fixture", "furniture"}:
         raise ValueError("TV objects should be wall-mounted or set on furniture.")
+    if object_kind == "computer" and placement not in {"desk", "table", "counter", "furniture"}:
+        raise ValueError("Computer objects belong on a desk, table, counter, or workstation furniture.")
     if object_kind == "window" and placement != "wall":
         raise ValueError("Window objects must use wall placement.")
     if object_kind in {"fridge", "stove", "oven", "microwave"} and placement not in {
@@ -287,6 +302,16 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
         str(next_params.get("ownerName", item.params.get("ownerName", "")) or "").strip(),
         max_length=80,
         field_name="ownerName",
+    )
+    next_params["roomId"] = enforce_max_length(
+        str(next_params.get("roomId", item.params.get("roomId", "")) or "").strip(),
+        max_length=128,
+        field_name="roomId",
+    )
+    next_params["roomRole"] = enforce_max_length(
+        str(next_params.get("roomRole", item.params.get("roomRole", "")) or "").strip(),
+        max_length=80,
+        field_name="roomRole",
     )
     next_params["keyId"] = enforce_max_length(
         str(next_params.get("keyId", item.params.get("keyId", "")) or "").strip(),
@@ -397,6 +422,30 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     next_params["phoneContacts"] = contacts[:100] if isinstance(contacts, list) else []
     routes = next_params.get("phonePbxRoutes", item.params.get("phonePbxRoutes", []))
     next_params["phonePbxRoutes"] = routes[:4] if isinstance(routes, list) else []
+    computer_platform = str(
+        next_params.get("computerPlatform", item.params.get("computerPlatform", "desktop"))
+        or "desktop"
+    ).strip().lower()
+    if computer_platform not in {"desktop", "laptop", "workstation", "tablet"}:
+        raise ValueError("computerPlatform must be desktop, laptop, workstation, or tablet.")
+    next_params["computerPlatform"] = computer_platform
+    next_params["computerOs"] = enforce_max_length(
+        str(next_params.get("computerOs", item.params.get("computerOs", "Windows")) or "Windows").strip(),
+        max_length=80,
+        field_name="computerOs",
+    )
+    computer_power_state = str(
+        next_params.get("computerPowerState", item.params.get("computerPowerState", "sleeping"))
+        or "sleeping"
+    ).strip().lower()
+    if computer_power_state not in {"on", "sleeping", "off"}:
+        raise ValueError("computerPowerState must be on, sleeping, or off.")
+    next_params["computerPowerState"] = computer_power_state
+    next_params["computerProfile"] = enforce_max_length(
+        str(next_params.get("computerProfile", item.params.get("computerProfile", "")) or "").strip(),
+        max_length=80,
+        field_name="computerProfile",
+    )
     object_kind = str(next_params.get("objectKind", "mug")).strip().lower()
     presets = _normalize_station_presets(item.params.get("stationPresets", []))
     if not presets:
@@ -575,6 +624,16 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
         ),
         max_length=2048,
         field_name="emitSound",
+    )
+    next_params["journalFolder"] = parse_bool_like(
+        next_params.get("journalFolder", item.params.get("journalFolder", False)),
+        default=False,
+    )
+    next_params["journalIndex"] = _normalize_note_index(
+        next_params.get("journalIndex", item.params.get("journalIndex", []))
+    )
+    next_params["letterIndex"] = _normalize_note_index(
+        next_params.get("letterIndex", item.params.get("letterIndex", []))
     )
     _validate_location_fit(item, next_params)
     return keep_only_known_params(next_params, PARAM_KEYS)

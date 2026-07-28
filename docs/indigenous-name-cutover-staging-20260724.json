@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "status": "staged-not-published",
+  "canonicalProductName": "Indiginous",
+  "canonicalLowerName": "indiginous",
+  "createdAt": "2026-07-24",
+  "purpose": "Per-file staging receipt for the corrected product-name cutover. Apply this manifest to the next coordinated desktop/web release only after both platform artifacts and public routes pass release preflight.",
+  "replacementRules": [
+    {"from": "Indiginous", "to": "Indiginous", "scope": "visible copy, release metadata, installer display names, user-facing documentation"},
+    {"from": "indiginous", "to": "indiginous", "scope": "new canonical filenames, update-feed filenames, canonical web aliases, and new client settings"},
+    {"from": "Indiginous", "to": "Indiginous", "scope": "legacy typo cleanup"}
+  ],
+  "compatibilityContracts": [
+    "chatgrid:// and indiginous:// deep links remain accepted by the cutover release",
+    "/chatgrid/, /indiginous/, and their websocket/auth aliases remain served until the cutover release is installed across the supported population",
+    "chat_grid_native import paths, CHGRID_* environment variables, chat-grid systemd units, database names, and existing storage keys remain readable so updates do not strand installations",
+    "old installer/update-feed URLs resolve to the same next Indiginous artifact and checksum"
+  ],
+  "feedAliases": {
+    "windows": [
+      "/indiginous/updates/latest-windows.json",
+      "/indiginous/updates/latest-windows.json",
+      "/chatgrid/updates/latest-windows.json"
+    ],
+    "macos": [
+      "/indiginous/updates/latest-macos.json",
+      "/indiginous/updates/latest-macos.json",
+      "/chatgrid/updates/latest-macos.json"
+    ],
+    "rule": "All aliases must serve identical Indiginous 0.4.7 metadata, download filename, artifact bytes, and SHA-256 before publication."
+  },
+  "inventory": {
+    "trackedFilesWithLegacyProductTextBeforeStaging": 156,
+    "trackedLegacyTextMatchesBeforeStaging": 870,
+    "generatedInventoryCommand": "git grep -Il -i -E 'indiginous|indiginous' -- ':!**/dist/**' ':!**/build/**' ':!**/release/**' ':!**/recovery/**' ':!**/tmp/**' ':!*.lock'"
+  },
+  "releaseGate": {
+    "nextDesktopVersion": "0.4.7",
+    "requiredPlatforms": ["windows", "macos"],
+    "requiredProof": ["source preflight", "native accessibility tests", "Windows install/update proof", "macOS install/update proof", "public canonical and legacy URL checks", "old-installer update-feed check"],
+    "publish": false
+  }
+}

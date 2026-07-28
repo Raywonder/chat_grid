@@ -4,7 +4,7 @@ Date: 2026-07-22 CDT
 
 ## Change
 
-Updated the existing Endiginous browser cast path so local and remote audio
+Updated the existing Indiginous browser cast path so local and remote audio
 casts are visible and keyboard/screen-reader reachable. Cast surfaces now use
 native media controls for audio and video and include an explicit **Stop cast**
 button. Stopping a local cast releases its tracks, clears the peer stream, and
@@ -31,7 +31,7 @@ No new release tree, app, account, or public download was created.
 
 ## Release status
 
-This is source-level progress only. The public Endiginous downloads and update
+This is source-level progress only. The public Indiginous downloads and update
 feeds remain unchanged until browser settings/audio reachability, desktop-tree
 parity, Windows/NVDA proof, macOS VoiceOver proof, authenticated movement, and
 signed/notarized artifact checks are complete.

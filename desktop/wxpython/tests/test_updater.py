@@ -19,8 +19,8 @@ def test_tcast_nested_windows_manifest() -> None:
     manifest = UpdateManifest.from_dict({
         "version": "0.2.0",
         "platforms": {"windows": {
-            "url": "https://example.test/EndiginousSetup-0.2.0.exe",
-            "fileName": "EndiginousSetup-0.2.0.exe",
+            "url": "https://example.test/opaque-token-windows",
+            "fileName": "Indiginous_Setup.exe",
             "sha256": checksum,
         }},
     })
@@ -35,17 +35,17 @@ def test_manifest_rejects_missing_checksum() -> None:
         manifest.validate()
 
 
-def test_manifest_rejects_version_filename_mismatch() -> None:
+def test_manifest_rejects_nonstable_filename() -> None:
     checksum = hashlib.sha256(b"installer").hexdigest()
     manifest = UpdateManifest.from_dict({
         "version": "0.4.3",
         "platforms": {"windows": {
-            "url": "https://example.test/EndiginousSetup-0.4.2.exe",
-            "fileName": "EndiginousSetup-0.4.2.exe",
+            "url": "https://example.test/opaque-token-windows",
+            "fileName": "IndiginousSetup-0.4.2.exe",
             "sha256": checksum,
         }},
     })
-    with pytest.raises(ValueError, match="version"):
+    with pytest.raises(ValueError, match="stable"):
         manifest.validate()
 
 
@@ -54,8 +54,8 @@ def test_verified_cached_installer_is_reused(tmp_path) -> None:
     checksum = hashlib.sha256(payload).hexdigest()
     manifest = UpdateManifest.from_dict({
         "version": "0.2.0",
-        "downloadUrl": "https://example.test/EndiginousSetup-0.2.0.exe",
-        "fileName": "EndiginousSetup-0.2.0.exe",
+        "downloadUrl": "https://example.test/opaque-token-windows",
+        "fileName": "Indiginous_Setup.exe",
         "sha256": checksum,
     })
     target = tmp_path / "updates" / manifest.file_name
@@ -69,15 +69,15 @@ def test_cancel_dismissal_is_scoped_to_exact_manifest(tmp_path) -> None:
     checksum = hashlib.sha256(b"installer").hexdigest()
     manifest = UpdateManifest.from_dict({
         "version": "0.2.0",
-        "downloadUrl": "https://example.test/EndiginousSetup-0.2.0.exe",
-        "fileName": "EndiginousSetup-0.2.0.exe",
+        "downloadUrl": "https://example.test/opaque-token-windows",
+        "fileName": "Indiginous_Setup.exe",
         "sha256": checksum,
     })
     service.dismiss(manifest)
     assert service.is_dismissed(manifest)
     assert not service.is_dismissed(UpdateManifest.from_dict({
         "version": "0.2.1",
-        "downloadUrl": "https://example.test/EndiginousSetup-0.2.1.exe",
-        "fileName": "EndiginousSetup-0.2.1.exe",
+        "downloadUrl": "https://example.test/opaque-token-windows",
+        "fileName": "Indiginous_Setup.exe",
         "sha256": checksum,
     }))

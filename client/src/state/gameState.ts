@@ -74,6 +74,8 @@ export type Player = {
   seatedItemId: string | null;
   seatedOffset: number;
   handHeldById: string | null;
+  gender?: string;
+  wornClothing?: string[];
   lastMoveTime: number;
 };
 
@@ -88,6 +90,8 @@ export type PeerState = {
   seatedItemId?: string | null;
   seatedOffset?: number;
   handHeldById?: string | null;
+  gender?: string;
+  wornClothing?: string[];
 };
 
 export type GameState = {
@@ -162,6 +166,8 @@ export function createInitialState(): GameState {
       seatedItemId: null,
       seatedOffset: 0,
       handHeldById: null,
+      gender: '',
+      wornClothing: [],
       lastMoveTime: 0,
     },
     peers: new Map(),

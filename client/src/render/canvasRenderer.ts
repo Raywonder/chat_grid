@@ -57,15 +57,36 @@ export class CanvasRenderer {
     }
   }
 
-  private drawObject(obj: Pick<PeerState, 'x' | 'y' | 'nickname'>, color: string, name: string): void {
+  private drawObject(
+    obj: Pick<PeerState, 'x' | 'y' | 'nickname' | 'gender' | 'wornClothing'>,
+    color: string,
+    name: string,
+  ): void {
     const drawX = obj.x * this.squarePixelSize;
     const drawY = this.canvas.height - (obj.y * this.squarePixelSize) - this.squarePixelSize;
-    this.ctx.fillStyle = color;
-    this.ctx.fillRect(drawX, drawY, this.squarePixelSize, this.squarePixelSize);
+    const size = this.squarePixelSize;
+    const centerX = drawX + size / 2;
+    const clothing = new Set(obj.wornClothing ?? []);
+    const gender = (obj.gender ?? '').toLowerCase();
+    this.ctx.fillStyle = gender.includes('woman') ? '#f9a8d4' : gender.includes('man') ? '#93c5fd' : color;
+    this.ctx.beginPath();
+    this.ctx.arc(centerX, drawY + size * 0.22, size * 0.16, 0, Math.PI * 2);
+    this.ctx.fill();
+    this.ctx.fillStyle = clothing.has('everyday-top') ? '#f59e0b' : '#d1d5db';
+    this.ctx.fillRect(drawX + size * 0.28, drawY + size * 0.38, size * 0.44, size * 0.3);
+    this.ctx.fillStyle = clothing.has('everyday-bottom') ? '#2563eb' : '#9ca3af';
+    this.ctx.fillRect(drawX + size * 0.3, drawY + size * 0.7, size * 0.18, size * 0.22);
+    this.ctx.fillRect(drawX + size * 0.52, drawY + size * 0.7, size * 0.18, size * 0.22);
+    if (clothing.has('shoes')) {
+      this.ctx.fillStyle = '#111827';
+      this.ctx.fillRect(drawX + size * 0.25, drawY + size * 0.9, size * 0.24, size * 0.06);
+      this.ctx.fillRect(drawX + size * 0.51, drawY + size * 0.9, size * 0.24, size * 0.06);
+    }
     this.ctx.fillStyle = 'white';
     this.ctx.font = '12px Courier New';
     this.ctx.textAlign = 'center';
-    this.ctx.fillText(name, drawX + this.squarePixelSize / 2, drawY - 5);
+    const descriptor = obj.gender ? ` (${obj.gender}${clothing.size ? `, ${clothing.size} worn` : ''})` : '';
+    this.ctx.fillText(`${name}${descriptor}`, drawX + this.squarePixelSize / 2, drawY - 5);
   }
 
   private drawTextOverlay(state: GameState, label: string): void {

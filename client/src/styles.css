@@ -56,6 +56,24 @@ html.chatgrid-native #appFooter {
   margin-top: 0.5rem;
 }
 
+.movement-controls {
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  margin: 0.75rem auto;
+  width: fit-content;
+}
+
+.movement-controls-row {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.movement-controls button {
+  min-width: 4.5rem;
+  min-height: 2.75rem;
+}
+
 .updates-section {
   color: #94a3b8;
   text-align: left;
@@ -267,7 +285,7 @@ canvas {
 .interactive-item-panel {
   width: min(1120px, 98vw);
   margin: 0.75rem auto 0;
-  border: 1px solid #334155;
+  border: 2px solid #60a5fa;
   border-radius: 8px;
   background: #0f172a;
   overflow: hidden;
@@ -302,6 +320,37 @@ canvas {
   color: #bfdbfe;
 }
 
+.interactive-item-origin {
+  margin: 0;
+  padding: 0.65rem;
+  color: #cbd5e1;
+  border-bottom: 1px solid #334155;
+  overflow-wrap: anywhere;
+}
+
+.interactive-item-actions button:focus-visible,
+.interactive-item-actions a:focus-visible,
+.interactive-item-panel iframe:focus-visible {
+  outline: 3px solid #facc15;
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .interactive-item-panel {
+    border: 2px solid CanvasText;
+  }
+
+  .interactive-item-origin {
+    border-color: CanvasText;
+  }
+}
+
 .interactive-item-panel iframe {
   width: 100%;
   height: min(82vh, 780px);
@@ -315,6 +364,25 @@ canvas {
   height: 2rem;
   color: #86efac;
   margin-bottom: 0.75rem;
+}
+
+.game-invite-panel {
+  width: min(1120px, 98vw);
+  margin: 0.75rem auto 0;
+  padding: 0.75rem;
+  border: 2px solid #facc15;
+  border-radius: 8px;
+  background: #172554;
+  text-align: left;
+}
+
+.game-invite-panel h2,
+.game-invite-panel p {
+  margin-top: 0;
+}
+
+.game-invite-panel button + button {
+  margin-left: 0.5rem;
 }
 
 #instructions {

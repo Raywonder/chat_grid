@@ -1,25 +1,25 @@
-# Endiginous Rename Plan
+# Indiginous Rename Plan
 
-Endiginous is the current user-facing name for the project formerly called Chat
+Indiginous is the current user-facing name for the project formerly called Chat
 Grid.
 
 ## Already Migrated
 
 - Web app title, main heading, help title, sign-in copy, and current desktop
-  update feeds use Endiginous.
-- Package metadata now uses `endiginous-client`, `endiginous-server`,
-  `endiginous-desktop`, `endiginous-windows`, and
-  `endiginous-windows-native`.
+  update feeds use Indiginous.
+- Package metadata now uses `indiginous-client`, `indiginous-server`,
+  `indiginous-desktop`, `indiginous-windows`, and
+  `indiginous-windows-native`.
 - Agent instructions in the main, Mac, Windows, and project workspaces tell
-  Codex and other CLI workers to use Endiginous for new visible naming.
-- `scripts/endiginous_presence.py` is the preferred companion CLI entrypoint.
+  Codex and other CLI workers to use Indiginous for new visible naming.
+- `scripts/indiginous_presence.py` is the preferred companion CLI entrypoint.
 
 ## Completed Primary Route Migration
 
-The web client is now built and published at `/endiginous/`. The signaling
+The web client is now built and published at `/indiginous/`. The signaling
 service, session routes, voice assets, desktop defaults, update feeds, and
-account auth links use `/endiginous/` as the primary path. `/chatgrid/` remains
-an active compatibility path and proxies to the same Endiginous backend so
+account auth links use `/indiginous/` as the primary path. `/chatgrid/` remains
+an active compatibility path and proxies to the same Indiginous backend so
 older installed clients and bookmarks continue to work.
 
 ## Compatibility Names To Keep For Now
@@ -43,7 +43,7 @@ The remaining `chatgrid` identifiers are deliberately retained where removing
 them would strand an installed client or change a persistent contract: legacy
 deep links, old environment variables, Python import paths, service names,
 database/topic names, browser bridge events, bundle identifiers, and historical
-release artifacts. New installers register `endiginous://` and continue to
+release artifacts. New installers register `indiginous://` and continue to
 accept `chatgrid://`.
 
 The old path should only be retired after the active Windows/macOS population

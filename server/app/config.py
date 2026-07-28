@@ -14,9 +14,9 @@ class ServerConfigSection(BaseModel):
     bind_ip: str = "127.0.0.1"
     port: int = 8765
     base_path: str = "/"
-    grid_name: str = "Endiginous"
+    grid_name: str = "Indiginous"
     welcome_message: str = (
-        "Welcome to Endiginous, your immersive audio playground. "
+        "Welcome to Indiginous, your immersive audio playground. "
         "Configure your audio, then Log in or register to join the grid."
     )
 

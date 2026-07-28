@@ -1,4 +1,4 @@
-"""Browser-side HRTF spatial-audio runtime for compatible Endiginous worlds."""
+"""Browser-side HRTF spatial-audio runtime for compatible Indiginous worlds."""
 
 from __future__ import annotations
 

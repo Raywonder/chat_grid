@@ -2,7 +2,7 @@
 
 ## Release Goal
 
-Publish the next Endiginous Desktop build through the verified update channel
+Publish the next Indiginous Desktop build through the verified update channel
 with browser-based sign-in, secure authentication return to the native client,
 and native microphone/output-device settings that control the embedded world.
 
@@ -12,7 +12,7 @@ manifests must not be deployed to an assumed host.
 
 ## Browser Authentication Flow
 
-1. Add **Sign in with browser** to the Endiginous menu and initial signed-out
+1. Add **Sign in with browser** to the Indiginous menu and initial signed-out
    experience.
 2. Open the system browser at the portal's HTTPS authorization endpoint with a
    generated state value, PKCE challenge, desktop app ID, and registered return
@@ -27,7 +27,7 @@ manifests must not be deployed to an assumed host.
 5. Route the callback to the already-running desktop process through local IPC;
    if it is not running, start it and process the callback once.
 6. Verify state, exchange the code over HTTPS with PKCE, and create the normal
-   Endiginous session.
+   Indiginous session.
 7. Store only refresh/session material in Windows Credential Manager or macOS
    Keychain. Never store it in `settings.json` or logs.
 8. Refresh silently when permitted; otherwise return the user to browser login.
@@ -35,13 +35,13 @@ manifests must not be deployed to an assumed host.
    replay rejection, and cancellation.
 10. If BlindSoftware local login is not the selected credential method, keep the
     same app flow: the portal resolves the chosen provider to the canonical
-    BlindSoftware account, then returns the normal Endiginous authorization code.
+    BlindSoftware account, then returns the normal Indiginous authorization code.
     The native client should not special-case Mastodon beyond showing the
     provider label/status returned by the portal.
 
 ## Audio Settings UI
 
-Add **Audio Settings…** to the Endiginous/File menu with a standard accessible
+Add **Audio Settings…** to the Indiginous/File menu with a standard accessible
 dialog containing:
 
 - Output device (speakers/headphones);
@@ -79,7 +79,7 @@ alone.
 ## Native-First Keyboard Input
 
 The native window owns keyboard dispatch before the embedded browser. The File
-or Endiginous menu keeps only explicit desktop actions; every other supported key
+or Indiginous menu keeps only explicit desktop actions; every other supported key
 is offered to the world-input bridge.
 
 ### Dispatch order
@@ -111,11 +111,11 @@ is offered to the world-input bridge.
 
 ### Separate native and browser control profiles
 
-Endiginous defines semantic actions once, then supplies distinct bindings for
+Indiginous defines semantic actions once, then supplies distinct bindings for
 the native desktop view and browser Web UI. The profiles must not pretend the
 two environments reserve the same keys.
 
-- Native desktop may use **Alt+Left** and **Alt+Right** for documented Endiginous
+- Native desktop may use **Alt+Left** and **Alt+Right** for documented Indiginous
   UI/world navigation because the native shell can consume them before WebView
   browser-history handling.
 - The embedded WebView must not navigate backward or forward when those native
@@ -138,7 +138,7 @@ layouts.
 
 ### Menu and discoverability
 
-- File/Endiginous menu commands remain keyboard accessible and list their
+- File/Indiginous menu commands remain keyboard accessible and list their
   accelerators.
 - Add a keyboard-controls/reference action to the Help menu.
 - Let users review and change non-reserved world bindings, detect conflicts,
@@ -153,7 +153,7 @@ layouts.
 - Send normalized event objects containing event type, physical code, logical
   key, modifiers, repeat state, timestamp, and text when applicable.
 - Do not send keystrokes to server logs, analytics, crash reports, or any page
-  outside the approved Endiginous origin.
+  outside the approved Indiginous origin.
 - Disable the bridge on untrusted navigation and restore it only after origin
   and protocol-version validation.
 - Keep browser and native control maps synchronized from one versioned control
@@ -178,14 +178,14 @@ layouts.
   can use the login methods configured on the BlindSoftware account, including
   Mastodon/fediverse OAuth when enabled.
 - Resolve every external provider login to a verified canonical BlindSoftware
-  account before issuing an Endiginous code. Do not let a Mastodon handle or
-  domain become the Endiginous account identity by itself.
+  account before issuing an Indiginous code. Do not let a Mastodon handle or
+  domain become the Indiginous account identity by itself.
 - Keep provider tokens and refresh credentials in the portal credential store
-  only. Do not send them to the Endiginous world server, desktop client,
+  only. Do not send them to the Indiginous world server, desktop client,
   installer logs, crash logs, or update manifests.
-- Expose account notification preferences to the Endiginous session so clients
+- Expose account notification preferences to the Indiginous session so clients
   can manage shared in-grid/ntfy settings from the signed-in account.
-- Generate browser-to-app return pages with a manual **Return to Endiginous**
+- Generate browser-to-app return pages with a manual **Return to Indiginous**
   link when automatic protocol opening is blocked.
 - Publish signed/checksummed Windows and macOS update metadata only after both
   artifacts pass launch, authentication, audio, reconnect, and rollback tests.
@@ -217,7 +217,7 @@ layouts.
 - World controls receive native key-down/key-up events, including approved keys
   unavailable to an ordinary browser page, while menu, text-entry, OS, and
   screen-reader shortcuts retain correct behavior.
-- Alt+Left and Alt+Right perform their documented Endiginous actions in the
+- Alt+Left and Alt+Right perform their documented Indiginous actions in the
   native client without triggering WebView history. Browser Web UI exposes and
   documents tested alternative bindings for those same actions.
 - Native and web help surfaces announce only their active control profile and

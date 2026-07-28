@@ -147,7 +147,7 @@ class AuthSession:
 
 @dataclass(frozen=True)
 class EcryptoAccountSummary:
-    """Per-user eCrypto account summary linked to an Endiginous auth user."""
+    """Per-user eCrypto account summary linked to an Indiginous auth user."""
 
     account_id: str
     user_id: str
@@ -851,7 +851,7 @@ class AuthService:
         *,
         memo: str = "",
     ) -> tuple[EcryptoAccountSummary, EcryptoAccountSummary]:
-        """Move test-chain eCrypto between two linked Endiginous accounts."""
+        """Move test-chain eCrypto between two linked Indiginous accounts."""
 
         if amount <= 0:
             raise AuthError("Amount must be positive.")
@@ -1060,8 +1060,9 @@ class AuthService:
         email: str | None = None,
         role: str = "user",
         display_name: str | None = None,
+        gender: str | None = None,
     ) -> AuthSession:
-        """Authenticate a verified external identity and issue an Endiginous session."""
+        """Authenticate a verified external identity and issue an Indiginous session."""
 
         normalized_provider = self._normalize_external_provider(provider)
         normalized_subject = subject.strip()
@@ -1086,11 +1087,12 @@ class AuthService:
                     email=normalized_email,
                     role=normalized_role,
                     display_name=display_name,
+                    gender=gender,
                 )
                 self._conn.commit()
                 user = self.get_user_by_id(str(user_id))
                 if user is None:
-                    raise AuthError("Linked Endiginous account was not found.")
+                    raise AuthError("Linked Indiginous account was not found.")
                 return self._create_session(user)
 
             user_id = self._find_existing_external_user_id(
@@ -1102,6 +1104,7 @@ class AuthService:
                     email=normalized_email,
                     role=normalized_role,
                     display_name=display_name,
+                    gender=gender,
                 )
             else:
                 self._sync_external_user_profile(
@@ -1127,7 +1130,7 @@ class AuthService:
 
         user = self.get_user_by_id(str(user_id))
         if user is None:
-            raise AuthError("Failed to load external Endiginous account.")
+            raise AuthError("Failed to load external Indiginous account.")
         return self._create_session(user)
 
     def login_external_assertion(
@@ -1155,7 +1158,47 @@ class AuthService:
             email=str(payload.get("email") or "") or None,
             role=str(payload.get("role") or "user"),
             display_name=str(payload.get("displayName") or "") or None,
+            gender=str(payload.get("gender") or "") or None,
         )
+
+    def get_avatar_profile(self, user_id: str) -> dict[str, object]:
+        """Return server-owned gender, wardrobe, and worn-clothing state."""
+
+        row = self._db_fetchone(
+            "SELECT gender, wardrobe_json, worn_clothing_json FROM user_state WHERE user_id = ?",
+            (int(user_id),),
+        )
+        if row is None:
+            return {"gender": "", "wardrobe": [], "wornClothing": []}
+
+        def decode_list(value: object) -> list[str]:
+            try:
+                parsed = json.loads(str(value or "[]"))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                return []
+            if not isinstance(parsed, list):
+                return []
+            return [str(entry)[:64] for entry in parsed if str(entry).strip()]
+
+        wardrobe = decode_list(row["wardrobe_json"])
+        if not wardrobe:
+            wardrobe = ["everyday-top", "everyday-bottom", "shoes"]
+        worn = [entry for entry in decode_list(row["worn_clothing_json"]) if entry in wardrobe]
+        return {"gender": str(row["gender"] or ""), "wardrobe": wardrobe, "wornClothing": worn}
+
+    def save_worn_clothing(self, user_id: str, worn_clothing: list[str]) -> dict[str, object]:
+        """Persist a validated worn-clothing list and return the resulting profile."""
+
+        profile = self.get_avatar_profile(user_id)
+        wardrobe = {str(entry) for entry in profile["wardrobe"]}
+        cleaned = list(dict.fromkeys(str(entry) for entry in worn_clothing if str(entry) in wardrobe))
+        self._db_execute(
+            "UPDATE user_state SET worn_clothing_json = ?, updated_at_ms = ? WHERE user_id = ?",
+            (json.dumps(cleaned), self.now_ms(), int(user_id)),
+        )
+        self._db_commit()
+        profile["wornClothing"] = cleaned
+        return profile
 
     def resume(self, token: str) -> AuthSession:
         """Validate a session token and apply rolling expiry."""
@@ -1475,6 +1518,9 @@ class AuthService:
                 last_y INTEGER,
                 last_location_id TEXT,
                 updated_at_ms INTEGER NOT NULL,
+                gender TEXT NOT NULL DEFAULT '',
+                wardrobe_json TEXT NOT NULL DEFAULT '["everyday-top", "everyday-bottom", "shoes"]',
+                worn_clothing_json TEXT NOT NULL DEFAULT '["everyday-top", "everyday-bottom", "shoes"]',
                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
             )
             """
@@ -1485,6 +1531,12 @@ class AuthService:
         }
         if "last_location_id" not in user_state_cols:
             self._db_execute("ALTER TABLE user_state ADD COLUMN last_location_id TEXT")
+        if "gender" not in user_state_cols:
+            self._db_execute("ALTER TABLE user_state ADD COLUMN gender TEXT NOT NULL DEFAULT ''")
+        if "wardrobe_json" not in user_state_cols:
+            self._db_execute("ALTER TABLE user_state ADD COLUMN wardrobe_json TEXT NOT NULL DEFAULT '[\"everyday-top\", \"everyday-bottom\", \"shoes\"]'")
+        if "worn_clothing_json" not in user_state_cols:
+            self._db_execute("ALTER TABLE user_state ADD COLUMN worn_clothing_json TEXT NOT NULL DEFAULT '[\"everyday-top\", \"everyday-bottom\", \"shoes\"]'")
         self._db_execute(
             """
             CREATE TABLE IF NOT EXISTS external_identities (
@@ -1755,8 +1807,9 @@ class AuthService:
         email: str | None,
         role: str,
         display_name: str | None,
+        gender: str | None = None,
     ) -> int:
-        """Create a local Endiginous account for a verified external identity."""
+        """Create a local Indiginous account for a verified external identity."""
 
         normalized_username = self._unique_external_username(username, email)
         role_row = self._conn.execute(
@@ -1794,6 +1847,8 @@ class AuthService:
             """,
             (user_id, nickname, now_ms),
         )
+        if gender is not None:
+            self._conn.execute("UPDATE user_state SET gender = ? WHERE user_id = ?", (gender.strip()[:64], user_id))
         return user_id
 
     def _sync_external_user_profile(
@@ -1803,6 +1858,7 @@ class AuthService:
         email: str | None,
         role: str,
         display_name: str | None,
+        gender: str | None = None,
     ) -> None:
         """Refresh safe local account fields from a verified external account."""
 
@@ -1847,6 +1903,11 @@ class AuthService:
                 """,
                 (user_id, nickname, user_id, now_ms),
             )
+        if gender is not None:
+            self._conn.execute(
+                "UPDATE user_state SET gender = ?, updated_at_ms = ? WHERE user_id = ?",
+                (gender.strip()[:64], now_ms, user_id),
+            )
 
     def _unique_external_username(self, username: str, email: str | None) -> str:
         """Return a valid unique username derived from external account fields."""
@@ -1875,7 +1936,7 @@ class AuthService:
             ).fetchone()
             if row is None:
                 return attempt
-        raise AuthError("Could not allocate an Endiginous username.")
+        raise AuthError("Could not allocate an Indiginous username.")
 
     def _consume_external_nonce(self, nonce: str, exp_seconds: int) -> None:
         """Store a one-use external assertion nonce or reject a replay."""
@@ -2107,7 +2168,7 @@ class AuthService:
 
     @staticmethod
     def _external_role_name(role_name: str) -> str:
-        """Map external site roles into Endiginous roles."""
+        """Map external site roles into Indiginous roles."""
 
         normalized = role_name.strip().lower()
         if normalized == "admin":

@@ -1,0 +1,55 @@
+INDIGINOUS APPLICATION AND BLIND.SOFTWARE USE LICENSE
+
+Copyright (c) 2026 Raywonder / TappedIn and contributors
+
+This document applies to the distributed Indiginous desktop application and
+its bundled application assets. It is separate from the MIT License that
+applies to the source code, and separate from the licenses of third-party
+software and media listed in THIRD_PARTY_NOTICES.md.
+
+1. Permission to use
+
+Subject to these terms, Raywonder / TappedIn grants you a non-exclusive,
+non-transferable permission to install and use the Indiginous application on
+devices that you own or are authorized to operate. The application is
+intended to provide an accessible client for the blind.software service and
+related worlds, rooms, audio, and features made available by that service.
+
+2. blind.software service and account
+
+Use of blind.software, including sign-in, shared spaces, communication,
+audio, media, user content, and connected services, remains subject to the
+service operator's current rules, account requirements, privacy notices, and
+other terms that apply when you use the service. Installing Indiginous does
+not grant access to a blind.software account, private space, or restricted
+content, and does not change those service rules.
+
+3. Code, names, and content are different rights
+
+The source-code portions identified as MIT-licensed remain available under
+the MIT License in LICENSE. That permission does not grant rights to the
+Indiginous, blind.software, Raywonder, TappedIn, or other names and marks,
+nor to hosted or bundled recordings, broadcasts, music, artwork, voices,
+feeds, station branding, user content, or other media. Use or redistribution
+of those materials requires permission from the applicable rights holder.
+
+You may not present a modified or redistributed build as an official
+Indiginous or blind.software release, or imply endorsement or affiliation
+that has not been granted. Preserve the copyright, license, and third-party
+notices when copying or redistributing the application or source.
+
+4. Updates and availability
+
+Indiginous may check for and install a newer application release. Updates,
+service availability, features, and connected content may change or be
+withdrawn. You are responsible for using a release and service in accordance
+with applicable law and the current service requirements.
+
+5. Disclaimer
+
+The application is provided "AS IS" and without warranties to the fullest
+extent permitted by law. The MIT License and the applicable third-party
+licenses remain controlling for the code and components to which they apply.
+
+For source-code terms, see LICENSE. For dependency and media notices, see
+THIRD_PARTY_NOTICES.md.

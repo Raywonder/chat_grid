@@ -1,5 +1,22 @@
 # Repository Guidelines
 
+## Mandatory multi-agent synchronization gate
+
+Before editing this repository, read the workspace
+`AGENT-CONNECTION-CONTRACT.md` and claim this exact worktree with
+`python3 scripts/agent_sync_guard.py connect --repo "$PWD" --agent NAME`.
+Run `check` before every build, release, deployment, and handoff. If the
+commit or working-tree fingerprint changes, stop: another worker or sync path
+has changed the source, so inspect the newer state and reacquire ownership.
+Never publish from an old staging directory, cached artifact, or copied tree.
+Keep the existing Indiginous installer filename `Indiginous_Setup.exe`.
+
+Desktop and iOS/macOS surfaces are not interchangeable. Matching version or
+build numbers do not establish feature parity. VoiceLink Windows/macOS
+desktop builds belong on the VoiceLink websites; VoiceLink iOS belongs only in
+TestFlight/App Store and must never be installed on Mac. This rule applies to
+all apps unless Dominique explicitly changes it.
+
 ## Project Structure & Module Organization
 - `client/`: Vite + TypeScript web app.
   - `src/main.ts`: connect flow, key commands, status/audio cues.
@@ -15,11 +32,11 @@
 - `deploy/`: Apache snippet + systemd unit examples.
 
 ## Product Naming
-- The current user-facing product name is **Endiginous**.
+- The current user-facing product name is **Indiginous**.
 - Treat **Chat Grid** as the old/original project name or a legacy technical
   compatibility name only.
 - New visible UI, release notes, docs, package descriptions, and agent-facing
-  instructions should say Endiginous.
+  instructions should say Indiginous.
 - Keep existing `/chatgrid/`, `chatgrid://`, `CHGRID_*`, Python module paths,
   bundle identifiers, service names, database filenames, and package-lock
   compatibility values unless a dedicated migration also updates production,

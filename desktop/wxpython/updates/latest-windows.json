@@ -1,12 +1,12 @@
 {
-  "version": "0.4.5",
-  "revision": "R517",
-  "releaseNotes": "Endiginous Windows 0.4.5 replaces the complete installed app payload during updates, removes stale legacy app files and shortcuts, and preserves user data in the current app-data folder.",
+  "version": "0.4.13",
+  "revision": "R536",
+  "releaseNotes": "Indiginous Windows 0.4.13 fixes browser sign-in return so the desktop client connects even when automatic-connect preference is off.",
   "platforms": {
     "windows": {
-      "url": "https://blind.software/endiginous/downloads/EndiginousSetup-0.4.5.exe",
-      "fileName": "EndiginousSetup-0.4.5.exe",
-      "sha256": "96f70c6c30d937ce9acdc7c64fd8d5243f5f709cea79f313b10e8ef7633fcae8",
+      "url": "https://blind.software/downloads/public/7Kp3mN8vQ2xL5rT9cW6yH1/windows",
+      "fileName": "Indiginous_Setup.exe",
+      "sha256": "9b02ecaedba3f6d3b09d9c4b5c952d602ccfd93c74896bf3bb3766995e01b409",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }
   }

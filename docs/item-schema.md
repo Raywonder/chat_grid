@@ -158,7 +158,7 @@ and rejects missing, non-numeric, or unusably large dimensions.
 - `houseName`: max 80 chars.
 - `ownerName`: optional owner/family name, max 80 chars.
 - `doorState`: `unlocked | locked`.
-- `targetLocation`: optional Endiginous interior id. Blank houses get a generated
+- `targetLocation`: optional Indiginous interior id. Blank houses get a generated
   interior location with connected entry/exit doors and practical starter
   companion items.
 - `description`: short spoken description, max 240 chars.
@@ -179,7 +179,8 @@ and rejects missing, non-numeric, or unusably large dimensions.
 }
 ```
 
-- `objectKind`: everyday object kind. Includes paper items such as `book`, `notebook`, `letter`, `envelope`, and `note`, plus `remote`, `speaker`, `radio`, and `tv`; TVs can be mounted with `placement="wall"`.
+- `objectKind`: everyday object kind. Includes paper items such as `book`, `notebook`, `letter`, `envelope`, and `note`, plus `remote`, `speaker`, `radio`, `tv`, and `computer`; TVs can be mounted with `placement="wall"`.
+- Personal computers use `objectKind="computer"`. Their individual persistent settings are `computerPlatform` (`desktop`, `laptop`, `workstation`, or `tablet`), `computerOs`, `computerPowerState` (`on`, `sleeping`, or `off`), and optional `computerProfile`. Computers belong on a desk, table, counter, or workstation furniture and remain separate from global app settings.
 - `readableText`: optional content spoken when the object is used, intended for books, notebooks, letters, envelopes, notes, and signs; max 2000 chars.
 - `interactionHint`: optional brief spoken clue for non-obvious interactions; max 160 chars.
 - `remoteControlLinkedRadios`: boolean, default `true`, visible for `objectKind="remote"`. When true, the radio remote controls compatible connected radios/speakers in the current location, with explicit Raywonder house groups allowed to span rooms. When false, it controls only the nearest/current-location radio.
@@ -252,7 +253,7 @@ and rejects missing, non-numeric, or unusably large dimensions.
 - `repairMode`: `inspect | auto_repair`.
 - `targetKinds`: comma-separated target kinds, currently `radio` and `object`.
 - `authorizedNames`: optional comma-separated display names allowed to ask the keeper to act. Blank means any user in the room may ask.
-- House keepers repair modeled Endiginous state only. They do not contact outside services, send notifications, touch accounts, or claim to fix real physical devices unless a separate approved integration is added.
+- House keepers repair modeled Indiginous state only. They do not contact outside services, send notifications, touch accounts, or claim to fix real physical devices unless a separate approved integration is added.
 
 ### `service_link`
 
@@ -279,7 +280,7 @@ and rejects missing, non-numeric, or unusably large dimensions.
 
 - `serviceKind`: one of `app | door | game | house | room | service | site | station | tool | portal`.
 - `url`: empty, absolute public `http/https` URL, or site-relative path.
-- `targetLocation`: optional Endiginous location id or room entered when used.
+- `targetLocation`: optional Indiginous location id or room entered when used.
 - `portalDestinationMode`: `random | static`; random portals choose a destination at use time, while static portals always use `targetLocation`.
 - `portalLocationPool`: optional comma-separated location ids for random portals. When empty, random portals choose from public map locations.
 - `doorState`: `unlocked | locked`; locked doors report their status and do not move the user unless a matching key unlocks them.
@@ -320,7 +321,7 @@ and rejects missing, non-numeric, or unusably large dimensions.
 - `url`: optional public `http/https` URL or site-relative path.
 - `announcementText`: text intended for spoken voice announcements, max 500 chars.
 - `voiceName`: optional voice label such as a creator/agent name, max 80 chars.
-- `voiceAssetUrl`: optional real voice MP3/OGG path or URL. `sounds/...` paths are served from the Endiginous static assets; public `http/https` URLs are validated.
+- `voiceAssetUrl`: optional real voice MP3/OGG path or URL. `sounds/...` paths are served from the Indiginous static assets; public `http/https` URLs are validated.
 - `bannerText`: optional rotating banner lines separated with `|`, max 500 chars.
 - `rotationSeconds`: integer seconds between banner lines, range `3-300`.
 - `emitRange`: integer hearing range in squares, range `1-20`.

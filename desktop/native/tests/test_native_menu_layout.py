@@ -9,14 +9,18 @@ def test_native_main_window_has_no_duplicate_status_strip():
 
 def test_shared_settings_are_file_menu_only_in_native_client():
     source = (Path(__file__).parents[1] / "src" / "chat_grid_native" / "app.py").read_text(encoding="utf-8")
-    assert 'settings_shortcut = "Cmd+," if sys.platform == "darwin" else "Ctrl+,"' in source
+    assert 'settings_shortcut = "Cmd+Alt+," if sys.platform == "darwin" else "Ctrl+Alt+,"' in source
     assert 'file_menu.Append(self.app_settings_id, f"&Settings...\\t{settings_shortcut}")' in source
     assert 'file_menu.Append(wx.ID_PREFERENCES, "&Desktop settings...")' in source
     assert "AppendSubMenu" not in source
     assert "#loginView,#authSessionView" in source
     assert "window.chatGridNativeOpenSettings?.();" in source
-    assert "self.Bind(wx.EVT_MENU_OPEN, self._on_menu_open)" in source
-    assert "self.Bind(wx.EVT_MENU_CLOSE, self._on_menu_close)" in source
+    assert "self.SetMenuBar(menu_bar)" in source
+    assert "event.Skip()" in source
+    assert 'self.SetName("Indiginous main window")' in source
+    assert "EVT_MENU_OPEN" in source
+    assert "SetForegroundWindow" in source
+    assert "SingleInstanceActivation" in source
 
 
 def test_native_file_menu_does_not_use_single_item_submenus():
@@ -34,6 +38,20 @@ def test_native_file_menu_does_not_use_single_item_submenus():
     assert "Secure browser sign-in will start in 5 seconds." in source
     assert 'subprocess.Popen(["open", "-g", flow.authorization_url])' in source
     assert 'label = "Sign &out\\tCtrl+Shift+S" if signed_in' in source
+
+
+def test_public_links_are_menu_actions_not_startup_window_chrome():
+    source = (Path(__file__).parents[1] / "src" / "chat_grid_native" / "app.py").read_text(encoding="utf-8")
+    assert 'help_menu.Append(website_id, "Open Indiginous &website")' in source
+    assert 'help_menu.Append(blindsoftware_id, "Open &blind.software")' in source
+    assert 'https://blind.software/indiginous/' in source
+
+
+def test_native_menu_highlight_is_spoken():
+    source = (Path(__file__).parents[1] / "src" / "chat_grid_native" / "app.py").read_text(encoding="utf-8")
+    assert "EVT_MENU_HIGHLIGHT" in source
+    assert "GetMenuItem" in source
+    assert "self._announce(label, speak=True)" in source
 
 
 def test_native_world_surface_hides_web_chrome_but_keeps_navigation():

@@ -26,20 +26,18 @@ def test_native_world_exposes_application_role_and_bridges_arrows() -> None:
     assert 'navigation_query.append(("native_client", __version__))' in source
 
 
-def test_windows_world_movement_falls_back_when_global_hotkeys_are_unavailable() -> None:
+def test_windows_world_movement_never_falls_back_to_global_hooks() -> None:
     source = APP_SOURCE.read_text(encoding="utf-8")
 
-    assert "WindowsWorldKeyHook" in source
-    assert "using foreground keyboard hook" in source
-    assert "self.world_key_hook = WindowsWorldKeyHook(self._dispatch_world_arrow)" in source
-    assert "self.world_key_hook.close()" in source
+    assert "RegisterHotKey" not in source
+    assert "WindowsWorldKeyHook" not in source
+    assert "WH_KEYBOARD_LL" not in source
+    assert "window.chatGridNativeKey" in source
 
 
-def test_windows_hook_is_foreground_only_and_preserves_modified_arrows() -> None:
+def test_legacy_windows_hook_module_is_fail_closed() -> None:
     source = HOOK_SOURCE.read_text(encoding="utf-8")
 
-    assert "WH_KEYBOARD_LL" in source
-    assert "_is_foreground_process()" in source
-    assert "VK_CONTROL" in source
-    assert "VK_MENU" in source
-    assert "self.on_arrow" in source
+    assert "Global Indiginous keyboard hooks are disabled for safety" in source
+    assert "SetWindowsHookExW" not in source
+    assert "WH_KEYBOARD_LL" not in source

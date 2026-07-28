@@ -1,4 +1,4 @@
-# Endiginous R515 auth/world-load receipt
+# Indiginous R515 auth/world-load receipt
 
 Date: 2026-07-21 CDT
 
@@ -16,10 +16,10 @@ Date: 2026-07-21 CDT
 - Client lint passed.
 - Client tests passed: 25 tests in 6 files.
 - Clean Vite production build passed.
-- Published `/endiginous/` reports R515.
-- Published HTML references `/endiginous/assets/index-DEZ1zV6t.js` and
-  `/endiginous/assets/index-CHvDw-Mp.css`; both returned HTTP 200.
-- Public `/endiginous/ws` returned `101 Switching Protocols` and the server
+- Published `/indiginous/` reports R515.
+- Published HTML references `/indiginous/assets/index-DEZ1zV6t.js` and
+  `/indiginous/assets/index-CHvDw-Mp.css`; both returned HTTP 200.
+- Public `/indiginous/ws` returned `101 Switching Protocols` and the server
   advertised expected client revision R515.
 - Public WebSocket auth challenge identified the unauthenticated state rather
   than a missing or broken world endpoint.
@@ -28,7 +28,7 @@ Date: 2026-07-21 CDT
 
 Pre-publish copy:
 
-`/home/tappedin/.openclaw/workspace/projects/chat_grid/recovery/endiginous-r515-20260721-162251/`
+`/home/tappedin/.openclaw/workspace/projects/chat_grid/recovery/indiginous-r515-20260721-162251/`
 
 ## Remaining verification
 

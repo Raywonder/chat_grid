@@ -44,6 +44,8 @@ export const welcomeMessageSchema = z.object({
     seatedItemId: z.string().nullable().optional(),
     seatedOffset: z.number().optional(),
     handHeldById: z.string().nullable().optional(),
+    gender: z.string().optional(),
+    wornClothing: z.array(z.string()).optional(),
   }),
   users: z.array(
     z.object({
@@ -57,6 +59,8 @@ export const welcomeMessageSchema = z.object({
       seatedItemId: z.string().nullable().optional(),
       seatedOffset: z.number().optional(),
       handHeldById: z.string().nullable().optional(),
+      gender: z.string().optional(),
+      wornClothing: z.array(z.string()).optional(),
     }),
   ),
   items: z.array(itemSchema).optional(),
@@ -81,6 +85,8 @@ export const welcomeMessageSchema = z.object({
             spawnY: z.number().int(),
             ambienceKey: z.string().optional(),
             ambienceName: z.string().optional(),
+            roomLayout: z.string().optional(),
+            footstepSurface: z.string().optional(),
           }),
         )
         .optional(),
@@ -255,6 +261,13 @@ export const updatePositionSchema = z.object({
   handHeldById: z.string().nullable().optional(),
 });
 
+export const updateAvatarSchema = z.object({
+  type: z.literal('update_avatar'),
+  id: z.string(),
+  gender: z.string().optional(),
+  wornClothing: z.array(z.string()).optional(),
+});
+
 export const locationChangedSchema = z.object({
   type: z.literal('location_changed'),
   id: z.string(),
@@ -264,6 +277,10 @@ export const locationChangedSchema = z.object({
   locationName: z.string(),
   x: z.number().int(),
   y: z.number().int(),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
+  gender: z.string().optional(),
+  wornClothing: z.array(z.string()).optional(),
 });
 
 export const teleportCompleteSchema = z.object({
@@ -561,6 +578,7 @@ export const adminAmbienceCatalogSchema = z.object({
   sounds: z.array(z.object({
     id: z.string(), label: z.string(), category: z.string(), url: z.string(), sourceFilename: z.string(),
     durationSeconds: z.number(), loopStartSeconds: z.number(), loopEndSeconds: z.number(), seamCrossfadeSeconds: z.number(),
+    kind: z.enum(['loop', 'one_shot']).default('loop'),
   })),
 });
 
@@ -579,6 +597,7 @@ export const adminActionResultSchema = z.object({
     'notifications_mark_read',
     'blindsoftware_admin_sync',
     'location_ambience_set',
+    'ambience_sound_upload',
   ]),
   message: z.string(),
 });
@@ -608,6 +627,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   welcomeMessageSchema,
   signalMessageSchema,
   updatePositionSchema,
+  updateAvatarSchema,
   locationChangedSchema,
   teleportCompleteSchema,
   updateNicknameSchema,
@@ -666,6 +686,9 @@ export type OutgoingMessage =
   | { type: 'admin_blindsoftware_sync' }
   | { type: 'admin_ambience_catalog' }
   | { type: 'admin_location_ambience_set'; locationId: string; soundId: string }
+  | { type: 'admin_ambience_upload_begin'; uploadId: string; filename: string; contentType: string; kind: 'loop' | 'one_shot'; totalBytes: number }
+  | { type: 'admin_ambience_upload_chunk'; uploadId: string; index: number; data: string }
+  | { type: 'admin_ambience_upload_complete'; uploadId: string; sha256: string }
   | { type: 'admin_user_set_role'; username: string; role: string }
   | { type: 'admin_user_ban'; username: string }
   | { type: 'admin_user_unban'; username: string }
@@ -776,4 +799,6 @@ export type RemoteUser = {
   locationId?: string;
   x: number;
   y: number;
+  gender?: string;
+  wornClothing?: string[];
 };

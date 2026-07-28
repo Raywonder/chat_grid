@@ -33,7 +33,7 @@ class BrowserAuthFlow:
         self.callback_url = f"http://127.0.0.1:{port}{CALLBACK_PATH}"
         self.authorization_url = self.server_origin + "/?" + urlencode(
             {
-                "route": "endiginous_client_auth_start",
+                "route": "indiginous_client_auth_start",
                 "callback": self.callback_url,
                 "state": self.state,
             }
@@ -56,10 +56,10 @@ class BrowserAuthFlow:
                 )
                 if valid:
                     flow.assertion = assertion
-                    self._reply(200, "Endiginous sign-in complete", "Return to Endiginous. This browser tab can be closed.")
+                    self._reply(200, "Indiginous sign-in complete", "Return to Indiginous. This browser tab can be closed.")
                 else:
-                    flow.error = "The browser returned an invalid or expired Endiginous sign-in response."
-                    self._reply(400, "Endiginous sign-in failed", flow.error)
+                    flow.error = "The browser returned an invalid or expired Indiginous sign-in response."
+                    self._reply(400, "Indiginous sign-in failed", flow.error)
 
             def _reply(self, status: int, title: str, message: str) -> None:
                 body = (
@@ -93,7 +93,7 @@ class BrowserAuthFlow:
                 if self.assertion:
                     on_success(self.grid_url, self.assertion)
                 else:
-                    on_error(self.error or "Browser sign-in timed out. Try again from Endiginous.")
+                    on_error(self.error or "Browser sign-in timed out. Try again from Indiginous.")
             finally:
                 self._server.server_close()
 

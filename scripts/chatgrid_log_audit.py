@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize Endiginous runtime and web log errors for release triage."""
+"""Summarize Indiginous runtime and web log errors for release triage."""
 
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def bucket_path(path: str) -> str:
 
 
 def summarize_access(path: Path, lines: int) -> list[str]:
-    """Summarize recent Endiginous non-2xx/3xx access log entries."""
+    """Summarize recent Indiginous non-2xx/3xx access log entries."""
     statuses: collections.Counter[str] = collections.Counter()
     endpoints: collections.Counter[tuple[str, str]] = collections.Counter()
     examples: dict[tuple[str, str], str] = {}
@@ -65,7 +65,7 @@ def summarize_access(path: Path, lines: int) -> list[str]:
         if not match:
             continue
         request_path = match.group("path")
-        if not request_path.startswith(("/endiginous", "/chatgrid")):
+        if not request_path.startswith(("/indiginous", "/chatgrid")):
             continue
         status = match.group("status")
         if int(status) < 400:
@@ -96,11 +96,11 @@ def summarize_access(path: Path, lines: int) -> list[str]:
 
 
 def summarize_error_log(path: Path, lines: int) -> list[str]:
-    """Summarize recent nginx errors mentioning Endiginous paths."""
+    """Summarize recent nginx errors mentioning Indiginous paths."""
     buckets: collections.Counter[str] = collections.Counter()
     examples: dict[str, str] = {}
     for line in tail_lines(path, lines):
-        if "/endiginous" not in line and "/chatgrid" not in line:
+        if "/indiginous" not in line and "/chatgrid" not in line:
             continue
         normalized = re.sub(r"client: [^,]+", "client: <redacted>", line)
         normalized = re.sub(r'upstream: "[^"]+"', 'upstream: "<redacted>"', normalized)

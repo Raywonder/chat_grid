@@ -40,6 +40,7 @@ type AdminAmbienceLocation = { id: string; name: string; currentSoundId: string;
 type AdminAmbienceSound = {
   id: string; label: string; category: string; url: string; sourceFilename: string;
   durationSeconds: number; loopStartSeconds: number; loopEndSeconds: number; seamCrossfadeSeconds: number;
+  kind?: 'loop' | 'one_shot';
 };
 
 export type AdminPendingUserMutation =
@@ -63,6 +64,7 @@ type AdminControllerDeps = {
   sfxUiCancel: () => void;
   applyTextInputEdit: (code: string, key: string, maxLength: number, ctrlKey?: boolean, allowReplaceOnNextType?: boolean) => void;
   setReplaceTextOnNextType: (value: boolean) => void;
+  uploadAmbienceSound: (kind: 'loop' | 'one_shot') => void;
 };
 
 /**
@@ -413,6 +415,12 @@ export function createAdminController(deps: AdminControllerDeps): {
       adminPendingAmbience = null;
       deps.updateStatus(message.message);
       message.ok ? deps.sfxUiBlip() : deps.sfxUiCancel();
+      return;
+    }
+    if (message.action === 'ambience_sound_upload') {
+      deps.updateStatus(message.message);
+      message.ok ? deps.signalingSend({ type: 'admin_ambience_catalog' }) : deps.sfxUiCancel();
+      if (message.ok) deps.sfxUiBlip();
       return;
     }
     if (message.action === 'notifications_mark_read') {
@@ -934,6 +942,7 @@ export function createAdminController(deps: AdminControllerDeps): {
       const currentIndex = adminAmbienceSounds.findIndex((entry) => entry.id === location.currentSoundId);
       adminAmbienceSoundIndex = currentIndex >= 0 ? currentIndex : 0;
       deps.state.mode = 'adminAmbienceSoundList';
+      deps.updateStatus(`Ambience sounds. Press L to upload a loop or O to upload a one-shot sound. Press Space for details.`);
       if (adminAmbienceSounds[adminAmbienceSoundIndex]) {
         deps.announceMenuEntry(`Ambience for ${location.name}`, adminAmbienceSounds[adminAmbienceSoundIndex].label);
       } else deps.updateStatus('No ambience sounds available.');
@@ -943,6 +952,14 @@ export function createAdminController(deps: AdminControllerDeps): {
   }
 
   function handleAdminAmbienceSoundListModeInput(code: string, key: string): void {
+    if (code === 'KeyL' && key.toLowerCase() === 'l') {
+      deps.uploadAmbienceSound('loop');
+      return;
+    }
+    if (code === 'KeyO' && key.toLowerCase() === 'o') {
+      deps.uploadAmbienceSound('one_shot');
+      return;
+    }
     const control = handleListControlKey(code, key, adminAmbienceSounds, adminAmbienceSoundIndex, (entry) => entry.label);
     if (control.type === 'move') {
       adminAmbienceSoundIndex = control.index;
@@ -952,7 +969,7 @@ export function createAdminController(deps: AdminControllerDeps): {
     const sound = adminAmbienceSounds[adminAmbienceSoundIndex];
     const location = adminAmbienceLocations[adminAmbienceLocationIndex];
     if (code === 'Space' && sound) {
-      deps.updateStatus(`${sound.label}. Source ${sound.sourceFilename}. ${sound.durationSeconds.toFixed(1)} seconds, seamless ${sound.seamCrossfadeSeconds.toFixed(1)} second boundary crossfade, loop ${sound.loopStartSeconds.toFixed(1)} to ${sound.loopEndSeconds.toFixed(1)} seconds.`);
+      deps.updateStatus(`${sound.label}. ${sound.kind === 'one_shot' ? 'One-shot sound.' : 'Loop sound.'} Source ${sound.sourceFilename}. ${sound.durationSeconds.toFixed(1)} seconds, seamless ${sound.seamCrossfadeSeconds.toFixed(1)} second boundary crossfade, loop ${sound.loopStartSeconds.toFixed(1)} to ${sound.loopEndSeconds.toFixed(1)} seconds.`);
       deps.sfxUiBlip(); return;
     }
     if (control.type === 'select' && sound && location) {

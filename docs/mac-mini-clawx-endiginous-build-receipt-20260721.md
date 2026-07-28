@@ -1,4 +1,4 @@
-# Intel Mac mini ClawX and Endiginous build receipt
+# Intel Mac mini ClawX and Indiginous build receipt
 
 Date: 2026-07-21
 Host: `admin-s-mac-mini.tailnet.raywonderis.me` (`x86_64`, macOS 15.7.7)
@@ -25,22 +25,22 @@ Artifacts and SHA-256:
 - `release/ClawX-0.1.24-mac-arm64.dmg` — `58bd47fce64ad45c91c54269374f46037dd4ff2ca70299db28780fb90bc2b856`
 - `release/ClawX-0.1.24-mac-arm64.zip` — `7e70d9b4453aabe13bfa802a96e0ed9194b7861a8b908535937d3252404fcc0b`
 
-## Endiginous
+## Indiginous
 
 This is a separate build from ClawX; it is not included in the ClawX application.
 
-Source staged on the Mac at: `/Users/admin/git/Raywonder/Endiginous/desktop/native`
+Source staged on the Mac at: `/Users/admin/git/Raywonder/Indiginous/desktop/native`
 Build command: `PYTHON_BIN=python3 ./macos/scripts/build-macos.sh`
 
 - The first test run found one platform-specific updater test hardcoding a Windows `.exe` name. The smallest correction made `tests/test_updater.py` choose `.zip` on macOS and `.exe` on Windows.
 - After that correction, all 34 tests passed.
-- PyInstaller produced the x86_64 `dist/Endiginous.app`.
+- PyInstaller produced the x86_64 `dist/Indiginous.app`.
 - The app launched successfully and was closed after verification.
 - The build generated the unsigned internal DMG and ZIP; no public feed or release metadata was changed.
 
 Artifacts and SHA-256:
 
-- `/Users/admin/git/Raywonder/Endiginous/desktop/native/macos/release/Endiginous-0.4.3-macOS.zip` — `5b53e8cbc4319624d18302778c616f90bb5fab41ec54e29770ba30f9a64e1bef`
-- `/Users/admin/git/Raywonder/Endiginous/desktop/native/macos/release/Endiginous-0.4.3.dmg` — `74d95d89d03e42dff89c3d58f2a196e0472382a8618adc99b9114523551e7ffe`
+- `/Users/admin/git/Raywonder/Indiginous/desktop/native/macos/release/Indiginous-0.4.3-macOS.zip` — `5b53e8cbc4319624d18302778c616f90bb5fab41ec54e29770ba30f9a64e1bef`
+- `/Users/admin/git/Raywonder/Indiginous/desktop/native/macos/release/Indiginous-0.4.3.dmg` — `74d95d89d03e42dff89c3d58f2a196e0472382a8618adc99b9114523551e7ffe`
 
 Both launched test applications were closed, and no build/test app processes were left running.

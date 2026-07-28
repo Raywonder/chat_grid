@@ -1,6 +1,11 @@
 from pydantic import ValidationError, TypeAdapter
 
-from app.models import AgentVoicePacket, ClientPacket, SpeakPacket
+from app.models import (
+    AdminAmbienceUploadBeginPacket,
+    AgentVoicePacket,
+    ClientPacket,
+    SpeakPacket,
+)
 
 
 def test_update_position_validates() -> None:
@@ -48,6 +53,25 @@ def test_admin_user_delete_packet_validates() -> None:
     adapter: TypeAdapter[ClientPacket] = TypeAdapter(ClientPacket)
     packet = adapter.validate_python({"type": "admin_user_delete", "username": "alpha"})
     assert packet.type == "admin_user_delete"
+
+
+def test_admin_ambience_upload_accepts_one_gib_and_five_gib_limits() -> None:
+    one_gib = AdminAmbienceUploadBeginPacket(
+        type="admin_ambience_upload_begin",
+        uploadId="upload-1",
+        filename="room.ogg",
+        contentType="audio/ogg",
+        totalBytes=1 * 1024 * 1024 * 1024,
+    )
+    five_gib = AdminAmbienceUploadBeginPacket(
+        type="admin_ambience_upload_begin",
+        uploadId="upload-2",
+        filename="room.ogg",
+        contentType="audio/ogg",
+        totalBytes=5 * 1024 * 1024 * 1024,
+    )
+    assert one_gib.totalBytes == 1 * 1024 * 1024 * 1024
+    assert five_gib.totalBytes == 5 * 1024 * 1024 * 1024
 
 
 def test_speak_packet_validates() -> None:

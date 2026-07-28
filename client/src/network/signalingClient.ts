@@ -67,7 +67,7 @@ export class SignalingClient {
       // can queue retryable messages instead of the global keyboard handler
       // turning it into a navigation-recovery failure.
       this.status('Connection interrupted; message queued for reconnect.');
-      console.warn('Endiginous signaling send deferred after socket transition.', error);
+      console.warn('Indiginous signaling send deferred after socket transition.', error);
       return false;
     }
   }

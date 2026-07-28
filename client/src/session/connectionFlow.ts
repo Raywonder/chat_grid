@@ -8,6 +8,7 @@ type DomRefs = {
   focusGridButton: HTMLButtonElement;
   canvas: HTMLCanvasElement;
   instructions: HTMLDivElement;
+  movementControls: HTMLDivElement;
   audioInputSelect: HTMLSelectElement;
 };
 
@@ -103,6 +104,8 @@ export function runDisconnectFlow(deps: ConnectFlowDeps): void {
   deps.dom.focusGridButton.classList.add('hidden');
   deps.dom.canvas.classList.add('hidden');
   deps.dom.instructions.classList.add('hidden');
+  deps.dom.movementControls.classList.add('hidden');
+  deps.dom.movementControls.hidden = true;
   document.getElementById('joinGuide')?.classList.remove('hidden');
   const dashboard = document.getElementById('gridDashboard');
   dashboard?.classList.add('hidden');

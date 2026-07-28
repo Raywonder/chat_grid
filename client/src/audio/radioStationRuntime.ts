@@ -286,8 +286,6 @@ type ListenerPosition = {
   locationId?: string;
 };
 
-const SUBSCRIBE_PRELOAD_SQUARES = 5;
-const UNSUBSCRIBE_HYSTERESIS_SQUARES = 8;
 const STREAM_PLAY_RETRY_MS = 5000;
 const STREAM_PLAY_MAX_RETRIES = 6;
 const STREAM_STALLED_READY_STATE = HTMLMediaElement.HAVE_CURRENT_DATA;
@@ -1163,20 +1161,20 @@ export class RadioStationRuntime {
     currentlyActive: boolean,
     items: Iterable<WorldItem>,
   ): boolean {
-    if (!effective.streamUrl || !effective.enabled || listenerPositions.length === 0) {
+    if (!effective.streamUrl || !effective.enabled) {
       return false;
     }
-    const spatialConfig = this.getSpatialConfig(item);
-    const baseRange = Math.max(1, spatialConfig.range || HEARING_RADIUS);
-    const audibleRange = baseRange * 2.2;
-    const threshold = audibleRange + (currentlyActive ? UNSUBSCRIBE_HYSTERESIS_SQUARES : SUBSCRIBE_PRELOAD_SQUARES);
-    return listenerPositions.some((listenerPosition) => {
-      if (this.isAdjacentRoomTv(item, listenerPosition, items)) return true;
-      if (item.locationId && listenerPosition.locationId && item.locationId !== listenerPosition.locationId) {
-        return false;
-      }
-      return Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold;
-    });
+    // Media playback is shared world state. Keep the source alive even when
+    // the listener leaves the room or walks far away; updateSpatialAudio()
+    // attenuates it to silence/far-field level without resetting the stream.
+    // This preserves continuous radio/TV playback when the listener returns.
+    // `currentlyActive`, listener positions, and the preload constants remain
+    // part of this runtime's scheduling contract, but no longer gate playback
+    // lifetime for enabled shared media.
+    void currentlyActive;
+    void listenerPositions;
+    void items;
+    return true;
   }
 
   /** TVs can carry through a connected doorway; ordinary item layers cannot. */

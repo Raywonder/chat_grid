@@ -1,6 +1,6 @@
-# Endiginous Windows Native
+# Indiginous Windows Native
 
-Official accessible wxPython Windows client. The native frame hosts the shared Endiginous web runtime in the installed Edge WebView2 engine so browser, Windows, and future platforms keep one world protocol and audio implementation.
+Official accessible wxPython Windows client. The native frame hosts the shared Indiginous web runtime in the installed Edge WebView2 engine so browser, Windows, and future platforms keep one world protocol and audio implementation.
 
 - Persistent WebView2 profile retains the blind.software sign-in securely.
 - Automatic connect after the retained session is restored.
@@ -12,7 +12,7 @@ Official accessible wxPython Windows client. The native frame hosts the shared E
 - Optional per-user Windows startup and minimized startup.
 - The full current web/sound asset tree is packaged from `../windows/web` for fallback. Normal live operation uses WebView2 HTTP caching, which downloads only resources the current world requests.
 - Background update checks use the tCast manifest pattern, require HTTPS and a valid SHA-256, download atomically, install silently after exit, and relaunch only after successful setup.
-- The Windows installer contains only Endiginous. It does not install,
+- The Windows installer contains only Indiginous. It does not install,
   configure, or bundle OpenClaw or another agent. Users may install and manage
   their own agents separately through their own approved integrations.
 

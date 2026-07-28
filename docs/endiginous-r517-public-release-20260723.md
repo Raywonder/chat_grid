@@ -1,9 +1,9 @@
-# Endiginous R517 public release — 2026-07-23
+# Indiginous R517 public release — 2026-07-23
 
 ## Change
 
-Published the verified Endiginous web client movement repair from commit
-`ec2f10b` (`Repair Endiginous movement after stale UI focus`). Hidden or stale
+Published the verified Indiginous web client movement repair from commit
+`ec2f10b` (`Repair Indiginous movement after stale UI focus`). Hidden or stale
 Connect/focus controls no longer prevent world-key recovery to the canvas.
 
 ## Build and source proof
@@ -12,7 +12,7 @@ Connect/focus controls no longer prevent world-key recovery to the canvas.
 - Client lint and production build passed.
 - Public client revision: `R517`.
 - Public release version: `0.4.4`.
-- Recovery copy: `/home/tappedin/OpenCloud/Agent Reports/Endiginous Backups/endiginous-before-r517-20260723`.
+- Recovery copy: `/home/tappedin/OpenCloud/Agent Reports/Indiginous Backups/indiginous-before-r517-20260723`.
 
 ## User-facing proof
 
@@ -20,11 +20,11 @@ Connect/focus controls no longer prevent world-key recovery to the canvas.
   version, branding, help, and changelog resources.
 - `https://blind.software/chatgrid/version.js` reports `R517`.
 - `https://blind.software/chatgrid/client_branding.json` identifies the
-  product as `Endiginous`.
+  product as `Indiginous`.
 - A real WebSocket connection to
   `wss://blind.software/chatgrid/ws` opened successfully and returned the
   authentication challenge with `expectedClientRevision: R517` and
-  `gridName: Endiginous`.
+  `gridName: Indiginous`.
 - `chat-grid.service` and `chat-grid-companion.service` are active.
 - Server runtime item data parsed successfully with 210 entries.
 

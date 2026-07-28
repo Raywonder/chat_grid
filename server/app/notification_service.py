@@ -1,4 +1,4 @@
-"""Runtime notification storage for Endiginous account/admin events."""
+"""Runtime notification storage for Indiginous account/admin events."""
 
 from __future__ import annotations
 

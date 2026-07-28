@@ -8,16 +8,16 @@ import os
 from pathlib import Path
 
 
-APP_NAME = "Endiginous"
+APP_NAME = "Indiginous"
 APP_ID = "fm.tappedin.chatgrid.wxpython"
-DEFAULT_URL = "https://blind.software/endiginous/?desktop=1"
-DEFAULT_UPDATE_URL = "https://blind.software/endiginous/updates/latest-windows.json"
+DEFAULT_URL = "https://blind.software/indiginous/?native_client=1"
+DEFAULT_UPDATE_URL = "https://blind.software/downloads/public/7Kp3mN8vQ2xL5rT9cW6yH1/latest-windows.json"
 
 
 def app_data_dir() -> Path:
     """Return the per-user application data directory."""
     root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-    return root / "TappedIn" / "Endiginous"
+    return root / "TappedIn" / "Indiginous"
 
 
 @dataclass(slots=True)

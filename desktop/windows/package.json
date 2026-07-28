@@ -1,8 +1,8 @@
 {
-  "name": "endiginous-windows",
-  "version": "0.4.4",
+  "name": "indiginous-windows",
+  "version": "0.4.7",
   "private": true,
-  "description": "Windows desktop shell for Endiginous.",
+  "description": "Windows desktop shell for Indiginous.",
   "main": "src/main.cjs",
   "author": "Raywonder / TappedIn",
   "license": "MIT",
@@ -21,7 +21,7 @@
   },
   "build": {
     "appId": "fm.tappedin.chatgrid",
-    "productName": "Endiginous",
+    "productName": "Indiginous",
     "directories": {
       "output": "release"
     },

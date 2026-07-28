@@ -18,7 +18,7 @@ ipcRenderer.on('chat-grid-focus', () => {
       canvas.focus();
     }
   } catch (error) {
-    console.error('Endiginous desktop focus bridge recovered after an error.', error);
+    console.error('Indiginous desktop focus bridge recovered after an error.', error);
   }
 });
 
@@ -30,6 +30,6 @@ ipcRenderer.on('chat-grid-native-key', (_event, input) => {
       shiftKey: Boolean(input.shiftKey),
     });
   } catch (error) {
-    console.error('Endiginous desktop key bridge recovered after an error.', error);
+    console.error('Indiginous desktop key bridge recovered after an error.', error);
   }
 });

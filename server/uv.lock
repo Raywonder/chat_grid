@@ -549,7 +549,7 @@ wheels = [
 ]
 
 [[package]]
-name = "endiginous-server"
+name = "indiginous-server"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

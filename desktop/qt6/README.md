@@ -1,7 +1,7 @@
-# Endiginous native Qt 6 foundation
+# Indiginous native Qt 6 foundation
 
 This directory is an isolated, initial Qt 6 Widgets foundation for a native
-Endiginous client. It is intentionally disjoint from the existing browser,
+Indiginous client. It is intentionally disjoint from the existing browser,
 wxPython, and Windows client trees. It contains no WebView, browser widget,
 HTML UI, or deployment integration.
 

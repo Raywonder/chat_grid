@@ -1,3 +1,3 @@
-"""Official Endiginous Windows native shell."""
+"""Official Indiginous Windows native shell."""
 
-__version__ = "0.4.5"
+__version__ = "0.4.13"

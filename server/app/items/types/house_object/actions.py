@@ -94,6 +94,19 @@ def use_item(
             self_message=f"{item.title}, extension {extension}. Phone audio is {mode}.",
             others_message="",
         )
+    if object_kind == "computer":
+        platform = str(item.params.get("computerPlatform") or "desktop").strip()
+        operating_system = str(item.params.get("computerOs") or "Windows").strip()
+        power_state = str(item.params.get("computerPowerState") or "sleeping").strip().lower()
+        profile = str(item.params.get("computerProfile") or "").strip()
+        profile_text = f" Profile: {profile}." if profile else ""
+        return ItemUseResult(
+            self_message=(
+                f"{item.title} is a {platform} computer running {operating_system}. "
+                f"Power state: {power_state}.{profile_text}"
+            ).strip(),
+            others_message="",
+        )
     readable_text = str(item.params.get("readableText", "") or "").strip()
     if readable_text:
         verb = "open and read" if object_kind == "envelope" else "read"
@@ -136,6 +149,15 @@ def use_item(
                 if next_enabled
                 else 0,
             },
+        )
+    if object_kind == "computer":
+        current_state = str(item.params.get("computerPowerState") or "sleeping").strip().lower()
+        next_state = {"off": "on", "sleeping": "on", "on": "sleeping"}[current_state]
+        verb = "wake" if next_state == "on" else "put to sleep"
+        return ItemUseResult(
+            self_message=f"You {verb} {item.title}.",
+            others_message=f"{_nickname} {verb}s {item.title}.",
+            updated_params={**item.params, "computerPowerState": next_state},
         )
     if object_kind == "keys" and key_for:
         description = f"{description} Opens: {key_for}.".strip()
@@ -199,6 +221,15 @@ def secondary_use_item(
         else:
             message = "No TV now playing data."
         return ItemUseResult(self_message=message, others_message="")
+    if object_kind == "computer":
+        current_state = str(item.params.get("computerPowerState") or "sleeping").strip().lower()
+        next_state = {"off": "on", "sleeping": "on", "on": "sleeping"}[current_state]
+        verb = "wake" if next_state == "on" else "put to sleep"
+        return ItemUseResult(
+            self_message=f"You {verb} {item.title}.",
+            others_message=f"{nickname} {verb}s {item.title}.",
+            updated_params={**item.params, "computerPowerState": next_state},
+        )
     if object_kind == "window":
         window_state = str(item.params.get("windowState", "closed")).strip().lower()
         next_state = "closed" if window_state == "open" else "open"

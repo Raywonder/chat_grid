@@ -183,6 +183,10 @@ def test_builtin_items_seed_without_replacing_existing_station(tmp_path: Path) -
     assert "seed-city-acb-media-1" not in service.items
     assert service.items["seed-arcade-moonstep-runner"].locationId == "arcade"
     assert service.items["seed-arcade-moonstep-runner"].params["serviceKind"] == "game"
+    shaftfall = service.items["seed-arcade-shaftfall"]
+    assert shaftfall.locationId == "arcade"
+    assert shaftfall.params["serviceKind"] == "game"
+    assert shaftfall.params["url"] == "https://elevator-echoes-quest.lovable.app/"
     assert service.items["seed-town-ecrypto-bank"].type == "ecrypto_bank"
     assert service.items["seed-town-ecrypto-bank"].locationId == "town"
     assert (
@@ -215,6 +219,23 @@ def test_builtin_items_seed_without_replacing_existing_station(tmp_path: Path) -
     assert service.items["seed-city-portal-arcade"].locationId == "city"
     assert service.items["seed-city-portal-arcade"].params["serviceKind"] == "portal"
     assert service.items["seed-city-portal-arcade"].params["targetLocation"] == "arcade"
+    shared_cars = [
+        service.items[item_id]
+        for item_id in (
+            "seed-city-shared-car-blue",
+            "seed-city-shared-car-red",
+            "seed-city-shared-suv",
+        )
+    ]
+    assert all(item.type == "furniture" for item in shared_cars)
+    assert {item.params["furnitureKind"] for item in shared_cars} == {"car", "suv"}
+    assert all(item.params["seatingCapacity"] == 1 for item in shared_cars)
+    assert all(item.params["postureMode"] == "sit" for item in shared_cars)
+    assert all(item.params["vehicleControls"].startswith("Arrow keys") for item in shared_cars)
+    assert all(item.params["vehicleStartSound"] == "sounds/vehicles/vehicle-start.ogg" for item in shared_cars)
+    assert all(item.params["vehicleStopSound"] == "sounds/vehicles/vehicle-stop.ogg" for item in shared_cars)
+    assert service.items["seed-city-shared-car-blue"].params["engineIdleSound"] == "sounds/vehicles/car-engine-idle.ogg"
+    assert service.items["seed-city-shared-suv"].params["engineIdleSound"] == "sounds/vehicles/suv-engine-idle.ogg"
     assert (
         service.items["seed-city-portal-arcade"].params["emitSound"]
         == "sounds/teleport_pad_loop.ogg"

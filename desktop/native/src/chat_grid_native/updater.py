@@ -40,7 +40,7 @@ class UpdateManifest:
     def from_dict(cls, data: dict[str, Any]) -> "UpdateManifest":
         """Resolve both flat and tCast platform-nested manifest forms."""
         platform = data.get("platforms", {}).get(PLATFORM_KEY, {})
-        default_name = "Endiginous-macOS.zip" if sys.platform == "darwin" else "EndiginousSetup.exe"
+        default_name = "Indiginous-macOS.zip" if sys.platform == "darwin" else "Indiginous_Setup.exe"
         return cls(
             version=str(data.get("version", "")).strip(),
             download_url=str(data.get("downloadUrl") or data.get("download_url") or platform.get("downloadUrl") or platform.get("url") or "").strip(),
@@ -60,11 +60,9 @@ class UpdateManifest:
         expected = ".zip" if sys.platform == "darwin" else ".exe"
         if Path(self.file_name).suffix.lower() != expected:
             raise ValueError(f"Update package must be a {expected} file.")
-        published_name = Path(urlparse(self.download_url).path).name
-        if published_name != self.file_name:
-            raise ValueError("Update URL filename does not match the manifest filename.")
-        if self.version not in self.file_name:
-            raise ValueError("Update filename does not identify the manifest version.")
+        stable_name = "Indiginous-macOS.zip" if sys.platform == "darwin" else "Indiginous_Setup.exe"
+        if self.file_name != stable_name:
+            raise ValueError(f"Update must use the stable {stable_name} filename.")
 
 
 class UpdateService:
@@ -137,16 +135,16 @@ class UpdateService:
                 [
                     "/bin/sh", "-c",
                     'while kill -0 "$1" 2>/dev/null; do sleep 1; done; '
-                    'tmp=$(mktemp -d); backup="$3/.Endiginous.app.previous"; '
+                    'tmp=$(mktemp -d); backup="$3/.Indiginous.app.previous"; '
                     'trap "/bin/rm -rf \\\"$tmp\\\"" EXIT; '
                     '/usr/bin/ditto -x -k "$2" "$tmp" || exit 3; '
-                    '[ -d "$tmp/Endiginous.app" ] || exit 4; '
-                    '/bin/rm -rf "$3/.Endiginous.app.previous"; '
-                    'if [ -e "$3/Endiginous.app" ]; then /bin/mv "$3/Endiginous.app" "$backup" || exit 5; fi; '
-                    'if ! /usr/bin/ditto "$tmp/Endiginous.app" "$3/Endiginous.app"; then '
-                    '  /bin/rm -rf "$3/Endiginous.app"; '
-                    '  [ -e "$backup" ] && /bin/mv "$backup" "$3/Endiginous.app"; exit 6; '
-                    'fi; /bin/rm -rf "$backup"; /usr/bin/open "$3/Endiginous.app"',
+                    '[ -d "$tmp/Indiginous.app" ] || exit 4; '
+                    '/bin/rm -rf "$3/.Indiginous.app.previous"; '
+                    'if [ -e "$3/Indiginous.app" ]; then /bin/mv "$3/Indiginous.app" "$backup" || exit 5; fi; '
+                    'if ! /usr/bin/ditto "$tmp/Indiginous.app" "$3/Indiginous.app"; then '
+                    '  /bin/rm -rf "$3/Indiginous.app"; '
+                    '  [ -e "$backup" ] && /bin/mv "$backup" "$3/Indiginous.app"; exit 6; '
+                    'fi; /bin/rm -rf "$backup"; /usr/bin/open "$3/Indiginous.app"',
                     "chatgrid-update", str(os_getpid()), str(installer), str(destination),
                 ],
                 start_new_session=True,
@@ -158,7 +156,7 @@ class UpdateService:
             "param([int]$Pid,[string]$Installer,[string]$Arguments,[string]$App,[string]$InstallDirectory)\n"
             "$Log = Join-Path (Split-Path -Parent $Installer) 'install-update.log'\n"
             "function Write-UpdateLog([string]$Message){ Add-Content -LiteralPath $Log -Value ((Get-Date -Format o) + ' ' + $Message) }\n"
-            "$mutex = New-Object System.Threading.Mutex($false, 'EndiginousUpdateInstall')\n"
+            "$mutex = New-Object System.Threading.Mutex($false, 'IndiginousUpdateInstall')\n"
             "if(-not $mutex.WaitOne(0)){ exit 0 }\n"
             "try {\n"
             "  Write-UpdateLog \"handoff pid=$Pid installer=$Installer app=$App\"\n"

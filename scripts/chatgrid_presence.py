@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check, ensure, or move the durable Endiginous companion presence."""
+"""Check, ensure, or move the durable Indiginous companion presence."""
 
 from __future__ import annotations
 

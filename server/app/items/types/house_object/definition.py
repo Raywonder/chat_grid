@@ -48,6 +48,15 @@ EDITABLE_PROPERTIES: tuple[str, ...] = (
     "phoneAudioMode",
     "phoneContacts",
     "phonePbxRoutes",
+    "computerPlatform",
+    "computerOs",
+    "computerPowerState",
+    "computerProfile",
+    "journalFolder",
+    "journalIndex",
+    "letterIndex",
+    "roomId",
+    "roomRole",
 )
 CAPABILITIES: tuple[str, ...] = ("editable", "carryable", "deletable", "usable")
 USE_SOUND: str | None = None
@@ -86,11 +95,17 @@ OBJECT_KIND_OPTIONS: tuple[str, ...] = (
     "chair",
     "couch",
     "bed",
+    "wardrobe",
     "table",
     "counter",
     "shelf",
     "fridge",
     "sink",
+    "toilet",
+    "shower",
+    "mirror",
+    "towel_rack",
+    "soap_dispenser",
     "stove",
     "oven",
     "microwave",
@@ -99,6 +114,7 @@ OBJECT_KIND_OPTIONS: tuple[str, ...] = (
     "rug",
     "mailbox",
     "sign",
+    "computer",
 )
 MATERIAL_OPTIONS: tuple[str, ...] = (
     "ceramic",
@@ -124,6 +140,7 @@ PLACEMENT_OPTIONS: tuple[str, ...] = (
     "furniture",
     "appliance",
     "carried",
+    "desk",
 )
 CONDITION_OPTIONS: tuple[str, ...] = (
     "intact",
@@ -189,6 +206,15 @@ DEFAULT_PARAMS: dict = {
     "phoneAudioMode": "ear_left",
     "phoneContacts": [],
     "phonePbxRoutes": [],
+    "computerPlatform": "desktop",
+    "computerOs": "Windows",
+    "computerPowerState": "sleeping",
+    "computerProfile": "",
+    "journalFolder": False,
+    "journalIndex": [],
+    "letterIndex": [],
+    "roomId": "",
+    "roomRole": "",
 }
 PARAM_KEYS: tuple[str, ...] = (
     "objectKind",
@@ -245,6 +271,15 @@ PARAM_KEYS: tuple[str, ...] = (
     "phoneAudioMode",
     "phoneContacts",
     "phonePbxRoutes",
+    "computerPlatform",
+    "computerOs",
+    "computerPowerState",
+    "computerProfile",
+    "journalFolder",
+    "journalIndex",
+    "letterIndex",
+    "roomId",
+    "roomRole",
 )
 
 EFFECT_OPTIONS: tuple[str, ...] = (
@@ -404,6 +439,34 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "tooltip": "Configured server-side PBX route labels. Credentials never belong in item data.",
         "visibleWhen": {"objectKind": "phone"},
     },
+    "computerPlatform": {
+        "valueType": "list",
+        "label": "Computer platform",
+        "tooltip": "The physical computer form used by this personal computer.",
+        "options": ["desktop", "laptop", "workstation", "tablet"],
+        "visibleWhen": {"objectKind": "computer"},
+    },
+    "computerOs": {
+        "valueType": "text",
+        "label": "Computer operating system",
+        "tooltip": "The operating system spoken for this personal computer.",
+        "maxLength": 80,
+        "visibleWhen": {"objectKind": "computer"},
+    },
+    "computerPowerState": {
+        "valueType": "list",
+        "label": "Computer power state",
+        "tooltip": "Whether this personal computer is on, sleeping, or off.",
+        "options": ["on", "sleeping", "off"],
+        "visibleWhen": {"objectKind": "computer"},
+    },
+    "computerProfile": {
+        "valueType": "text",
+        "label": "Computer profile",
+        "tooltip": "Optional owner/profile name for this computer's individual settings.",
+        "maxLength": 80,
+        "visibleWhen": {"objectKind": "computer"},
+    },
     "streamUrl": {
         "valueType": "text",
         "label": "TV stream URL",
@@ -548,5 +611,17 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "label": "Looped sound",
         "tooltip": "Optional looped item sound such as a fridge hum, fan, or appliance tone.",
         "maxLength": 2048,
+    },
+    "roomId": {
+        "valueType": "text",
+        "label": "Assigned room",
+        "tooltip": "Server-assigned room location for a fixture or object belonging to a generated room.",
+        "maxLength": 128,
+    },
+    "roomRole": {
+        "valueType": "text",
+        "label": "Room role",
+        "tooltip": "The fixture or element's role inside its assigned room.",
+        "maxLength": 80,
     },
 }

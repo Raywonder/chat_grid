@@ -1,4 +1,4 @@
-"""Accessible wxPython shell around the shared Endiginous client."""
+"""Accessible wxPython shell around the shared Indiginous client."""
 
 from __future__ import annotations
 
@@ -23,11 +23,11 @@ from .config import APP_ID, APP_NAME, Settings, SettingsStore, app_data_dir
 from .deeplink import resolve_launch_url
 from .reconnect import ReconnectBackoff
 from .screen_reader import ScreenReaderSpeech
+from .single_instance import SingleInstanceActivation
 from .spatial_audio import spatial_audio_script
 from .startup import set_start_with_windows
 from .updater import UpdateService
 from .migration import migrate_legacy_state
-from .windows_keyboard import WindowsWorldKeyHook
 
 
 LOGGER = logging.getLogger(__name__)
@@ -41,16 +41,32 @@ class TrayIcon(wx.adv.TaskBarIcon):
         self.frame = frame
         icon = wx.Icon()
         icon.CopyFromBitmap(wx.ArtProvider.GetBitmap(wx.ART_INFORMATION, wx.ART_OTHER, (32, 32)))
-        self.SetIcon(icon, "Endiginous — connected in the background")
+        self.SetIcon(icon, "Indiginous — connected in the background")
         self.Bind(wx.adv.EVT_TASKBAR_LEFT_DCLICK, lambda _event: frame.restore_from_tray())
 
     def CreatePopupMenu(self) -> wx.Menu:
         menu = wx.Menu()
-        restore = menu.Append(wx.ID_ANY, "&Restore Endiginous")
+        restore = menu.Append(wx.ID_ANY, "&Restore Indiginous")
+        reconnect = menu.Append(wx.ID_REFRESH, "&Reconnect")
+        focus = menu.Append(wx.ID_ANY, "&Focus world")
         menu.AppendSeparator()
-        exit_item = menu.Append(wx.ID_EXIT, "E&xit Endiginous")
-        self.Bind(wx.EVT_MENU, lambda _event: self.frame.restore_from_tray(), restore)
-        self.Bind(wx.EVT_MENU, lambda _event: self.frame.exit_application(), exit_item)
+        app_settings = menu.Append(wx.ID_ANY, "&App settings...")
+        desktop_settings = menu.Append(wx.ID_PREFERENCES, "&Desktop settings...")
+        updates = menu.Append(wx.ID_ANY, "Check for &updates")
+        menu.AppendSeparator()
+        about = menu.Append(wx.ID_ABOUT, "&Credits and version")
+        menu.AppendSeparator()
+        exit_item = menu.Append(wx.ID_EXIT, "E&xit Indiginous")
+        # Bind on the transient menu so repeatedly opening the tray popup does
+        # not accumulate duplicate handlers on the persistent tray icon.
+        menu.Bind(wx.EVT_MENU, lambda _event: self.frame.restore_from_tray(), id=restore.GetId())
+        menu.Bind(wx.EVT_MENU, lambda _event: self.frame._reload(), id=reconnect.GetId())
+        menu.Bind(wx.EVT_MENU, lambda _event: self.frame._focus_world(), id=focus.GetId())
+        menu.Bind(wx.EVT_MENU, lambda _event: self.frame._show_app_settings(_event), id=app_settings.GetId())
+        menu.Bind(wx.EVT_MENU, lambda _event: self.frame._show_settings(_event), id=desktop_settings.GetId())
+        menu.Bind(wx.EVT_MENU, lambda _event: self.frame._check_updates_background(interactive=True), id=updates.GetId())
+        menu.Bind(wx.EVT_MENU, lambda _event: self.frame._show_about(_event), id=about.GetId())
+        menu.Bind(wx.EVT_MENU, lambda _event: self.frame.exit_application(), id=exit_item.GetId())
         return menu
 
 
@@ -58,12 +74,12 @@ class SettingsDialog(wx.Dialog):
     """Accessible desktop behavior settings."""
 
     def __init__(self, parent: wx.Window, settings: Settings) -> None:
-        super().__init__(parent, title="Endiginous desktop settings")
+        super().__init__(parent, title="Indiginous desktop settings")
         self.settings = settings
         panel = wx.Panel(self)
         layout = wx.BoxSizer(wx.VERTICAL)
 
-        self.startup = wx.CheckBox(panel, label="Start Endiginous when I sign in to this computer")
+        self.startup = wx.CheckBox(panel, label="Start Indiginous when I sign in to this computer")
         self.startup.SetValue(settings.start_with_windows)
         layout.Add(self.startup, 0, wx.ALL, 8)
         self.minimized = wx.CheckBox(panel, label="Start minimized when the computer starts")
@@ -174,7 +190,7 @@ class UpdateInstallCountdown(wx.Dialog):
     """Give the user a visible, cancellable pause before update installation."""
 
     def __init__(self, parent: wx.Window, version: str, seconds: int = 5) -> None:
-        super().__init__(parent, title="Endiginous update ready")
+        super().__init__(parent, title="Indiginous update ready")
         self.remaining = max(1, seconds)
         panel = wx.Panel(self)
         layout = wx.BoxSizer(wx.VERTICAL)
@@ -187,7 +203,7 @@ class UpdateInstallCountdown(wx.Dialog):
         outer = wx.BoxSizer(wx.VERTICAL)
         outer.Add(panel, 1, wx.EXPAND)
         self.SetSizerAndFit(outer)
-        self.message.SetLabel(f"Endiginous {version} will close and install the verified update in {self.remaining} seconds.")
+        self.message.SetLabel(f"Indiginous {version} will close and install the verified update in {self.remaining} seconds.")
         self.timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._tick, self.timer)
         self.Bind(wx.EVT_CHAR_HOOK, self._on_key)
@@ -200,7 +216,7 @@ class UpdateInstallCountdown(wx.Dialog):
             self.timer.Stop()
             self.EndModal(wx.ID_OK)
             return
-        self.message.SetLabel(f"Endiginous will close and install the verified update in {self.remaining} seconds.")
+        self.message.SetLabel(f"Indiginous will close and install the verified update in {self.remaining} seconds.")
 
     def _on_key(self, event: wx.KeyEvent) -> None:
         if event.GetKeyCode() == wx.WXK_ESCAPE:
@@ -224,10 +240,9 @@ class MainFrame(wx.Frame):
         self.tray_icon: TrayIcon | None = None
         self.force_exit = False
         self.screen_reader = ScreenReaderSpeech()
-        self.world_hotkeys_registered = False
-        self.world_key_hook: WindowsWorldKeyHook | None = None
         self.signed_in = False
         self.auto_browser_auth_call: wx.CallLater | None = None
+        self.pending_external_auth = False
 
         panel = wx.Panel(self)
         layout = wx.BoxSizer(wx.VERTICAL)
@@ -236,7 +251,7 @@ class MainFrame(wx.Frame):
         login_layout = wx.BoxSizer(wx.VERTICAL)
         self.default_login = wx.Button(self.login_panel, label="&Sign in to Blind Software")
         login_layout.Add(self.default_login, 0, wx.EXPAND | wx.ALL, 8)
-        domain_label = wx.StaticText(self.login_panel, label="Other Endiginous server domain:")
+        domain_label = wx.StaticText(self.login_panel, label="Other Indiginous server domain:")
         login_layout.Add(domain_label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 8)
         self.domain = wx.TextCtrl(self.login_panel, value="", style=wx.TE_PROCESS_ENTER)
         self.domain.SetHint("example.com")
@@ -261,15 +276,13 @@ class MainFrame(wx.Frame):
 
         self._build_menu()
         self.CreateStatusBar()
-        self.SetStatusText("Starting Endiginous")
+        self.SetStatusText("Starting Indiginous")
         self.Bind(wx.html2.EVT_WEBVIEW_LOADED, self._on_loaded, self.web)
         self.Bind(wx.html2.EVT_WEBVIEW_ERROR, self._on_error, self.web)
         self.Bind(wx.html2.EVT_WEBVIEW_SCRIPT_MESSAGE_RECEIVED, self._on_script_message, self.web)
         self.Bind(wx.EVT_TIMER, self._on_reconnect_timer, self.reconnect_timer)
         self.Bind(wx.EVT_CLOSE, self._on_close)
         self.Bind(wx.EVT_ACTIVATE, self._on_activate)
-        self.Bind(wx.EVT_MENU_OPEN, self._on_menu_open)
-        self.Bind(wx.EVT_MENU_CLOSE, self._on_menu_close)
         self.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
         self.web.Bind(wx.EVT_CHAR_HOOK, self._on_char_hook)
         self.web.Bind(wx.EVT_KEY_DOWN, self._on_world_key_down)
@@ -280,7 +293,7 @@ class MainFrame(wx.Frame):
         if launch_url:
             self._open_grid(launch_url)
         else:
-            self._announce("Choose an Endiginous server and sign in.")
+            self._announce("Choose an Indiginous server and sign in.")
             # The fallback login panel is deliberately hidden. Keep focus on
             # the frame/menu so VoiceOver/NVDA never lands on an unavailable
             # control; File > Sign in is the visible first-run path.
@@ -307,7 +320,7 @@ class MainFrame(wx.Frame):
         file_menu.Append(self.focus_world_id, "&Focus world\tF6")
         file_menu.AppendSeparator()
         self.app_settings_id = wx.NewIdRef()
-        settings_shortcut = "Cmd+," if sys.platform == "darwin" else "Ctrl+,"
+        settings_shortcut = "Cmd+Alt+," if sys.platform == "darwin" else "Ctrl+Alt+,"
         file_menu.Append(self.app_settings_id, f"&Settings...\t{settings_shortcut}")
         file_menu.Append(wx.ID_PREFERENCES, "&Desktop settings...")
         self.cast_device_id = wx.NewIdRef()
@@ -316,7 +329,16 @@ class MainFrame(wx.Frame):
         file_menu.Append(wx.ID_ABOUT, "&Credits and version")
         file_menu.Append(wx.ID_EXIT, "E&xit\tAlt+F4")
         menu_bar.Append(file_menu, "&File")
+        help_menu = wx.Menu()
+        website_id = wx.NewIdRef()
+        blindsoftware_id = wx.NewIdRef()
+        help_menu.Append(website_id, "Open Indiginous &website")
+        help_menu.Append(blindsoftware_id, "Open &blind.software")
+        menu_bar.Append(help_menu, "&Help")
         self.SetMenuBar(menu_bar)
+        self.SetName("Indiginous main window")
+        self.Bind(wx.EVT_MENU_OPEN, self._on_menu_open)
+        self.Bind(wx.EVT_MENU_HIGHLIGHT, self._on_menu_highlight)
         self.Bind(wx.EVT_MENU, self._login_default, id=self.browser_sign_in_id)
         self.Bind(wx.EVT_MENU, self._prompt_server_sign_in, id=self.browser_server_sign_in_id)
         self.Bind(wx.EVT_MENU, lambda _event: self._reload(), id=wx.ID_REFRESH)
@@ -326,6 +348,8 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, lambda _event: self.web.RunScript("window.dispatchEvent(new Event('chatgrid-cast-to-device'));"), id=self.cast_device_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.exit_application(), id=wx.ID_EXIT)
         self.Bind(wx.EVT_MENU, self._show_about, id=wx.ID_ABOUT)
+        self.Bind(wx.EVT_MENU, lambda _event: webbrowser.open("https://blind.software/indiginous/", new=2), id=website_id)
+        self.Bind(wx.EVT_MENU, lambda _event: webbrowser.open("https://blind.software/", new=2), id=blindsoftware_id)
 
         self.world_key_ids: dict[int, wx.WindowIDRef] = {
             wx.WXK_LEFT: wx.NewIdRef(),
@@ -343,77 +367,53 @@ class MainFrame(wx.Frame):
             accelerator_entries.append(wx.AcceleratorEntry(wx.ACCEL_NORMAL, key_code, command_id))
         if sys.platform != "win32":
             self.SetAcceleratorTable(wx.AcceleratorTable(accelerator_entries))
-        else:
-            self.Bind(wx.EVT_HOTKEY, self._on_world_hotkey)
-
-    def _on_world_hotkey(self, event: wx.KeyEvent) -> None:
-        """Map a registered Windows hotkey event back to its world direction."""
-        event_id = event.GetId()
-        for key_code, command_id in self.world_key_ids.items():
-            if int(command_id) == event_id:
-                self._dispatch_world_arrow(key_code)
-                return
+        # Windows deliberately uses the WebView/window key path below.  Do not
+        # install any process-wide keyboard capture: an error must never take
+        # ownership of input outside Indiginous.
 
     def _set_world_hotkeys_active(self, active: bool) -> None:
-        """Register arrows only while this foreground window owns the world."""
-        if sys.platform != "win32":
-            return
-        should_register = active and self.IsActive() and self.web.IsShown()
-        if should_register == self.world_hotkeys_registered:
-            return
-        if should_register:
-            registered: list[int] = []
-            windows_virtual_keys = {
-                wx.WXK_LEFT: 0x25,
-                wx.WXK_UP: 0x26,
-                wx.WXK_RIGHT: 0x27,
-                wx.WXK_DOWN: 0x28,
-            }
-            for key_code, command_id in self.world_key_ids.items():
-                command = int(command_id)
-                if ctypes.windll.user32.RegisterHotKey(
-                    int(self.GetHandle()), command, 0, windows_virtual_keys[key_code]
-                ):
-                    registered.append(command)
-                    continue
-                for registered_id in registered:
-                    ctypes.windll.user32.UnregisterHotKey(int(self.GetHandle()), registered_id)
-                LOGGER.warning("Unable to register native world arrow hotkeys; using foreground keyboard hook")
-                try:
-                    self.world_key_hook = WindowsWorldKeyHook(self._dispatch_world_arrow)
-                except (AttributeError, OSError):
-                    self.world_key_hook = None
-                    LOGGER.exception("Unable to install foreground keyboard hook for world movement")
-                return
-            self.world_hotkeys_registered = True
-            return
-        for command_id in self.world_key_ids.values():
-            ctypes.windll.user32.UnregisterHotKey(int(self.GetHandle()), int(command_id))
-        self.world_hotkeys_registered = False
-        if self.world_key_hook is not None:
-            self.world_key_hook.close()
-            self.world_key_hook = None
+        """Keep keyboard handling local to the Indiginous window.
+
+        This lifecycle seam is intentionally a no-op on Windows.  Movement is
+        dispatched from wx/WebView events while this window is focused; the
+        app must never install a process-wide or low-level keyboard hook.
+        """
+        LOGGER.debug("Local Indiginous keyboard path active=%s", active)
 
     def _on_activate(self, event: wx.ActivateEvent) -> None:
         self._set_world_hotkeys_active(event.GetActive())
         event.Skip()
-
-    def _on_menu_open(self, _event: wx.MenuEvent) -> None:
-        """Keep native menu navigation from moving the world underneath it."""
-        self._set_world_hotkeys_active(False)
-
-    def _on_menu_close(self, _event: wx.MenuEvent) -> None:
-        """Restore world movement after the native menu closes."""
-        self._set_world_hotkeys_active(True)
 
     def _announce(self, text: str, *, speak: bool = False) -> None:
         self.SetStatusText(text)
         if speak:
             self.screen_reader.speak(text, interrupt=True)
 
+    def _on_menu_open(self, event: wx.MenuEvent) -> None:
+        """Keep native menu opening visible to keyboard and screen-reader users."""
+        menu = event.GetMenu()
+        if menu is not None and self.GetMenuBar() is not None:
+            index = next(
+                (i for i in range(self.GetMenuBar().GetMenuCount())
+                 if self.GetMenuBar().GetMenu(i) is menu),
+                -1,
+            )
+            if index == 0:
+                self._announce("File menu opened. Use the arrow keys to choose an action.", speak=True)
+        event.Skip()
+
+    def _on_menu_highlight(self, event: wx.MenuEvent) -> None:
+        """Speak the highlighted native action so VoiceOver/NVDA can follow it."""
+        item = event.GetMenuItem()
+        if item is not None:
+            label = item.GetItemLabelText().replace('&', '').strip()
+            if label:
+                self._announce(label, speak=True)
+        event.Skip()
+
     @staticmethod
     def _server_url(value: str) -> str:
-        """Return an HTTPS Endiginous URL for a user-entered domain."""
+        """Return an HTTPS Indiginous URL for a user-entered domain."""
         candidate = value.strip()
         if not candidate:
             raise ValueError("Enter a server domain.")
@@ -423,7 +423,7 @@ class MainFrame(wx.Frame):
         if parsed.scheme.lower() != "https" or not parsed.hostname or parsed.username or parsed.password:
             raise ValueError("Enter a valid HTTPS server domain.")
         port = f":{parsed.port}" if parsed.port else ""
-        return urlunsplit(("https", f"{parsed.hostname}{port}", "/endiginous/", "", ""))
+        return urlunsplit(("https", f"{parsed.hostname}{port}", "/indiginous/", "", ""))
 
     def _open_grid(self, url: str) -> None:
         parsed = urlsplit(url)
@@ -455,13 +455,13 @@ class MainFrame(wx.Frame):
         if self.signed_in:
             self.web.RunScript("document.getElementById('logoutButton')?.click();")
             return
-        self._start_browser_auth("https://blind.software", "https://blind.software/endiginous/")
+        self._start_browser_auth("https://blind.software", "https://blind.software/indiginous/")
 
     def _prompt_server_sign_in(self, _event: wx.CommandEvent) -> None:
         """Collect an alternate HTTPS server without putting auth controls in the world window."""
         dialog = wx.TextEntryDialog(
             self,
-            "Enter the HTTPS domain for the Endiginous server.",
+            "Enter the HTTPS domain for the Indiginous server.",
             "Sign in to another server",
             value=urlsplit(self.settings.grid_url).hostname or "",
         )
@@ -494,7 +494,7 @@ class MainFrame(wx.Frame):
         try:
             flow = BrowserAuthFlow(server_origin, grid_url)
         except ValueError:
-            self._announce("Enter a valid HTTPS Endiginous server before signing in.")
+            self._announce("Enter a valid HTTPS Indiginous server before signing in.")
             return
         self.browser_auth_flow = flow
         self.default_login.Disable()
@@ -503,7 +503,7 @@ class MainFrame(wx.Frame):
             lambda url, assertion: wx.CallAfter(self._finish_browser_auth, url, assertion),
             lambda message: wx.CallAfter(self._browser_auth_failed, message),
         )
-        self._announce("Complete sign-in in the opened sign-in window. Endiginous will continue automatically.")
+        self._announce("Complete sign-in in the opened sign-in window. Indiginous will continue automatically.")
         opened = False
         if sys.platform == "darwin":
             try:
@@ -548,6 +548,7 @@ class MainFrame(wx.Frame):
     def _finish_browser_auth(self, grid_url: str, assertion: str) -> None:
         """Load the one-use assertion into the embedded world client."""
         self.browser_auth_flow = None
+        self.pending_external_auth = True
         self.default_login.Enable()
         self.domain_login.Enable()
         separator = "&" if "?" in grid_url else "?"
@@ -563,17 +564,16 @@ class MainFrame(wx.Frame):
     def _on_loaded(self, _event: wx.html2.WebViewEvent) -> None:
         self.reconnect_timer.Stop()
         self.backoff.reset()
-        self._announce("Endiginous loaded. Session and reconnect monitoring are active.")
+        self._announce("Indiginous loaded. Session and reconnect monitoring are active.")
         # Browser sign-in returns a one-use external_auth assertion. The
         # embedded client hides its connect controls in native mode, so make
         # the callback deterministic and submit the assertion after the page
         # has finished wiring its shared auth controller.
-        self.web.RunScript(
-            "(() => {"
-            "const hasExternalAuth = new URL(window.location.href).searchParams.has('external_auth');"
-            "if (hasExternalAuth) setTimeout(() => document.getElementById('connectButton')?.click(), 150);"
-            "})();"
-        )
+        if self.pending_external_auth:
+            self.pending_external_auth = False
+            self.web.RunScript(
+                "setTimeout(() => document.getElementById('connectButton')?.click(), 150);"
+            )
         # The shared web client owns saved-session auto-connect. Injecting a
         # second Connect click races its cookie/auth startup and can create a
         # storm of short-lived websocket sessions.
@@ -681,7 +681,7 @@ class MainFrame(wx.Frame):
     def _show_app_settings(self, _event: wx.CommandEvent) -> None:
         """Open the shared accessible app settings dialog from File."""
         if not self.web.IsShown():
-            self._announce("Sign in to an Endiginous server before opening settings.")
+            self._announce("Sign in to an Indiginous server before opening settings.")
             self.default_login.SetFocus()
             return
         self.web.RunScript("window.chatGridNativeOpenSettings?.();")
@@ -712,8 +712,13 @@ class MainFrame(wx.Frame):
             return
         key, code = mapped
         LOGGER.info("Forwarding native world key %s", code)
-        success, result = self.web.RunScript(f"window.chatGridNativeKey?.({json.dumps(code)});")
-        LOGGER.info("Native world key result success=%s result=%s", success, result)
+        try:
+            success, result = self.web.RunScript(f"window.chatGridNativeKey?.({json.dumps(code)});")
+            LOGGER.info("Native world key result success=%s result=%s", success, result)
+        except Exception:
+            LOGGER.exception("Indiginous world key dispatch failed; closing safely")
+            self.force_exit = True
+            self.Close(force=True)
 
     def _dispatch_world_shortcut(self, code: str, *, ctrl: bool = False, shift: bool = False) -> None:
         """Forward a native-only shortcut into the embedded world command profile."""
@@ -733,7 +738,7 @@ class MainFrame(wx.Frame):
                 manifest = service.check()
                 if manifest is None:
                     if interactive:
-                        wx.CallAfter(self._announce, "Endiginous is up to date.")
+                        wx.CallAfter(self._announce, "Indiginous is up to date.")
                     return
                 if not interactive and service.is_dismissed(manifest):
                     return
@@ -750,24 +755,24 @@ class MainFrame(wx.Frame):
     def _prepare_update_install(self, service: UpdateService, installer: Path, manifest: object) -> None:
         """Show the countdown on the UI thread before closing for installation."""
         version = str(getattr(manifest, "version", "the update"))
-        self._announce(f"Endiginous {version} is verified and ready to install.", speak=True)
+        self._announce(f"Indiginous {version} is verified and ready to install.", speak=True)
         with UpdateInstallCountdown(self, version) as dialog:
             if dialog.ShowModal() != wx.ID_OK:
                 service.dismiss(manifest)
-                self._announce("Update cancelled. Endiginous will keep running.", speak=True)
+                self._announce("Update cancelled. Indiginous will keep running.", speak=True)
                 return
         service.install_after_exit(installer, manifest)
         # The update dialog is already the user's approval/countdown. Do not
         # open the generic exit dialog a second time: the helper is waiting
         # for this process to end before it can install and relaunch.
-        self._announce("Endiginous is closing to install the verified update.", speak=True)
+        self._announce("Indiginous is closing to install the verified update.", speak=True)
         self.force_exit = True
         self.Close(force=True)
 
     def _show_about(self, _event: wx.CommandEvent) -> None:
         wx.MessageBox(
-            f"Endiginous {__version__}\nOfficial accessible desktop client by Raywonder / TappedIn.",
-            "About Endiginous", wx.OK | wx.ICON_INFORMATION, self,
+            f"Indiginous {__version__}\nOfficial accessible desktop client by Raywonder / TappedIn.",
+            "About Indiginous", wx.OK | wx.ICON_INFORMATION, self,
         )
         if self.web.IsShown():
             self.web.SetFocus()
@@ -777,16 +782,15 @@ class MainFrame(wx.Frame):
     def _on_char_hook(self, event: wx.KeyEvent) -> None:
         key = event.GetKeyCode()
         unicode_key = event.GetUnicodeKey()
-        if (event.ControlDown() or event.MetaDown()) and (key == ord(",") or unicode_key == ord(",")):
+        if ((event.ControlDown() and event.AltDown()) or (event.MetaDown() and event.AltDown())) and (
+            key == ord(",") or unicode_key == ord(",")
+        ):
             self._show_app_settings(event)
             return
         if (event.ControlDown() or event.MetaDown()) and not event.AltDown() and (
             key == ord("R") or key == ord("r") or unicode_key == ord("R") or unicode_key == ord("r")
         ):
             self._dispatch_world_shortcut("KeyR", ctrl=True)
-            return
-        if key == wx.WXK_ALT:
-            self._open_file_menu()
             return
         if key in self.world_key_ids and not (
             event.ControlDown() or event.AltDown() or event.MetaDown()
@@ -798,18 +802,6 @@ class MainFrame(wx.Frame):
             self.Raise()
             return
         event.Skip()
-
-    def _open_file_menu(self) -> None:
-        """Open File when WebView2 consumes the standalone Alt key."""
-        if sys.platform == "win32":
-            try:
-                ctypes.windll.user32.SendMessageW(int(self.GetHandle()), 0x0112, 0xF100 | ord("f"), 0)
-                return
-            except (AttributeError, OSError):
-                LOGGER.debug("Native File-menu activation was unavailable", exc_info=True)
-        menu_bar = self.GetMenuBar()
-        if menu_bar is not None:
-            menu_bar.SetFocus()
 
     def _on_world_key_down(self, event: wx.KeyEvent) -> None:
         """Catch arrows at the WebView boundary when the embedded browser consumes them."""
@@ -824,14 +816,12 @@ class MainFrame(wx.Frame):
     def _on_close(self, event: wx.CloseEvent) -> None:
         if self.settings.keep_in_tray and not self.force_exit and event.CanVeto():
             event.Veto()
-            self._set_world_hotkeys_active(False)
             self.Hide()
             if self.tray_icon is None:
                 self.tray_icon = TrayIcon(self)
-            self._announce("Endiginous is still connected and running in the background.")
+            self._announce("Indiginous is still connected and running in the background.")
             return
         self.reconnect_timer.Stop()
-        self._set_world_hotkeys_active(False)
         if self.tray_icon is not None:
             self.tray_icon.RemoveIcon()
             self.tray_icon.Destroy()
@@ -842,27 +832,47 @@ class MainFrame(wx.Frame):
         """Restore and focus the main window from its background state."""
         self.Show()
         self.Iconize(False)
+        self._activate_window()
+        self._announce("Indiginous window restored. You remained signed in.")
+
+    def _activate_window(self) -> None:
+        """Restore and foreground the existing window without creating a client."""
+        self.Show(True)
+        self.Iconize(False)
         self.Raise()
-        self.web.SetFocus()
-        wx.CallAfter(self._set_world_hotkeys_active, True)
-        self._announce("Endiginous window restored. You remained signed in.")
+        if sys.platform == "win32":
+            try:
+                hwnd = int(self.GetHandle())
+                user32 = ctypes.windll.user32
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                user32.BringWindowToTop(hwnd)
+                user32.SetForegroundWindow(hwnd)
+            except (AttributeError, OSError, TypeError, ValueError):
+                LOGGER.debug("Windows foreground activation was unavailable", exc_info=True)
+        self.SetFocus()
+        if self.web.IsShown():
+            self.web.SetFocus()
 
     def exit_application(self) -> None:
-        """Fully stop Endiginous, including any background session."""
-        self._prepare_exit()
-
-    def _prepare_exit(self) -> None:
-        self._announce("Endiginous will exit after the countdown.")
-        with UpdateInstallCountdown(self, "exit Endiginous") as dialog:
-            if dialog.ShowModal() != wx.ID_OK:
-                self._announce("Exit cancelled. Endiginous will keep running.")
-                return
+        """Fully stop Indiginous, including any background session."""
+        # Exit is an explicit user command, not an update installation flow.
+        # The old implementation reused the update countdown here, which
+        # presented an "update ready" dialog even when no update had been
+        # checked or was available and could leave the user in the world.
         self.force_exit = True
         self.Close(force=True)
 
+    def _prepare_exit(self) -> None:
+        """Keep the legacy exit hook equivalent to an explicit full quit."""
+        self.exit_application()
 
-class EndiginousApp(wx.App):
+
+class IndiginousApp(wx.App):
     """Application entry point."""
+
+    def __init__(self, activation: SingleInstanceActivation) -> None:
+        self.activation = activation
+        super().__init__(False)
 
     def OnInit(self) -> bool:
         if sys.platform == "win32":
@@ -870,8 +880,24 @@ class EndiginousApp(wx.App):
         autostart = "--autostart" in sys.argv
         launch_url = resolve_launch_url(sys.argv[1:])
         self.frame = MainFrame(SettingsStore(), autostart=autostart, launch_url=launch_url)
+        self.activation_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._on_activation_timer, self.activation_timer)
+        self.activation_timer.Start(250)
         self.SetTopWindow(self.frame)
         return True
+
+    def _on_activation_timer(self, _event: wx.TimerEvent) -> None:
+        if self.activation.activation_requested():
+            self.frame._activate_window()
+
+    def OnExit(self) -> int:
+        self.activation_timer.Stop()
+        if self.frame.tray_icon is not None:
+            self.frame.tray_icon.RemoveIcon()
+            self.frame.tray_icon.Destroy()
+            self.frame.tray_icon = None
+        self.activation.close()
+        return super().OnExit()
 
 
 def main() -> int:
@@ -883,6 +909,9 @@ def main() -> int:
         filename=root / "chat-grid.log", level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-    app = EndiginousApp(False)
+    activation = SingleInstanceActivation()
+    if not activation.is_owner:
+        return 0
+    app = IndiginousApp(activation)
     app.MainLoop()
     return 0

@@ -5,8 +5,8 @@ SOURCE = (Path(__file__).parents[1] / "src" / "chat_grid_native" / "app.py").rea
 
 
 def test_native_shortcuts_are_explicitly_handled():
-    assert "if key == wx.WXK_ALT:" in SOURCE
-    assert "SendMessageW" in SOURCE
+    assert "if key == wx.WXK_ALT:" not in SOURCE
+    assert "SendMessageW" not in SOURCE
     assert "event.ControlDown() or event.MetaDown()" in SOURCE
     assert 'key == ord(",")' in SOURCE
     assert 'settings_shortcut = "Cmd+," if sys.platform == "darwin" else "Ctrl+,"' in SOURCE
@@ -20,10 +20,17 @@ def test_update_install_has_visible_countdown_and_cancel_path():
     assert '"Cancel update"' in SOURCE
     assert "service.install_after_exit(installer, manifest)" in SOURCE
     assert "self.force_exit = True" in SOURCE
-    assert 'self._announce("Endiginous is closing to install the verified update.", speak=True)' in SOURCE
+    assert 'self._announce("Indiginous is closing to install the verified update.", speak=True)' in SOURCE
     assert "self.exit_application()" not in SOURCE[SOURCE.index("def _prepare_update_install"):SOURCE.index("def _show_about")]
-    assert "self._prepare_exit()" in SOURCE
-    assert "Exit cancelled. Endiginous will keep running." in SOURCE
+    assert "def _prepare_exit(self)" in SOURCE
+
+
+def test_explicit_exit_does_not_present_an_update_dialog_and_forces_close():
+    exit_source = SOURCE[SOURCE.index("    def exit_application"):SOURCE.index("    def _show_about")]
+    assert 'self.force_exit = True' in exit_source
+    assert 'self.Close(force=True)' in exit_source
+    assert 'UpdateInstallCountdown(self, "exit Indiginous")' not in exit_source
+    assert 'Exit cancelled. Indiginous will keep running.' not in exit_source
 
 
 def test_windows_installer_replaces_orphaned_files():

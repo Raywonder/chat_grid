@@ -1,4 +1,4 @@
-"""Owner-approved public discoveries for short-lived Endiginous notices."""
+"""Owner-approved public discoveries for short-lived Indiginous notices."""
 
 from __future__ import annotations
 

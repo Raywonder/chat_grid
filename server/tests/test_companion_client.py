@@ -8,7 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from tools.companion_client import CompanionClient, _choose_auto_seat
+from tools.companion_client import (
+    CompanionClient,
+    _choose_auto_seat,
+    _is_addressed_to_companion,
+)
 
 
 class FakeWebSocket:
@@ -17,6 +21,15 @@ class FakeWebSocket:
 
     async def send(self, payload: str) -> None:
         self.sent.append(json.loads(payload))
+
+
+def test_world_chat_addressing_accepts_name_aliases_without_matching_unrelated_text() -> None:
+    """Public chat wakes the companion only when someone clearly addresses her."""
+
+    assert _is_addressed_to_companion("@Clawdia, come see this.", "Clawdia")
+    assert _is_addressed_to_companion("Missi, are you there?", "Clawdia")
+    assert _is_addressed_to_companion("I found Claudia in the room.", "Clawdia")
+    assert not _is_addressed_to_companion("The claw is on the table.", "Clawdia")
 
 
 def test_write_state_publishes_current_world_receipt(tmp_path) -> None:

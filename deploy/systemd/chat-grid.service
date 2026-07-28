@@ -1,5 +1,5 @@
 [Unit]
-Description=Endiginous signaling server
+Description=Indiginous signaling server
 After=network.target
 
 [Service]

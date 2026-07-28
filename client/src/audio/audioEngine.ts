@@ -156,7 +156,15 @@ export class AudioEngine {
       this.sfxGainNode.connect(this.masterGainNode);
     }
     if (this.audioCtx.state === 'suspended') {
-      await this.audioCtx.resume();
+      // Chrome may reject resume() during the initial server/login flow when
+      // no user gesture has happened yet. Keep the context available so the
+      // ambience graph can still be built; a later keyboard/pointer gesture
+      // will resume it through resumeWorldAudioAfterFocus().
+      try {
+        await this.audioCtx.resume();
+      } catch {
+        // Autoplay policy is expected here; do not abort audio graph setup.
+      }
     }
     this.preloadActionSoundsOnce();
   }

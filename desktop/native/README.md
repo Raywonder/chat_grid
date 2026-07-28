@@ -1,12 +1,15 @@
-# Endiginous Desktop Native
+# Indiginous Desktop Native
 
-Official accessible wxPython desktop client. The native frame hosts the shared Endiginous web runtime in the installed WebView engine so browser, Windows, macOS, and future platforms keep one world protocol and audio implementation.
+Official accessible wxPython desktop client. The native frame hosts the shared Indiginous web runtime in the installed WebView engine so browser, Windows, macOS, and future platforms keep one world protocol and audio implementation.
 
 - Persistent WebView2 profile retains the blind.software sign-in securely.
 - Automatic connect after the retained session is restored.
 - Silent bounded reconnect after navigation/network loss; the shared client also reconnects its WebSocket peers.
 - Optional per-user Windows startup and minimized startup.
-- The full current web/sound asset tree is packaged from `../windows/web` for fallback. Normal live operation uses WebView2 HTTP caching, which downloads only resources the current world requests.
+- The full current web/sound asset tree is packaged for macOS fallback and the
+  signed PKG. Normal live operation also uses HTTPS caching and quietly
+  preloads the published ambience catalog in the background, so missing sounds
+  can refill without blocking startup.
 - Background update checks use the tCast manifest pattern, require HTTPS and a valid SHA-256, download atomically, install silently after exit, and relaunch only after successful setup.
 
 Build from Windows:

@@ -1,6 +1,6 @@
 import type { IncomingMessage, OutgoingMessage } from '../network/protocol';
 
-const PENDING_EXTERNAL_AUTH_STORAGE_KEY = 'endiginousPendingExternalAuth';
+const PENDING_EXTERNAL_AUTH_STORAGE_KEY = 'indiginousPendingExternalAuth';
 
 export type AuthPolicy = {
   usernameMinLength: number;
@@ -195,7 +195,7 @@ export function createAuthController(deps: AuthControllerDeps): {
       if (sanitizeAuthUsername(authUsername).length > 0 || savedSessionCookieAvailable) {
         deps.setConnectionStatus('Restoring saved session...');
       } else {
-        deps.setConnectionStatus('Sign in with blind.software to join Endiginous.');
+        deps.setConnectionStatus('Sign in with blind.software to join Indiginous.');
         deps.setConnecting(false);
       }
       updateConnectAvailability();

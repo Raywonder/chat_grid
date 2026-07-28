@@ -20,6 +20,8 @@ class ClientConnection:
     permissions: set[str] | None = None
     session_token: str | None = None
     nickname: str = "user..."
+    gender: str = ""
+    worn_clothing: list[str] | None = None
     saved_x: int | None = None
     saved_y: int | None = None
     saved_location_id: str | None = None
@@ -45,4 +47,6 @@ class ClientConnection:
             "x": self.x,
             "y": self.y,
             "seatedItemId": self.seated_item_id or "",
+            "gender": self.gender,
+            "wornClothing": ",".join(self.worn_clothing or []),
         }

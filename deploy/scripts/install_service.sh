@@ -20,7 +20,7 @@ fi
 
 sudo tee "$DST_UNIT" >/dev/null <<EOF
 [Unit]
-Description=Endiginous signaling server
+Description=Indiginous signaling server
 After=network.target
 
 [Service]

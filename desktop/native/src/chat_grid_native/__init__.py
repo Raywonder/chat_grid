@@ -1,3 +1,3 @@
-"""Official Endiginous desktop shell."""
+"""Official Indiginous desktop shell."""
 
-__version__ = "0.4.6"
+__version__ = "0.4.13"

@@ -1,4 +1,4 @@
-"""Server-only ntfy delivery for opted-in Endiginous identities."""
+"""Server-only ntfy delivery for opted-in Indiginous identities."""
 
 from __future__ import annotations
 
@@ -37,8 +37,8 @@ class NtfyPublisher:
             return False
         payload: dict[str, str] = {
             "topic": topic,
-            "title": str(title).strip()[:120] or "Endiginous notification",
-            "message": str(message).strip()[:500] or "New Endiginous notification",
+            "title": str(title).strip()[:120] or "Indiginous notification",
+            "message": str(message).strip()[:500] or "New Indiginous notification",
         }
         if click.startswith("https://"):
             payload["click"] = click

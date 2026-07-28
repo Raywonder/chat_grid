@@ -1,7 +1,7 @@
 [project]
-name = "endiginous-server"
+name = "indiginous-server"
 version = "0.1.0"
-description = "Endiginous signaling server"
+description = "Indiginous signaling server"
 requires-python = ">=3.11"
 dependencies = [
   "argon2-cffi>=23.1.0",

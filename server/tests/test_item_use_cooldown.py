@@ -563,6 +563,56 @@ async def test_house_keeper_repairs_broken_room_radio(
 
 
 @pytest.mark.asyncio
+async def test_house_keeper_accepts_carried_room_key_for_safekeeping(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(
+            websocket=ws,
+            id="u-key-giver",
+            nickname="Dom",
+            location_id="raywonder_house_entry",
+            x=20,
+            y=24,
+        ),
+        permissions={"item.use"},
+    )
+    server.clients[ws] = client
+    keeper = server.items["seed-raywonder-entry-house-keeper"]
+    keeper.locationId = client.location_id
+    keeper.x = client.x
+    keeper.y = client.y
+    key = server.items["seed-raywonder-entry-bedroom-key"]
+    key.carrierId = client.id
+
+    send_payloads: list[object] = []
+    broadcast_items: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast_item(item: object) -> None:
+        broadcast_items.append(item)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+
+    await server._handle_message(
+        client, json.dumps({"type": "item_use", "itemId": keeper.id})
+    )
+
+    result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert result.ok is True
+    assert "give Bedroom key" in result.message
+    assert key.carrierId is None
+    assert key.params["heldByKeeperId"] == keeper.id
+    assert key.id in keeper.params["heldKeyIds"]
+    assert {getattr(item, "id", "") for item in broadcast_items} == {key.id, keeper.id}
+
+
+@pytest.mark.asyncio
 async def test_house_keeper_auto_check_moves_and_repairs_room_radio(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -612,6 +662,51 @@ async def test_house_keeper_auto_check_moves_and_repairs_room_radio(
 
     assert did_run_again is False
     assert broadcast_items == []
+
+
+@pytest.mark.asyncio
+async def test_house_keeper_autonomy_uses_safe_local_model_action(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    keeper = server.items["seed-raywonder-entry-house-keeper"]
+    keeper.locationId = "raywonder_house_living_room"
+    keeper.x = 19
+    keeper.y = 20
+    keeper.params.update(
+        {
+            "autonomyEnabled": True,
+            "localModelEnabled": True,
+            "lastAutonomyAt": 0,
+        }
+    )
+    now_ms = 456_000
+    broadcast_items: list[object] = []
+    room_messages: list[object] = []
+
+    async def fake_broadcast_item(item: object) -> None:
+        broadcast_items.append(item)
+
+    async def fake_broadcast_location(_location: str, packet: object, **_kwargs: object) -> None:
+        room_messages.append(packet)
+
+    async def fake_suggest(*_args: object, **_kwargs: object):
+        from app.items.types.house_keeper.autonomy import KeeperDecision
+
+        return KeeperDecision(action="say", message="I am checking in with the room.")
+
+    monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+    monkeypatch.setattr(server, "_broadcast_location", fake_broadcast_location)
+    monkeypatch.setattr(server.item_service, "now_ms", lambda: now_ms)
+    monkeypatch.setattr("app.server.suggest_local_decision", fake_suggest)
+
+    did_run = await server._run_house_keeper_autonomy(keeper)
+
+    assert did_run is True
+    assert keeper.params["lastAutonomyAt"] == now_ms
+    assert "spoke with nearby people" in keeper.params["lastAutonomySummary"]
+    assert room_messages
+    assert keeper.id in {getattr(item, "id", "") for item in broadcast_items}
 
 
 @pytest.mark.asyncio

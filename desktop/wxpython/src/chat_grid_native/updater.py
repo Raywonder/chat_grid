@@ -43,7 +43,7 @@ class UpdateManifest:
             version=str(data.get("version", "")).strip(),
             download_url=str(data.get("downloadUrl") or data.get("download_url") or platform.get("downloadUrl") or platform.get("url") or "").strip(),
             sha256=str(data.get("sha256") or platform.get("sha256") or "").strip().lower(),
-            file_name=str(data.get("fileName") or data.get("file_name") or platform.get("fileName") or "EndiginousSetup.exe").strip(),
+            file_name=str(data.get("fileName") or data.get("file_name") or platform.get("fileName") or "Indiginous_Setup.exe").strip(),
             release_notes=str(data.get("releaseNotes") or data.get("release_notes") or "").strip(),
             silent_args=str(data.get("silentArgs") or platform.get("silentArgs") or DEFAULT_SILENT_ARGS).strip(),
         )
@@ -57,11 +57,8 @@ class UpdateManifest:
             raise ValueError("Update manifest SHA-256 is missing or invalid.")
         if Path(self.file_name).suffix.lower() != ".exe":
             raise ValueError("Windows update must be an executable installer.")
-        published_name = Path(urlparse(self.download_url).path).name
-        if published_name != self.file_name:
-            raise ValueError("Update URL filename does not match the manifest filename.")
-        if self.version not in self.file_name:
-            raise ValueError("Update filename does not identify the manifest version.")
+        if self.file_name != "Indiginous_Setup.exe":
+            raise ValueError("Windows update must use the stable Indiginous_Setup.exe filename.")
 
 
 class UpdateService:
@@ -132,7 +129,7 @@ class UpdateService:
             "param([int]$Pid,[string]$Installer,[string]$Arguments,[string]$App,[string]$InstallDirectory)\n"
             "$Log = Join-Path (Split-Path -Parent $Installer) 'install-update.log'\n"
             "function Write-UpdateLog([string]$Message){ Add-Content -LiteralPath $Log -Value ((Get-Date -Format o) + ' ' + $Message) }\n"
-            "$mutex = New-Object System.Threading.Mutex($false, 'EndiginousUpdateInstall')\n"
+            "$mutex = New-Object System.Threading.Mutex($false, 'IndiginousUpdateInstall')\n"
             "if(-not $mutex.WaitOne(0)){ exit 0 }\n"
             "try {\n"
             "  Write-UpdateLog \"handoff pid=$Pid installer=$Installer app=$App\"\n"

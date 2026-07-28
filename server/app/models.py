@@ -241,6 +241,37 @@ class AdminLocationAmbienceSetPacket(BasePacket):
     soundId: str = Field(min_length=1, max_length=96)
 
 
+class AdminAmbienceUploadBeginPacket(BasePacket):
+    """Start an authenticated admin ambience sound upload."""
+
+    type: Literal["admin_ambience_upload_begin"]
+    uploadId: str = Field(min_length=8, max_length=96)
+    filename: str = Field(min_length=1, max_length=160)
+    contentType: str = Field(min_length=1, max_length=96)
+    kind: Literal["loop", "one_shot"] = "loop"
+    # Keep the upload protocol aligned with the browser's 5 GiB ceiling.  The
+    # upload is streamed in chunks, so files below that ceiling remain valid.
+    totalBytes: int = Field(gt=0, le=5 * 1024 * 1024 * 1024)
+
+
+class AdminAmbienceUploadChunkPacket(BasePacket):
+    """One ordered base64 chunk of an admin ambience upload."""
+
+    type: Literal["admin_ambience_upload_chunk"]
+    uploadId: str = Field(min_length=8, max_length=96)
+    # 180 KiB client chunks need roughly 30k packets for a 5 GiB file.
+    index: int = Field(ge=0, le=40_000)
+    data: str = Field(min_length=1, max_length=400_000)
+
+
+class AdminAmbienceUploadCompletePacket(BasePacket):
+    """Finish and publish an admin ambience sound upload."""
+
+    type: Literal["admin_ambience_upload_complete"]
+    uploadId: str = Field(min_length=8, max_length=96)
+    sha256: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
+
+
 class AdminUserSetRolePacket(BasePacket):
     type: Literal["admin_user_set_role"]
     username: str = Field(min_length=1, max_length=128)
@@ -474,6 +505,9 @@ ClientPacket = (
     | AdminBlindSoftwareSyncPacket
     | AdminAmbienceCatalogPacket
     | AdminLocationAmbienceSetPacket
+    | AdminAmbienceUploadBeginPacket
+    | AdminAmbienceUploadChunkPacket
+    | AdminAmbienceUploadCompletePacket
     | AdminUserSetRolePacket
     | AdminUserBanPacket
     | AdminUserUnbanPacket
@@ -510,6 +544,8 @@ class RemoteUser(BaseModel):
     seatedItemId: str | None = None
     seatedOffset: float = 0.0
     handHeldById: str | None = None
+    gender: str = ""
+    wornClothing: list[str] = Field(default_factory=list)
 
 
 class WelcomePacket(BasePacket):
@@ -584,6 +620,15 @@ class BroadcastPositionPacket(BasePacket):
     handHeldById: str | None = None
 
 
+class BroadcastAvatarPacket(BasePacket):
+    """Authoritative avatar identity and clothing changes for one user."""
+
+    type: Literal["update_avatar"]
+    id: str
+    gender: str = ""
+    wornClothing: list[str] = Field(default_factory=list)
+
+
 class LocationChangedPacket(BasePacket):
     type: Literal["location_changed"]
     id: str
@@ -593,6 +638,12 @@ class LocationChangedPacket(BasePacket):
     locationName: str
     x: int
     y: int
+    # Included on every location handoff so clients do not retain the
+    # dimensions of the room they just left.
+    width: int | None = None
+    height: int | None = None
+    gender: str = ""
+    wornClothing: list[str] = Field(default_factory=list)
 
 
 class BroadcastTeleportCompletePacket(BasePacket):
@@ -898,6 +949,7 @@ class AdminAmbienceSoundSummary(BaseModel):
     loopStartSeconds: float
     loopEndSeconds: float
     seamCrossfadeSeconds: float
+    kind: Literal["loop", "one_shot"] = "loop"
 
 
 class AdminAmbienceLocationSummary(BaseModel):
@@ -940,5 +992,6 @@ class AdminActionResultPacket(BasePacket):
         "notifications_mark_read",
         "blindsoftware_admin_sync",
         "location_ambience_set",
+        "ambience_sound_upload",
     ]
     message: str

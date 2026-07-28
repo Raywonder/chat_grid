@@ -18,11 +18,11 @@ def test_windows_handoff_forces_current_install_directory() -> None:
 def test_tcast_nested_platform_manifest() -> None:
     checksum = hashlib.sha256(b"installer").hexdigest()
     platform = "macos" if sys.platform == "darwin" else "windows"
-    file_name = "Endiginous-0.2.0-macOS.zip" if sys.platform == "darwin" else "EndiginousSetup-0.2.0.exe"
+    file_name = "Indiginous-macOS.zip" if sys.platform == "darwin" else "Indiginous_Setup.exe"
     manifest = UpdateManifest.from_dict({
         "version": "0.2.0",
         "platforms": {platform: {
-            "url": f"https://example.test/{file_name}",
+            "url": "https://example.test/opaque-token",
             "fileName": file_name,
             "sha256": checksum,
         }},
@@ -38,19 +38,19 @@ def test_manifest_rejects_missing_checksum() -> None:
         manifest.validate()
 
 
-def test_manifest_rejects_version_filename_mismatch() -> None:
+def test_manifest_rejects_nonstable_filename() -> None:
     checksum = hashlib.sha256(b"installer").hexdigest()
     platform = "macos" if sys.platform == "darwin" else "windows"
     suffix = "macOS.zip" if sys.platform == "darwin" else "Setup.exe"
     manifest = UpdateManifest.from_dict({
         "version": "0.4.3",
         "platforms": {platform: {
-            "url": f"https://example.test/Endiginous-0.4.2-{suffix}",
-            "fileName": f"Endiginous-0.4.2-{suffix}",
+            "url": "https://example.test/opaque-token",
+            "fileName": f"Indiginous-0.4.2-{suffix}",
             "sha256": checksum,
         }},
     })
-    with pytest.raises(ValueError, match="version"):
+    with pytest.raises(ValueError, match="stable"):
         manifest.validate()
 
 
@@ -58,13 +58,13 @@ def test_verified_cached_installer_is_reused(tmp_path) -> None:
     payload = b"installer"
     checksum = hashlib.sha256(payload).hexdigest()
     file_name = (
-        "Endiginous-0.2.0-macOS.zip"
+        "Indiginous-macOS.zip"
         if sys.platform == "darwin"
-        else "EndiginousSetup-0.2.0.exe"
+        else "Indiginous_Setup.exe"
     )
     manifest = UpdateManifest.from_dict({
         "version": "0.2.0",
-        "downloadUrl": f"https://example.test/{file_name}",
+        "downloadUrl": "https://example.test/opaque-token",
         "fileName": file_name,
         "sha256": checksum,
     })
@@ -79,15 +79,15 @@ def test_cancel_dismissal_is_scoped_to_exact_manifest(tmp_path) -> None:
     checksum = hashlib.sha256(b"installer").hexdigest()
     manifest = UpdateManifest.from_dict({
         "version": "0.2.0",
-        "downloadUrl": "https://example.test/EndiginousSetup-0.2.0.exe",
-        "fileName": "EndiginousSetup-0.2.0.exe",
+        "downloadUrl": "https://example.test/opaque-token",
+        "fileName": "Indiginous_Setup.exe",
         "sha256": checksum,
     })
     service.dismiss(manifest)
     assert service.is_dismissed(manifest)
     assert not service.is_dismissed(UpdateManifest.from_dict({
         "version": "0.2.1",
-        "downloadUrl": "https://example.test/EndiginousSetup-0.2.1.exe",
-        "fileName": "EndiginousSetup-0.2.1.exe",
+        "downloadUrl": "https://example.test/opaque-token",
+        "fileName": "Indiginous_Setup.exe",
         "sha256": checksum,
     }))

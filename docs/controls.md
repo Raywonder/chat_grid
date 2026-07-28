@@ -8,6 +8,7 @@ When you join the grid, the page also shows a compact dashboard with your curren
 
 ### Movement
 - `Arrow Keys`: Move. The status reader narrates movement in an interactive-fiction style, such as the direction walked, current room/location, coordinates, surface, nearby people, and items on the square.
+- `Movement controls`: The Indiginous page also provides North, South, East, and West buttons for keyboard or screen-reader environments that reserve arrow keys for browser navigation.
 - `G`, `Ctrl+G`, or `Shift+G`: Open the location list; use arrows or first letters, then `Enter` to travel
 - `Shift+K`, `Applications`, or `Shift+F10`: Open the command palette in supported modes
 - `?`: Open help viewer
@@ -31,6 +32,7 @@ When you join the grid, the page also shows a compact dashboard with your curren
   - `/tap <user>`, `/chat <user>`, `/cuddle [user]`, `/kiss [user]`, `/handshake [user]`, `/holdhands [user]`, `/highfive [user]`, `/fistbump [user]`, `/cheer [user]`, `/clap [user]`, `/laugh [user]`, `/smile [user]`, `/wink [user]`, `/nod [user]`, `/blush [user]`, `/cry [user]`, `/yawn [user]`, `/apologize [user]`, `/forgive [user]`, `/bow [user]`, `/dance [user]`, `/comfort [user]`, `/pat <user>`, `/poke [user]`, `/boop [user]`, `/salute [user]`, `/thumbsup [user]`, `/heart [user]`, `/sparkle [user]`, `/celebrate [user]`, `/tease <user>`, `/smack <user>`, `/whisper <user>`, and `/listen [user]`: Send more human social reactions. Physical-comedy actions such as smack are playful in-world reactions, not moderation or harm.
   - `/walkto <user>`: Move to a nearby square beside a user
   - `/teleportto <user>` or `/join <user>`: Teleport to a user's square
+  - `/home`, `/bed`, or `/rest`: For an authorized signed-in Raywonder resident, return home through the available portal/alarm route and settle onto the bedroom bed.
   - `/up`: Show server uptime (self only)
   - `/version`: Show server version (self only)
   - `/go <location>`: Travel to another location, such as `/go arcade`

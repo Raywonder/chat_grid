@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from chat_grid_native import single_instance
 
 
@@ -62,3 +64,16 @@ def test_owner_consumes_relaunch_activation(monkeypatch) -> None:
     activation = single_instance.SingleInstanceActivation()
     kernel32.signaled = True
     assert activation.activation_requested() is True
+
+
+def test_posix_instance_uses_os_released_lock(monkeypatch, tmp_path) -> None:
+    if single_instance.fcntl is None:
+        pytest.skip("POSIX flock is unavailable on Windows")
+    monkeypatch.setattr(single_instance.sys, "platform", "darwin")
+    monkeypatch.setattr(single_instance.tempfile, "gettempdir", lambda: str(tmp_path))
+    first = single_instance.SingleInstanceActivation()
+    second = single_instance.SingleInstanceActivation()
+    assert first.is_owner is True
+    assert second.is_owner is False
+    second.close()
+    first.close()

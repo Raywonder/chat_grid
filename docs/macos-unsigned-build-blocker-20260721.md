@@ -1,10 +1,10 @@
-# Endiginous macOS unsigned build handoff
+# Indiginous macOS unsigned build handoff
 
 Date: 2026-07-21
 
 ## Target
 
-- Product: Endiginous
+- Product: Indiginous
 - Version: 0.4.3
 - Web revision: R514
 - Build type: unsigned internal macOS artifact
@@ -16,8 +16,8 @@ Date: 2026-07-21
   `python3 scripts/preflight.py source --repo . --framework wxpython --version 0.4.3 --revision R514`
 - The current project source is the intended 0.4.3/R514 tree.
 - The expected output names are:
-  - `desktop/native/macos/release/Endiginous-0.4.3-macOS.zip`
-  - `desktop/native/macos/release/Endiginous-0.4.3.dmg`
+  - `desktop/native/macos/release/Indiginous-0.4.3-macOS.zip`
+  - `desktop/native/macos/release/Indiginous-0.4.3.dmg`
 
 ## Blocker
 

@@ -1,9 +1,9 @@
-# Endiginous
+# Indiginous
 ## A Mostly Vibed, Audio-first Interactive Playground
 
-Endiginous is one of those projects that started with a random idea, and then grew to be many things, but most with spacial audio as its core. Briefly put, Endiginous allows users to move around a grid and interact with each other, or with items placed on the grid. Your voice, as well as items are shared as positional audio. Item types currently range from dice and a wheel to a fully-playable toy piano and media players with directional audio. New item types can be added as plugins.
+Indiginous is one of those projects that started with a random idea, and then grew to be many things, but most with spacial audio as its core. Briefly put, Indiginous allows users to move around a grid and interact with each other, or with items placed on the grid. Your voice, as well as items are shared as positional audio. Item types currently range from dice and a wheel to a fully-playable toy piano and media players with directional audio. New item types can be added as plugins.
 
-Endiginous is designed to be run on a secure server with users connecting via a web client. The client works best currently with Windows browsers, with minimal testing on mobile/Mac. Ideally, client apps would be better in the long-run, especially for mobile.
+Indiginous is designed to be run on a secure server with users connecting via a web client. The client works best currently with Windows browsers, with minimal testing on mobile/Mac. Ideally, client apps would be better in the long-run, especially for mobile.
 
 ## Local Run
 
@@ -65,7 +65,7 @@ Summary:
 - Protocol behavior notes: `docs/protocol-notes.md`
 - Item schema reference: `docs/item-schema.md`
 - Local dev commands: `docs/local.md`
-- Rename/compatibility plan: `docs/endiginous-rename-plan.md`
+- Rename/compatibility plan: `docs/indiginous-rename-plan.md`
 
 ## Contributing
 Contributions and ideas are welcome. The grid is already home to several rather absurd ideas, and yours may fit right in. Please look over the docs and other files for guidance, or ask for help.

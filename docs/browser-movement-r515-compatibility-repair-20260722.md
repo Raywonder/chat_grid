@@ -5,7 +5,7 @@ Date: 2026-07-21/22 CDT
 ## Cause
 
 The account/bookmark compatibility URL `/chatgrid/` was serving client revision
-R513 while the current Endiginous URL `/endiginous/` was serving R515. The older
+R513 while the current Indiginous URL `/indiginous/` was serving R515. The older
 client was therefore not the same browser build that had the current movement
 handling and server protocol expectations.
 
@@ -15,15 +15,15 @@ handling and server protocol expectations.
   `/mnt/backups/chat-grid/chatgrid-live-before-r515-sync-20260721-235811/`
 - Published the validated R515 browser artifact to `/chatgrid/`.
 - Preserved the existing downloads, updates, and voice directories.
-- Left `/endiginous/` on the same R515 client revision.
+- Left `/indiginous/` on the same R515 client revision.
 
 ## Proof
 
 - `https://blind.software/chatgrid/version.js` reports R515.
-- `https://blind.software/endiginous/version.js` reports R515.
+- `https://blind.software/indiginous/version.js` reports R515.
 - Both client HTML pages resolve their current JavaScript and CSS assets with
   HTTP 200.
-- Public WebSocket upgrade to `/endiginous/ws` returned `101 Switching
+- Public WebSocket upgrade to `/indiginous/ws` returned `101 Switching
   Protocols`; the server returned `expectedClientRevision: R515` and
   `serverVersion: S424`.
 - The browser bundle contains the arrow-key and `update_position` movement

@@ -38,6 +38,11 @@ from app.items.types.house_alarm.validator import validate_update as validate_ho
 from app.items.types.house_keeper.actions import (
     secondary_use_item as secondary_use_house_keeper,
 )
+from app.items.types.house_keeper.autonomy import (
+    build_prompt,
+    load_reviewed_discoveries,
+    parse_decision,
+)
 from app.items.types.house_keeper.validator import validate_update as validate_house_keeper
 from app.items.types.cabin.validator import validate_update as validate_cabin
 from app.items.types.room.validator import validate_update as validate_room
@@ -544,11 +549,37 @@ def test_house_keeper_validation_and_secondary_use() -> None:
         "authorizedNames": "Dom, Clawdia",
         "voicePrompt": "I can fix the radio if you ask.",
         "description": "A little in-world helper.",
-        "lastAutoCheckAt": 0,
-        "lastAutoCheckSummary": "",
-    }
+            "lastAutoCheckAt": 0,
+            "lastAutoCheckSummary": "",
+            "autonomyEnabled": True,
+            "localModelEnabled": False,
+            "localModelUrl": "http://127.0.0.1:11434/api/chat",
+            "localModelName": "llama3.2:3b",
+            "interactionRadius": 4,
+            "webDiscoveryEnabled": False,
+            "taskBoard": [],
+            "lastAutonomyAt": 0,
+            "lastAutonomySummary": "",
+            "heldKeyIds": [],
+        }
     assert "Radio helper looks after Dom house." in details.self_message
     assert "Mode: inspect." in details.self_message
+
+
+def test_house_keeper_local_autonomy_decision_is_bounded() -> None:
+    decision = parse_decision(
+        {"action": "say", "message": "  Hello   there. ", "task": "ignore"}
+    )
+    assert decision.action == "say"
+    assert decision.message == "Hello there."
+    assert parse_decision({"action": "run_shell", "message": "bad"}).action == "inspect"
+    assert "credentials" in build_prompt({"location": "raywonder_house_entry"})
+
+
+def test_house_keeper_accepts_only_short_reviewed_discovery_text(tmp_path) -> None:
+    path = tmp_path / "discoveries.json"
+    path.write_text('{"discoveries": ["Build a piano lesson room", "", "Build a piano lesson room"]}')
+    assert load_reviewed_discoveries(str(path)) == ["Build a piano lesson room"]
 
 
 def test_house_object_window_toggles_and_reports_outside_ambience() -> None:

@@ -35,7 +35,7 @@ export class TvScreenRuntime {
 
   constructor() {
     this.region.id = 'chatgrid-tv-screen';
-    this.region.setAttribute('aria-label', 'Endiginous television');
+    this.region.setAttribute('aria-label', 'Indiginous television');
     this.region.hidden = true;
     Object.assign(this.region.style, {
       position: 'fixed', right: '1rem', bottom: '1rem', zIndex: '20',
@@ -61,13 +61,24 @@ export class TvScreenRuntime {
   }
 
   sync(items: Iterable<WorldItem>, listener: { x: number; y: number }): void {
-    const selected = Array.from(items)
+    const televisions = Array.from(items)
       .filter((item) => isTv(item) && item.params.enabled !== false)
-      .map((item) => ({ item, url: playbackUrl(item), distance: Math.hypot(item.x - listener.x, item.y - listener.y) }))
+      .map((item) => ({ item, url: playbackUrl(item), distance: Math.hypot(item.x - listener.x, item.y - listener.y) }));
+    const selected = televisions
       .filter(({ item, distance }) => distance <= Math.max(3, Number(item.params.emitRange) || 12))
       .sort((a, b) => a.distance - b.distance)[0];
     if (!selected) {
-      this.hide();
+      // Keep the shared TV media element playing while it is out of range.
+      // The picture is hidden, but returning to the room can reuse the same
+      // continuous playback position instead of restarting the programme.
+      const activeStillExists = this.activeItemId.length > 0 && televisions.some(({ item, url }) =>
+        item.id === this.activeItemId && Boolean(url) && looksLikeVideo(item, url),
+      );
+      if (activeStillExists) {
+        this.region.hidden = true;
+      } else {
+        this.hide();
+      }
       return;
     }
     const title = String(selected.item.params.nowPlaying || selected.item.params.stationName || selected.item.title).trim();

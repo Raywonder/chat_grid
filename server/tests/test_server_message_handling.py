@@ -570,6 +570,44 @@ async def test_social_reaction_slash_commands_include_new_actions(
 
 
 @pytest.mark.asyncio
+async def test_home_command_is_available_as_authenticated_return_to_bed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    sender_ws = _fake_ws()
+    sender = _activate_client(
+        ClientConnection(
+            websocket=sender_ws,
+            id="u1",
+            nickname="Dom",
+            username="dominique",
+            location_id="raywonder_house_bedroom",
+            x=20,
+            y=18,
+        ),
+        user_id="dom-user",
+        username="dominique",
+    )
+    server.clients[sender_ws] = sender
+    sent_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        sent_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    await server._handle_chat_command(sender, "/home")
+
+    assert sender.location_id == "raywonder_house_bedroom"
+    assert sender.seated_item_id == "seed-raywonder-bedroom-bed"
+    assert sender.posture == "lying"
+    assert any(
+        isinstance(packet, BroadcastChatMessagePacket)
+        and "safe in bed" in packet.message
+        for packet in sent_payloads
+    )
+
+
+@pytest.mark.asyncio
 async def test_user_action_rejects_target_in_other_location(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -729,6 +767,8 @@ async def test_raywonder_studio_door_knock_and_allow_entry(
 
     arrival = _last_packet_of_type(sent_payloads[guest_ws], LocationChangedPacket)
     assert arrival.locationId == "raywonder_house_studio"
+    assert arrival.width == 41
+    assert arrival.height == 41
     assert guest.location_id == "raywonder_house_studio"
 
 
@@ -750,7 +790,7 @@ async def test_guarded_house_denial_knocks_outside_and_inside(
             location_id=door.locationId,
         ),
         username="visitor",
-        permissions={"item.use"},
+        permissions={"item.pickup_drop.any"},
     )
     resident = _activate_client(
         ClientConnection(
@@ -996,7 +1036,7 @@ async def test_guarded_house_allow_works_from_deeper_house_room(
 
 
 @pytest.mark.asyncio
-async def test_locked_bedroom_door_unlocks_with_key_on_square(
+async def test_locked_bedroom_door_requires_taken_key_before_unlocking(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
@@ -1025,6 +1065,18 @@ async def test_locked_bedroom_door_unlocks_with_key_on_square(
 
     monkeypatch.setattr(server, "_send", fake_send)
 
+    await server._handle_message(
+        guest,
+        json.dumps({"type": "item_use", "itemId": door.id}),
+    )
+
+    result = _last_packet_of_type(sent_payloads[guest_ws], ItemActionResultPacket)
+    assert result.ok is False
+    assert result.message == "Take Bedroom key first, then press Enter on Bedroom door."
+    assert door.params["doorState"] == "locked"
+
+    # Taking the key is an explicit physical action; Enter then unlocks and enters.
+    key.carrierId = guest.id
     await server._handle_message(
         guest,
         json.dumps({"type": "item_use", "itemId": door.id}),
@@ -1092,6 +1144,8 @@ async def test_cabin_use_with_target_location_enters_real_navigable_location(
     assert arrival.locationId == "town"
     assert arrival.x == 18
     assert arrival.y == 18
+    assert arrival.width == 41
+    assert arrival.height == 41
     assert "You arrive in Town" in arrival_chat.message
     assert any(
         location_id == "forest"
@@ -1658,7 +1712,7 @@ async def test_house_object_bed_cycles_sit_lie_stand(
 
 
 @pytest.mark.asyncio
-async def test_seated_user_can_walk_away_from_couch(
+async def test_seated_user_must_stand_before_walking_away_from_couch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
@@ -1718,15 +1772,49 @@ async def test_seated_user_can_walk_away_from_couch(
         for packet in broadcast_payloads
         if isinstance(packet, BroadcastChatMessagePacket)
     ]
-    assert client.x == 7
-    assert client.y == 5
-    assert client.seated_item_id is None
-    assert client.posture == "standing"
-    assert position.posture == "standing"
-    assert position.seatedItemId is None
-    assert "You get up from Living room couch." in self_messages
-    assert "tester gets up from Living room couch." in peer_messages
-    assert "Stand up before moving away from the furniture." not in self_messages
+    assert client.x == couch.x
+    assert client.y == couch.y
+    assert client.seated_item_id == couch.id
+    assert client.posture == "sitting"
+    assert position.posture == "sitting"
+    assert position.seatedItemId == couch.id
+    assert "You get up from Living room couch." not in self_messages
+    assert "tester gets up from Living room couch." not in peer_messages
+
+
+@pytest.mark.asyncio
+async def test_item_pickup_reaches_adjacent_item_but_not_from_furniture(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5),
+        permissions={"item.pickup_drop.any"},
+    )
+    server.clients[ws] = client
+    item = server.item_service.default_item(client, "house_object")
+    item.id = "adjacent-mug"
+    item.title = "Adjacent mug"
+    item.x = 6
+    item.y = 5
+    server.item_service.add_item(item)
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    await server._handle_message(client, json.dumps({"type": "item_pickup", "itemId": item.id}))
+    assert item.carrierId == client.id
+
+    client.seated_item_id = "bed-1"
+    client.posture = "lying"
+    item.carrierId = None
+    await server._handle_message(client, json.dumps({"type": "item_pickup", "itemId": item.id}))
+    result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert result.ok is False
+    assert "Stand up" in result.message
 
 
 @pytest.mark.asyncio
@@ -4003,6 +4091,43 @@ async def test_community_house_repair_creates_full_interior_and_companions(
     assert by_title["Front window"].params["placement"] == "wall"
     assert by_title["Entry lamp"].params["objectKind"] == "lamp"
     assert by_title["House keys"].params["keyFor"] == "Demo House"
+
+
+@pytest.mark.asyncio
+async def test_community_bathroom_room_gets_shared_fixtures_and_tile_footsteps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="builder", x=8, y=9),
+        permissions={"item.create"},
+    )
+    client.location_id = "houses"
+    server.clients[ws] = client
+    monkeypatch.setattr(server.item_service, "now_ms", lambda: 123_457)
+    room = server.item_service.default_item(client, "room")
+    room.title = "Shared Bathroom"
+    room.params.update(
+        {
+            "placeName": "Shared Bathroom",
+            "roomLayout": "bathroom",
+            "doorState": "locked",
+            "description": "A private bathroom that can be shared by men and women when unlocked.",
+        }
+    )
+    server.item_service.add_item(room)
+
+    await server._repair_community_locations(broadcast=False)
+
+    target_location = room.params["targetLocation"]
+    assert server._get_world_location(target_location).footstep_surface == "bathroom_tile"
+    assert room.params["doorState"] == "locked"
+    interior_items = [item for item in server.items.values() if item.locationId == target_location]
+    fixtures = {item.title: item for item in interior_items if item.params.get("roomId") == target_location}
+    assert {"Toilet", "Bathroom sink", "Shower", "Bathroom mirror", "Towel rack", "Soap dispenser"} <= set(fixtures)
+    assert fixtures["Bathroom sink"].params["objectKind"] == "sink"
+    assert fixtures["Bathroom sink"].params["roomRole"] == "sink"
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Preflight checks for Endiginous desktop release source and artifacts."""
+"""Preflight checks for Indiginous desktop release source and artifacts."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 def _read_json(path: Path) -> dict[str, object]:
@@ -104,6 +105,11 @@ def check_source(args: argparse.Namespace) -> int:
             mismatches.append(f"Windows update manifest version mismatch: {manifest_path}")
         if str(manifest.get("revision", "")).strip() != args.revision:
             mismatches.append(f"Windows update manifest revision mismatch: {manifest_path}")
+        update_url = str(platform.get("url", "")).strip()
+        if "indiginous" in urlparse(update_url).path.lower():
+            mismatches.append(f"Windows update URL must be app-name neutral: {manifest_path}")
+        if str(platform.get("fileName", "")).strip() != "Indiginous_Setup.exe":
+            mismatches.append(f"Windows update filename must be Indiginous_Setup.exe: {manifest_path}")
     if mismatches:
         raise SystemExit("source preflight failed:\n- " + "\n- ".join(mismatches))
     print(f"source preflight ok: {args.framework} {args.version} {args.revision} at {repo}")
@@ -121,8 +127,9 @@ def check_artifact(args: argparse.Namespace) -> int:
         built_at = datetime.fromtimestamp(artifact.stat().st_mtime, tz=threshold.tzinfo)
         if built_at < threshold:
             raise SystemExit(f"artifact is older than {args.built_after}: {built_at.isoformat()}")
-    if args.version.lower() not in artifact.name.lower():
-        raise SystemExit(f"artifact name does not include {args.version}: {artifact.name}")
+    expected_name = "Indiginous_Setup.exe" if artifact.suffix.lower() == ".exe" else "Indiginous-macOS.zip"
+    if artifact.name != expected_name:
+        raise SystemExit(f"artifact name must be the stable {expected_name}: {artifact.name}")
     print(f"artifact preflight ok: {artifact} ({artifact.stat().st_size} bytes)")
     return 0
 
@@ -136,7 +143,7 @@ def main() -> int:
     source.add_argument("--framework", required=True)
     source.add_argument("--version", required=True)
     source.add_argument("--revision", required=True)
-    source.add_argument("--app-name", default="Endiginous")
+    source.add_argument("--app-name", default="Indiginous")
     source.set_defaults(func=check_source)
 
     artifact = subparsers.add_parser("artifact")

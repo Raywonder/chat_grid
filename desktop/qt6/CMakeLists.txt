@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(EndiginousQt6Native
+project(IndiginousQt6Native
     VERSION 0.1.0
     LANGUAGES CXX
-    DESCRIPTION "Native Qt 6 Widgets foundation for Endiginous"
+    DESCRIPTION "Native Qt 6 Widgets foundation for Indiginous"
 )
 
 include(CTest)

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
+import hashlib
 from dataclasses import replace
 from collections import deque
 from contextlib import suppress
@@ -45,6 +47,7 @@ from .world_cup_live import (
 from .client import ClientConnection
 from .config import load_config
 from .chat_history import ChatHistory
+from .claudia_writing import writing_indexes
 from .item_catalog import (
     CLOCK_DEFAULT_TIME_ZONE,
     CLOCK_TIME_ZONE_OPTIONS,
@@ -64,6 +67,11 @@ from .seed_items import ensure_tv_channel_defaults
 from .items.types.clock.time_format import parse_alarm_time_flexible
 from .items.types.house_alarm.actions import evaluate_access as evaluate_house_alarm_access
 from .items.types.house_alarm.actions import use_with_credential as use_house_alarm_with_credential
+from .items.types.house_keeper.autonomy import (
+    KeeperDecision,
+    load_reviewed_discoveries,
+    suggest_local_decision,
+)
 from .items.types.radio_station.aaastreamer import resolve_aaastreamer_playback
 from .items.types.service_link.portal_state import effective_portal_state
 from .models import (
@@ -86,6 +94,9 @@ from .models import (
     AdminAmbienceCatalogResultPacket,
     AdminAmbienceLocationSummary,
     AdminAmbienceSoundSummary,
+    AdminAmbienceUploadBeginPacket,
+    AdminAmbienceUploadChunkPacket,
+    AdminAmbienceUploadCompletePacket,
     AdminLocationAmbienceSetPacket,
     AdminRoleCreatePacket,
     AdminRoleDeletePacket,
@@ -109,6 +120,7 @@ from .models import (
     AdminUsersListPacket,
     AdminUsersListResultPacket,
     AgentVoicePacket,
+    BroadcastAvatarPacket,
     BroadcastChatMessagePacket,
     BroadcastNicknamePacket,
     BroadcastPositionPacket,
@@ -221,6 +233,7 @@ RADIO_METADATA_POLL_INTERVAL_S = 10.0
 RADIO_METADATA_TIMEOUT_S = 6.0
 CLOCK_ANNOUNCE_POLL_INTERVAL_S = 1.0
 HOUSE_KEEPER_AUTO_CHECK_POLL_INTERVAL_S = 30.0
+HOUSE_KEEPER_AUTONOMY_INTERVAL_MS = 90_000
 AUTH_SESSION_COOKIE_NAME = "chgrid_session_token"
 AUTH_SESSION_COOKIE_MAX_AGE_SECONDS = 14 * 24 * 60 * 60
 AUTH_SESSION_COOKIE_SET_PATH = "auth/session/set"
@@ -536,6 +549,7 @@ AdminActionName: TypeAlias = Literal[
     "notifications_mark_read",
     "blindsoftware_admin_sync",
     "location_ambience_set",
+    "ambience_sound_upload",
 ]
 
 
@@ -584,9 +598,9 @@ class SignalingServer:
         state_save_max_delay_ms: int = 1000,
         host_origin: str | None = None,
         base_path: str = "/",
-        grid_name: str = "Endiginous",
+        grid_name: str = "Indiginous",
         welcome_message: str = (
-            "Welcome to Endiginous, your immersive audio playground. "
+            "Welcome to Indiginous, your immersive audio playground. "
             "Configure your audio, then Log in or register to join the grid."
         ),
     ):
@@ -643,10 +657,10 @@ class SignalingServer:
             else None
         )
         self.base_path = self._normalize_base_path(base_path)
-        self.grid_name = str(grid_name).strip() or "Endiginous"
+        self.grid_name = str(grid_name).strip() or "Indiginous"
         self.welcome_message = (
             str(welcome_message).strip()
-            or "Welcome to Endiginous, your immersive audio playground. Configure your audio, then Log in or register to join the grid."
+            or "Welcome to Indiginous, your immersive audio playground. Configure your audio, then Log in or register to join the grid."
         )
         self.auth_session_cookie_name = self._session_cookie_name_for_base_path(
             self.base_path
@@ -694,6 +708,7 @@ class SignalingServer:
         self._active_media_casts: dict[str, dict[str, MediaCastStatePacket]] = {}
         self._world_phone_calls: dict[str, WorldPhoneStatePacket] = {}
         self._flexpbx_bindings = self._load_flexpbx_bindings()
+        self._ambience_uploads: dict[str, dict[str, Any]] = {}
 
     @staticmethod
     def _resolve_server_version(release_version: str) -> str:
@@ -707,7 +722,7 @@ class SignalingServer:
 
     @staticmethod
     def _load_flexpbx_bindings() -> dict[str, dict[str, object]]:
-        """Load verified Endiginous username-to-FlexPBX bindings from service config."""
+        """Load verified Indiginous username-to-FlexPBX bindings from service config."""
 
         raw = os.getenv("CHGRID_FLEXPBX_BINDINGS", "").strip()
         if not raw:
@@ -899,6 +914,12 @@ class SignalingServer:
             spawn_y=20,
             ambience_key=ambience_key_by_type.get(item.type, "front_entry"),
             ambience_name=ambience_name_by_type.get(item.type, "Room tone"),
+            room_layout=str(item.params.get("roomLayout") or "").strip().lower(),
+            footstep_surface=(
+                "bathroom_tile"
+                if str(item.params.get("roomLayout") or "").strip().lower() == "bathroom"
+                else ""
+            ),
             width=max(1, min(41, int(item.params.get("widthSquares", 41) or 41))),
             height=max(1, min(41, int(item.params.get("depthSquares", 41) or 41))),
         )
@@ -1327,7 +1348,7 @@ class SignalingServer:
                 ("living-room", "Living room", "raywonder_house_living_room", 30, 26),
                 ("studio-room", "Studio", "raywonder_house_studio", 34, 30),
                 ("kitchen-room", "Kitchen", "raywonder_house_kitchen", 26, 24),
-                ("bedroom-room", "Bedroom", "raywonder_house_bedroom", 28, 26),
+                ("bedroom-room", "Bedroom", "raywonder_house_bedroom", 34, 36),
                 ("relaxation-room", "Relaxation room", "raywonder_house_relaxation_room", 30, 26),
             )
             for role, room_title, target_id, width, height in built_in_rooms:
@@ -1359,6 +1380,43 @@ class SignalingServer:
                 )
                 if marker is not None:
                     changed.append(marker)
+        room_layout = str(place_item.params.get("roomLayout") or "").strip().lower()
+        if place_item.type == "room" and room_layout == "bathroom":
+            room_width = max(1, min(self.grid_size, int(place_item.params.get("widthSquares", 12) or 12)))
+            room_depth = max(1, min(self.grid_size, int(place_item.params.get("depthSquares", 10) or 10)))
+            right_x = max(1, min(room_width, 8))
+            bottom_y = max(1, min(room_depth, 7))
+            left_x = max(1, min(room_width, 2))
+            top_y = max(1, min(room_depth, 2))
+            center_x = max(1, min(room_width, 5))
+            bathroom_fixtures: tuple[tuple[str, str, int, int, str, dict[str, object]], ...] = (
+                ("toilet", "Toilet", left_x, top_y, "toilet", {"objectKind": "toilet", "placement": "fixture", "description": "A private bathroom toilet."}),
+                ("sink", "Bathroom sink", right_x, top_y, "sink", {"objectKind": "sink", "placement": "fixture", "description": "A bathroom sink with a clear approach."}),
+                ("shower", "Shower", left_x, bottom_y, "shower", {"objectKind": "shower", "placement": "fixture", "description": "A walk-in shower."}),
+                ("mirror", "Bathroom mirror", right_x, bottom_y, "mirror", {"objectKind": "mirror", "placement": "wall", "description": "A wall-mounted bathroom mirror."}),
+                ("towel-rack", "Towel rack", center_x, bottom_y, "towel_rack", {"objectKind": "towel_rack", "placement": "wall", "description": "A towel rack by the bathroom fixtures."}),
+                ("soap", "Soap dispenser", right_x, 3 if room_depth >= 3 else room_depth, "soap_dispenser", {"objectKind": "soap_dispenser", "placement": "fixture", "description": "A soap dispenser beside the sink."}),
+            )
+            for role, title, x, y, room_role, fixture_params in bathroom_fixtures:
+                fixture = self._upsert_generated_house_object(
+                    item_id=self._generated_companion_item_id(location_id, f"bathroom-{role}"),
+                    title=title,
+                    location_id=location_id,
+                    x=max(1, min(self.grid_size, min(int(place_item.params.get("widthSquares", self.grid_size) or self.grid_size), x))),
+                    y=max(1, min(self.grid_size, min(int(place_item.params.get("depthSquares", self.grid_size) or self.grid_size), y))),
+                    params={
+                        **fixture_params,
+                        "roomId": location_id,
+                        "roomRole": room_role,
+                        "ownerName": place_item.params.get("ownerName", ""),
+                        "replacementHint": f"The {title.casefold()} belongs in this bathroom.",
+                        "repairCost": 8,
+                        "purchaseCost": 20,
+                    },
+                    now_ms=now_ms,
+                )
+                if fixture is not None:
+                    changed.append(fixture)
         fixtures: tuple[tuple[str, str, int, int, dict[str, object]], ...] = (
             (
                 "front-window",
@@ -1422,11 +1480,41 @@ class SignalingServer:
                 location_id=location_id,
                 x=x,
                 y=y,
-                params=params,
+                params={
+                    **params,
+                    **(
+                        {
+                            "roomId": location_id,
+                            "roomRole": role,
+                        }
+                        if place_item.type == "room"
+                        else {}
+                    ),
+                },
                 now_ms=now_ms,
             )
             if fixture is not None:
                 changed.append(fixture)
+        if location_id == "raywonder_house_bedroom":
+            wardrobe = self._upsert_generated_house_object(
+                item_id=self._generated_companion_item_id(location_id, "wardrobe"),
+                title="Wardrobe",
+                location_id=location_id,
+                x=16,
+                y=17,
+                params={
+                    "objectKind": "wardrobe",
+                    "placement": "furniture",
+                    "material": "wood",
+                    "description": "A private wardrobe for storing and changing clothes.",
+                    "roomId": location_id,
+                    "roomRole": "wardrobe",
+                    "clothingStorage": True,
+                },
+                now_ms=now_ms,
+            )
+            if wardrobe is not None:
+                changed.append(wardrobe)
         return changed
 
     async def _repair_community_locations(self, *, broadcast: bool) -> list[str]:
@@ -2240,7 +2328,11 @@ class SignalingServer:
     def _find_unlock_key_for(
         self, client: ClientConnection, item: WorldItem
     ) -> WorldItem | None:
-        """Find a matching carried or door-square key for one locked item."""
+        """Find a matching carried or keeper-held key for one locked item.
+
+        A key merely resting on the door square is deliberately not enough;
+        the user must take it first, as with a real physical key.
+        """
 
         required_key_id = self._required_key_id_for(item)
         if not required_key_id:
@@ -2254,6 +2346,7 @@ class SignalingServer:
                 and candidate.locationId == item.locationId
                 and candidate.x == item.x
                 and candidate.y == item.y
+                and str(candidate.params.get("heldByKeeperId") or "").strip()
             ],
         ]
         for candidate in candidates:
@@ -2261,6 +2354,101 @@ class SignalingServer:
             if key_id == required_key_id:
                 return candidate
         return None
+
+    def _find_key_on_item_square(self, item: WorldItem) -> WorldItem | None:
+        """Find a loose matching key so the user can be told to take it."""
+
+        required_key_id = self._required_key_id_for(item)
+        if not required_key_id:
+            return None
+        for candidate in self.items.values():
+            if (
+                candidate.carrierId is None
+                and not str(candidate.params.get("heldByKeeperId") or "").strip()
+                and candidate.locationId == item.locationId
+                and candidate.x == item.x
+                and candidate.y == item.y
+                and str(candidate.params.get("keyId") or "").strip() == required_key_id
+            ):
+                return candidate
+        return None
+
+    @staticmethod
+    def _is_key_item(item: WorldItem) -> bool:
+        """Return whether an item is a physical in-world key."""
+
+        return (
+            item.type == "house_object"
+            and str(item.params.get("objectKind") or "").strip().casefold() == "keys"
+            and bool(str(item.params.get("keyId") or "").strip())
+        )
+
+    async def _give_carried_key_to_keeper(
+        self, client: ClientConnection, keeper: WorldItem
+    ) -> WorldItem | None:
+        """Let a user hand one carried key to a nearby housekeeper."""
+
+        if keeper.locationId != client.location_id or keeper.x != client.x or keeper.y != client.y:
+            return None
+        key = next(
+            (
+                candidate
+                for candidate in self.item_service.carried_items_for_client(client.id)
+                if self._is_key_item(candidate)
+            ),
+            None,
+        )
+        if key is None:
+            return None
+        held_key_ids = [
+            str(key_id).strip()
+            for key_id in keeper.params.get("heldKeyIds", [])
+            if str(key_id).strip()
+        ] if isinstance(keeper.params.get("heldKeyIds"), list) else []
+        if key.id not in held_key_ids:
+            held_key_ids.append(key.id)
+        now_ms = self.item_service.now_ms()
+        actor_id, actor_name = self._item_updated_actor(client)
+        key.carrierId = None
+        key.locationId = keeper.locationId
+        key.x = keeper.x
+        key.y = keeper.y
+        key.params = {
+            **key.params,
+            "heldByKeeperId": keeper.id,
+            "placement": "held_by_keeper",
+            "surfaceId": "",
+            "surfaceTitle": "",
+        }
+        key.updatedAt = now_ms
+        key.updatedBy = actor_id
+        key.updatedByName = actor_name
+        key.version += 1
+        keeper.params = {**keeper.params, "heldKeyIds": held_key_ids}
+        keeper.updatedAt = now_ms
+        keeper.updatedBy = actor_id
+        keeper.updatedByName = actor_name
+        keeper.version += 1
+        self._request_state_save()
+        await self._broadcast_item(key)
+        await self._broadcast_item(keeper)
+        await self._broadcast_location(
+            keeper.locationId,
+            BroadcastChatMessagePacket(
+                type="chat_message",
+                message=f"{client.nickname} gives {key.title} to {keeper.title} for safekeeping.",
+                system=True,
+            ),
+            exclude=client.websocket,
+        )
+        await self._send_item_result(
+            client,
+            True,
+            "use",
+            f"You give {key.title} to {keeper.title}. It will keep the key safe for later use.",
+            keeper.id,
+        )
+        return key
 
     def _linked_house_alarm(self, door: WorldItem) -> WorldItem | None:
         """Return the alarm panel that authoritatively guards one exterior door."""
@@ -2496,6 +2684,165 @@ class SignalingServer:
             ),
         )
         await self._change_client_location(client, target_location)
+
+    async def _walk_client_to_square(
+        self, client: ClientConnection, target_x: int, target_y: int
+    ) -> bool:
+        """Walk one authenticated client to a nearby target square with presence updates."""
+
+        if not self._is_in_bounds(target_x, target_y, client.location_id):
+            return False
+        path = self._path_to_square(
+            client.x, client.y, target_x, target_y, client.location_id
+        )
+        if not path:
+            return client.x == target_x and client.y == target_y
+        now_ms = self.item_service.now_ms()
+        for step_x, step_y in path:
+            old_x, old_y = client.x, client.y
+            client.x, client.y = step_x, step_y
+            client.seated_item_id = None
+            client.seated_offset = 0.0
+            client.posture = "standing"
+            client.last_position_update_ms = now_ms
+            self._persist_client_position(client, force=True)
+            await self._send(client.websocket, self._position_packet_for(client))
+            await self._broadcast_location(
+                client.location_id,
+                self._position_packet_for(client),
+                exclude=client.websocket,
+            )
+            await self._update_carried_items_after_client_move(
+                client, old_x=old_x, old_y=old_y, now_ms=now_ms
+            )
+        return True
+
+    async def _bring_client_home_to_bed(self, client: ClientConnection) -> None:
+        """Return a verified resident home, using portals/alarm auth before the bed."""
+
+        alarms = [
+            item
+            for item in self.items.values()
+            if item.type == "house_alarm"
+            and str(item.params.get("houseName") or "").strip().casefold()
+            == "raywonder house"
+            and self._is_house_alarm_controller(item, client)
+        ]
+        if not alarms:
+            await self._send(
+                client.websocket,
+                BroadcastChatMessagePacket(
+                    type="chat_message",
+                    message="I cannot use the Raywonder home route until this signed-in account is authorized for it.",
+                    system=True,
+                ),
+            )
+            return
+        alarm = alarms[0]
+        bedroom_id = "raywonder_house_bedroom"
+        bed = next(
+            (
+                item
+                for item in self.items.values()
+                if item.locationId == bedroom_id
+                and item.type == "furniture"
+                and str(item.params.get("furnitureKind") or "").strip().casefold()
+                == "bed"
+            ),
+            None,
+        )
+        if bed is None:
+            await self._send(
+                client.websocket,
+                BroadcastChatMessagePacket(
+                    type="chat_message",
+                    message="The bedroom is available, but its bed is not currently present.",
+                    system=True,
+                ),
+            )
+            return
+
+        if client.location_id == bedroom_id:
+            pass
+        elif self._is_raywonder_house_location(client.location_id):
+            await self._send(
+                client.websocket,
+                BroadcastChatMessagePacket(
+                    type="chat_message",
+                    message="I walk you through the house toward the bedroom.",
+                    system=True,
+                ),
+            )
+            await self._change_client_location(client, bedroom_id)
+        else:
+            portal = next(
+                (
+                    item
+                    for item in self.items.values()
+                    if item.locationId == client.location_id
+                    and item.type == "service_link"
+                    and str(item.params.get("targetLocation") or "").strip()
+                    == "houses"
+                    and self._can_enter_service_link_target(item)
+                ),
+                None,
+            )
+            if portal is not None:
+                await self._send(
+                    client.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message=f"I walk alongside you to {portal.title}, and open the way home.",
+                        system=True,
+                    ),
+                )
+            else:
+                await self._send(
+                    client.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message="The ordinary home portal is not available here, so I use your verified resident return route.",
+                        system=True,
+                    ),
+                )
+            await self._change_client_location(client, "houses")
+            if not await self._walk_client_to_square(client, alarm.x, alarm.y):
+                await self._send(
+                    client.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message="I could not reach the home alarm safely, so I left you at the Houses arrival point.",
+                        system=True,
+                    ),
+                )
+                return
+            access_result = evaluate_house_alarm_access(
+                alarm, client.nickname, username=client.username or ""
+            )
+            if access_result not in {"authorized", "resident"}:
+                await self._send(
+                    client.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message="The home alarm did not accept this signed-in identity, so I left you safely outside.",
+                        system=True,
+                    ),
+                )
+                return
+            await self._complete_house_alarm_entry(
+                client=client, alarm=alarm, access_result=access_result
+            )
+            await self._change_client_location(client, bedroom_id)
+
+        await self._sit_client_on_furniture(client, bed, posture="lying")
+        await self._send(
+            client.websocket,
+            BroadcastChatMessagePacket(
+                type="chat_message",
+                message="You are home, safe in bed. Sleep well, love.",
+                system=True,
+            ),
+        )
 
     @staticmethod
     def _is_drifting_telepad(item: WorldItem) -> bool:
@@ -2889,6 +3236,59 @@ class SignalingServer:
 
         return location_id.startswith(RAYWONDER_HOUSE_LOCATION_PREFIX)
 
+    def _is_house_interior_location(self, location_id: str) -> bool:
+        """Return whether a location is a private house/place interior.
+
+        House keepers may work in built-in houses and generated private place
+        interiors, but never in public city, café, office, or travel rooms.
+        """
+
+        if self._is_raywonder_house_location(location_id):
+            return True
+        location = self._get_world_location(location_id)
+        return location.kind in {"house", "room", "cabin", "shack", "shed"}
+
+    async def _sync_claudia_writing_folder(self) -> bool:
+        """Mirror the real private Journal/Letters indexes into Clawdia's folder."""
+
+        journal_index, letter_index = await asyncio.to_thread(writing_indexes)
+        folder = next(
+            (
+                item
+                for item in self.items.values()
+                if item.type == "house_object" and item.params.get("journalFolder")
+            ),
+            None,
+        )
+        if folder is None:
+            return False
+        if (
+            folder.params.get("journalIndex") == journal_index
+            and folder.params.get("letterIndex") == letter_index
+        ):
+            return False
+        # These two fields are server-owned mirror metadata. Do not run the
+        # whole user-edit validator here: older seeded folder descriptions are
+        # intentionally richer than the short editable-description limit.
+        folder.params = {
+            **folder.params,
+            "journalIndex": journal_index,
+            "letterIndex": letter_index,
+        }
+        now_ms = self.item_service.now_ms()
+        folder.updatedAt = now_ms
+        folder.updatedBy = "system:claudia-writing-sync"
+        folder.updatedByName = "Clawdia"
+        folder.version += 1
+        self._request_state_save()
+        await self._broadcast_item(folder)
+        LOGGER.info(
+            "mirrored Clawdia writing folder journals=%d letters=%d",
+            len(journal_index),
+            len(letter_index),
+        )
+        return True
+
     @classmethod
     def _carry_scope_for_location(cls, location_id: str) -> str:
         """Return the broader place where carried items may remain in hand."""
@@ -3058,7 +3458,176 @@ class SignalingServer:
         ).strip()
         keeper.version += 1
         await self._broadcast_item(keeper)
+        for key in self.items.values():
+            if str(key.params.get("heldByKeeperId") or "").strip() != keeper.id:
+                continue
+            key.locationId = keeper.locationId
+            key.x = keeper.x
+            key.y = keeper.y
+            key.updatedAt = now_ms
+            key.updatedBy = "system:house_keeper"
+            key.updatedByName = str(keeper.params.get("keeperName") or keeper.title)
+            key.version += 1
+            await self._broadcast_item(key)
         self._request_state_save()
+        return True
+
+    @staticmethod
+    def _house_keeper_autonomy_enabled(item: WorldItem) -> bool:
+        """Return whether this keeper may act as a quiet autonomous NPC."""
+
+        value = item.params.get("autonomyEnabled", True)
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().casefold() not in {"0", "false", "no", "off", "disabled"}
+
+    def _house_keeper_snapshot(self, keeper: WorldItem) -> dict[str, Any]:
+        """Build a small privacy-bounded local-model world snapshot."""
+
+        radius = max(1, min(12, int(keeper.params.get("interactionRadius", 4) or 4)))
+        nearby_people = [
+            {
+                "nickname": client.nickname,
+                "x": client.x,
+                "y": client.y,
+                "distance": abs(client.x - keeper.x) + abs(client.y - keeper.y),
+            }
+            for client in self.clients.values()
+            if client.location_id == keeper.locationId
+            and abs(client.x - keeper.x) + abs(client.y - keeper.y) <= radius
+        ]
+        nearby_keepers = [
+            {"name": str(other.params.get("keeperName") or other.title), "x": other.x, "y": other.y}
+            for other in self.items.values()
+            if other.id != keeper.id
+            and self._is_house_keeper(other)
+            and other.locationId == keeper.locationId
+            and abs(other.x - keeper.x) + abs(other.y - keeper.y) <= radius
+        ]
+        nearby_items = [
+            {"title": item.title, "type": item.type, "x": item.x, "y": item.y}
+            for item in self.items.values()
+            if item.id != keeper.id
+            and item.locationId == keeper.locationId
+            and item.carrierId is None
+            and abs(item.x - keeper.x) + abs(item.y - keeper.y) <= radius
+        ][:24]
+        return {
+            "keeper": str(keeper.params.get("keeperName") or keeper.title),
+            "location": keeper.locationId,
+            "position": {"x": keeper.x, "y": keeper.y},
+            "nearbyPeople": nearby_people,
+            "nearbyKeepers": nearby_keepers,
+            "nearbyItems": nearby_items,
+            "taskBoard": list(keeper.params.get("taskBoard") or [])[:12],
+        }
+
+    async def _move_house_keeper_through_nearby_link(self, keeper: WorldItem) -> bool:
+        """Use a nearby open door or portal to visit another permitted location."""
+
+        links = [
+            item
+            for item in self.items.values()
+            if item.locationId == keeper.locationId
+            and item.carrierId is None
+            and item.type == "service_link"
+            and abs(item.x - keeper.x) + abs(item.y - keeper.y) <= 1
+            and self._resolve_service_link_target_location(item, keeper.locationId)
+        ]
+        if not links:
+            return False
+        link = sorted(links, key=lambda item: (item.title.lower(), item.id))[0]
+        target = self._resolve_service_link_target_location(link, keeper.locationId)
+        if not target or not self._is_house_interior_location(target):
+            return False
+        keeper.locationId = target
+        keeper.x, keeper.y = 1, 1
+        now_ms = self.item_service.now_ms()
+        keeper.updatedAt = now_ms
+        keeper.updatedBy = "system:house_keeper"
+        keeper.updatedByName = str(keeper.params.get("keeperName") or keeper.title).strip()
+        keeper.version += 1
+        await self._broadcast_item(keeper)
+        self._request_state_save()
+        return True
+
+    async def _apply_house_keeper_decision(
+        self, keeper: WorldItem, decision: KeeperDecision
+    ) -> str:
+        """Apply one validated NPC decision using only in-world effects."""
+
+        label = str(keeper.params.get("keeperName") or keeper.title).strip() or "House keeper"
+        if decision.action == "move":
+            if await self._move_house_keeper_through_nearby_link(keeper):
+                return f"{label} visited another room."
+            return f"{label} walked around the room."
+        if decision.action == "say" and decision.message:
+            await self._broadcast_location(
+                keeper.locationId,
+                BroadcastChatMessagePacket(
+                    type="chat_message", message=f"{label}: {decision.message}", system=True
+                ),
+            )
+            return f"{label} spoke with nearby people."
+        if decision.action == "task" and decision.task:
+            current = [str(value) for value in keeper.params.get("taskBoard", []) if str(value).strip()]
+            if decision.task not in current:
+                current.append(decision.task)
+            handler = get_item_type_handler(keeper.type)
+            keeper.params = handler.validate_update(
+                keeper, {**keeper.params, "taskBoard": current[-12:]}
+            )
+            await self._broadcast_item(keeper)
+            return f"{label} added a useful idea to its task board."
+        if decision.action == "inspect":
+            return f"{label} inspected the room and its nearby helpers."
+        return f"{label} is keeping watch."
+
+    async def _run_house_keeper_autonomy(self, keeper: WorldItem) -> bool:
+        """Run one bounded local-NPC cycle for a private-house keeper."""
+
+        if not self._is_house_keeper(keeper) or not self._house_keeper_autonomy_enabled(keeper):
+            return False
+        if keeper.carrierId is not None or not self._is_house_interior_location(keeper.locationId):
+            return False
+        now_ms = self.item_service.now_ms()
+        last_at = int(keeper.params.get("lastAutonomyAt") or 0)
+        if last_at and now_ms - last_at < HOUSE_KEEPER_AUTONOMY_INTERVAL_MS:
+            return False
+        if keeper.params.get("webDiscoveryEnabled") is True:
+            discovery_path = os.getenv("CHGRID_HOUSE_KEEPER_DISCOVERIES_FILE", "").strip()
+            discoveries = load_reviewed_discoveries(discovery_path)
+            if discoveries:
+                existing = [str(value) for value in keeper.params.get("taskBoard", [])]
+                merged = [*existing, *(idea for idea in discoveries if idea not in existing)]
+                handler = get_item_type_handler(keeper.type)
+                keeper.params = handler.validate_update(
+                    keeper, {**keeper.params, "taskBoard": merged[-12:]}
+                )
+        snapshot = self._house_keeper_snapshot(keeper)
+        decision = KeeperDecision(action="move")
+        local_model_enabled = keeper.params.get("localModelEnabled", False)
+        if isinstance(local_model_enabled, str):
+            local_model_enabled = local_model_enabled.strip().casefold() in {"1", "true", "yes", "on", "enabled"}
+        if local_model_enabled:
+            decision = await suggest_local_decision(
+                snapshot,
+                url=str(keeper.params.get("localModelUrl") or "http://127.0.0.1:11434/api/chat"),
+                model=str(keeper.params.get("localModelName") or "llama3.2:3b"),
+            )
+        summary = await self._apply_house_keeper_decision(keeper, decision)
+        handler = get_item_type_handler(keeper.type)
+        keeper.params = handler.validate_update(
+            keeper,
+            {**keeper.params, "lastAutonomyAt": now_ms, "lastAutonomySummary": summary[:240]},
+        )
+        keeper.updatedAt = now_ms
+        keeper.updatedBy = "system:house_keeper"
+        keeper.updatedByName = str(keeper.params.get("keeperName") or keeper.title).strip()
+        keeper.version += 1
+        await self._broadcast_item(keeper)
+        self._request_state_save()
+        LOGGER.info("house keeper autonomy item=%s summary=%s", keeper.id, summary)
         return True
 
     @staticmethod
@@ -4441,7 +5010,7 @@ class SignalingServer:
         inspected = 0
         fixed: list[str] = []
 
-        if self._is_raywonder_house_location(keeper.locationId):
+        if self._is_house_interior_location(keeper.locationId):
             candidates = [
                 item
                 for item in self.items.values()
@@ -4513,11 +5082,16 @@ class SignalingServer:
         """Run scheduled baseline autonomy for in-world house keepers."""
 
         while True:
+            try:
+                await self._sync_claudia_writing_folder()
+            except Exception as exc:
+                LOGGER.warning("Clawdia writing-folder sync failed: %s", exc)
             for keeper in list(self.items.values()):
                 if not self._is_house_keeper(keeper):
                     continue
                 try:
                     await self._run_house_keeper_auto_check(keeper)
+                    await self._run_house_keeper_autonomy(keeper)
                 except Exception as exc:
                     LOGGER.warning(
                         "house keeper auto-check failed item=%s: %s", keeper.id, exc
@@ -4540,6 +5114,8 @@ class SignalingServer:
                 f"{keeper.title} is not authorized for {client.nickname}.",
                 keeper.id,
             )
+            return True
+        if await self._give_carried_key_to_keeper(client, keeper) is not None:
             return True
         targets = self._house_keeper_targets(keeper)
         repair_mode = str(keeper.params.get("repairMode") or "auto_repair").strip().lower()
@@ -4655,7 +5231,7 @@ class SignalingServer:
         try:
             with open_validated_public_url(
                 stream_url,
-                headers={"Icy-MetaData": "1", "User-Agent": "Endiginous"},
+                headers={"Icy-MetaData": "1", "User-Agent": "Indiginous"},
                 timeout=RADIO_METADATA_TIMEOUT_S,
             ) as response:
                 station = str(
@@ -5494,6 +6070,15 @@ class SignalingServer:
         location = self._get_world_location(location_id or DEFAULT_LOCATION_ID)
         return 0 <= x < min(self.grid_size, location.width) and 0 <= y < min(self.grid_size, location.height)
 
+    def _location_dimensions(self, location_id: str | None = None) -> tuple[int, int]:
+        """Return the effective dimensions advertised for one location."""
+
+        location = self._get_world_location(location_id or DEFAULT_LOCATION_ID)
+        return (
+            min(self.grid_size, max(1, int(location.width))),
+            min(self.grid_size, max(1, int(location.height))),
+        )
+
     def _movement_window_index(self, now_ms: int) -> int:
         """Return current movement rate-limit window index for a server timestamp."""
 
@@ -5657,6 +6242,10 @@ class SignalingServer:
                 locationName=next_location.name,
                 x=client.x,
                 y=client.y,
+                width=self._location_dimensions(next_location.id)[0],
+                height=self._location_dimensions(next_location.id)[1],
+                gender=client.gender,
+                wornClothing=client.worn_clothing or [],
             ),
         )
         for other in self.clients.values():
@@ -5673,6 +6262,10 @@ class SignalingServer:
                     locationName=next_location.name,
                     x=other.x,
                     y=other.y,
+                    width=self._location_dimensions(next_location.id)[0],
+                    height=self._location_dimensions(next_location.id)[1],
+                    gender=other.gender,
+                    wornClothing=other.worn_clothing or [],
                 ),
             )
         for item in self.items.values():
@@ -5692,6 +6285,10 @@ class SignalingServer:
                 locationName=next_location.name,
                 x=client.x,
                 y=client.y,
+                width=self._location_dimensions(next_location.id)[0],
+                height=self._location_dimensions(next_location.id)[1],
+                gender=client.gender,
+                wornClothing=client.worn_clothing or [],
             ),
             exclude=client.websocket,
         )
@@ -5845,8 +6442,10 @@ class SignalingServer:
                 return f"{item.title} is fixed in place and cannot be picked up."
             if not self._client_can_pickup_drop_item(client, item):
                 return f"Not authorized to pick up {item.title}."
-        if root.carrierId is None and (root.x != client.x or root.y != client.y):
-            return "Item is not on your square."
+        if root.carrierId is None and max(
+            abs(root.x - client.x), abs(root.y - client.y)
+        ) > 1:
+            return "Item is out of reach."
         return None
 
     def _validate_linked_drop(
@@ -6606,7 +7205,7 @@ class SignalingServer:
         return added
 
     async def _sync_blind_productions_billboards_once(self) -> list[WorldItem]:
-        """Mirror public Blind Productions messages into Endiginous billboards."""
+        """Mirror public Blind Productions messages into Indiginous billboards."""
 
         try:
             messages = await asyncio.to_thread(fetch_blind_productions_messages)
@@ -6879,6 +7478,8 @@ class SignalingServer:
                 seatedItemId=other.seated_item_id,
                 seatedOffset=other.seated_offset,
                 handHeldById=other.hand_held_by_id,
+                gender=other.gender,
+                wornClothing=other.worn_clothing or [],
             )
             for ws, other in self.clients.items()
             if ws is not client.websocket
@@ -6899,6 +7500,8 @@ class SignalingServer:
                 seatedItemId=client.seated_item_id,
                 seatedOffset=client.seated_offset,
                 handHeldById=client.hand_held_by_id,
+                gender=client.gender,
+                wornClothing=client.worn_clothing or [],
             ),
             users=users,
             items=[
@@ -6955,6 +7558,7 @@ class SignalingServer:
                         "targetNickname": entry.get("targetNickname") or "Unknown",
                         "senderUserId": entry.get("senderUserId"),
                         "targetUserId": entry.get("targetUserId"),
+                        "createdAt": entry.get("createdAt"),
                         "outgoing": entry.get("senderUserId") == client.user_id,
                     }
                     for entry in self.chat_history.direct_for_user(client.user_id or "")
@@ -7212,6 +7816,9 @@ class SignalingServer:
         client.permissions = set(session.user.permissions)
         client.session_token = session.token
         client.nickname = session.user.last_nickname or client.nickname
+        avatar_profile = self.auth_service.get_avatar_profile(session.user.id)
+        client.gender = str(avatar_profile.get("gender") or "")
+        client.worn_clothing = [str(entry) for entry in avatar_profile.get("wornClothing", [])]
         client.saved_x = session.user.last_x
         client.saved_y = session.user.last_y
         client.saved_location_id = session.user.last_location_id
@@ -7377,6 +7984,48 @@ class SignalingServer:
         )
         return True
 
+    async def _send_avatar_clothing_result(self, client: ClientConnection, command: str) -> None:
+        """Apply a clothing command and broadcast the authoritative avatar state."""
+
+        profile = self.auth_service.get_avatar_profile(client.user_id or "0")
+        wardrobe = [str(entry) for entry in profile.get("wardrobe", [])]
+        worn = [str(entry) for entry in profile.get("wornClothing", [])]
+        action, _, requested = command.partition(" ")
+        requested = requested.strip().casefold()
+        if action == "clothes":
+            message = f"Wardrobe: {', '.join(wardrobe)}. Wearing: {', '.join(worn) or 'nothing'}."
+        elif action in {"undress", "remove"}:
+            if action == "undress" and not requested:
+                next_worn: list[str] = []
+            else:
+                next_worn = [entry for entry in worn if entry.casefold() != requested]
+            if next_worn == worn:
+                message = f"You are not wearing {requested or 'that item'}."
+            else:
+                profile = self.auth_service.save_worn_clothing(client.user_id or "0", next_worn)
+                client.worn_clothing = [str(entry) for entry in profile.get("wornClothing", [])]
+                message = f"You remove {requested}." if requested else "You remove your clothing."
+        elif action == "wear":
+            match = next((entry for entry in wardrobe if entry.casefold() == requested), None)
+            if match is None:
+                message = f"That clothing is not in your wardrobe. Use /clothes to list what you own."
+            elif match in worn:
+                message = f"You are already wearing {match}."
+            else:
+                profile = self.auth_service.save_worn_clothing(client.user_id or "0", [*worn, match])
+                client.worn_clothing = [str(entry) for entry in profile.get("wornClothing", [])]
+                message = f"You wear {match}."
+        else:
+            message = "Use /clothes, /wear <item>, /remove <item>, or /undress."
+        await self._send(client.websocket, BroadcastChatMessagePacket(type="chat_message", message=message, system=True))
+        if action in {"wear", "remove", "undress"} and client.user_id:
+            await self._broadcast_location(
+                client.location_id,
+                BroadcastAvatarPacket(
+                    type="update_avatar", id=client.id, gender=client.gender, wornClothing=client.worn_clothing or []
+                ),
+            )
+
     async def _handle_chat_command(
         self, client: ClientConnection, message: str
     ) -> bool:
@@ -7417,6 +8066,9 @@ class SignalingServer:
             return True
         if command in {"ecrypto", "crypto", "wallet"}:
             await self._send_ecrypto_command_result(client, remainder.strip())
+            return True
+        if command in {"clothes", "wear", "remove", "undress"}:
+            await self._send_avatar_clothing_result(client, f"{command} {remainder.strip()}".strip())
             return True
         if command == "knock":
             if client.location_id != RAYWONDER_ENTRY_LOCATION_ID:
@@ -7587,6 +8239,9 @@ class SignalingServer:
             return True
         if command in {"teleportto", "teleport-to", "join", "goto-user"}:
             await self._move_to_named_user(client, remainder.strip(), exact=True)
+            return True
+        if command in {"home", "bed", "rest", "go-home", "gohome"}:
+            await self._bring_client_home_to_bed(client)
             return True
         if command == "up":
             await self._send(
@@ -7880,7 +8535,7 @@ class SignalingServer:
     def _ecrypto_transfer_text(
         self, client: ClientConnection, args: list[str]
     ) -> str:
-        """Transfer internal test-chain eCrypto to another Endiginous account."""
+        """Transfer internal test-chain eCrypto to another Indiginous account."""
 
         if not client.user_id:
             return "Log in to transfer eCrypto."
@@ -8291,13 +8946,18 @@ class SignalingServer:
             (target.x - 1, target.y + 1),
             (target.x + 1, target.y - 1),
         ]
-        in_bounds = [(x, y) for x, y in options if self._is_in_bounds(x, y)]
+        in_bounds = [
+            (x, y)
+            for x, y in options
+            if self._is_in_bounds(x, y, actor.location_id)
+        ]
         if not in_bounds:
             return target.x, target.y
         return min(in_bounds, key=lambda xy: (xy[0] - actor.x) ** 2 + (xy[1] - actor.y) ** 2)
 
     def _path_to_square(
-        self, start_x: int, start_y: int, target_x: int, target_y: int
+        self, start_x: int, start_y: int, target_x: int, target_y: int,
+        location_id: str | None = None,
     ) -> list[tuple[int, int]]:
         """Build a step-by-step Chebyshev path between two grid squares."""
 
@@ -8309,7 +8969,7 @@ class SignalingServer:
             guard -= 1
             x += 1 if target_x > x else -1 if target_x < x else 0
             y += 1 if target_y > y else -1 if target_y < y else 0
-            if not self._is_in_bounds(x, y):
+            if not self._is_in_bounds(x, y, location_id):
                 break
             path.append((x, y))
         return path
@@ -8339,7 +8999,50 @@ class SignalingServer:
             or item.type
         ).strip().lower()
         posture = str(item.params.get("postureMode", "")).strip().lower()
-        return posture in {"sit", "lie", "sit_lie"} or kind in {"chair", "couch", "sofa", "bench", "stool", "loveseat", "bed"}
+        return posture in {"sit", "lie", "sit_lie"} or kind in {"chair", "couch", "sofa", "bench", "stool", "loveseat", "bed", "car", "suv", "van"}
+
+    @staticmethod
+    def _is_vehicle_item(item: WorldItem | None) -> bool:
+        """Return whether a seated item carries its driver with movement."""
+
+        if item is None:
+            return False
+        kind = str(
+            item.params.get("furnitureKind")
+            or item.params.get("objectKind")
+            or ""
+        ).strip().lower()
+        return kind in {"car", "suv", "van"}
+
+    @staticmethod
+    def _vehicle_sound(item: WorldItem, key: str, fallback: str) -> str:
+        """Resolve a vehicle transition sound without exposing filesystem paths."""
+
+        value = str(item.params.get(key) or fallback).strip()
+        return value or fallback
+
+    def _vehicle_target_blocked(
+        self, client: ClientConnection, x: int, y: int, vehicle: WorldItem
+    ) -> bool:
+        """Keep a driving vehicle from entering another person's occupied square."""
+
+        if any(
+            other.id != client.id
+            and other.location_id == client.location_id
+            and other.x == x
+            and other.y == y
+            for other in self.clients.values()
+        ):
+            return True
+        return any(
+            item.id != vehicle.id
+            and item.locationId == client.location_id
+            and item.x == x
+            and item.y == y
+            and self._is_vehicle_item(item)
+            and bool(self._seated_clients_for_item(item.id))
+            for item in self.items.values()
+        )
 
     @staticmethod
     def _seating_capacity(item: WorldItem) -> int:
@@ -8362,7 +9065,7 @@ class SignalingServer:
             return 4
         if kind in {"bench", "loveseat"}:
             return 3
-        if kind in {"chair", "stool"}:
+        if kind in {"chair", "stool", "car", "suv", "van"}:
             return 1
         return 0
 
@@ -8417,6 +9120,17 @@ class SignalingServer:
         client.seated_offset = 0.0
         client.posture = "standing"
         await self._sync_client_position(client)
+        if item is not None and self._is_vehicle_item(item):
+            sound = self._vehicle_sound(
+                item, "vehicleStopSound", "sounds/vehicles/vehicle-stop.ogg"
+            )
+            await self._broadcast_location(
+                item.locationId,
+                ItemUseSoundPacket(
+                    type="item_use_sound", itemId=item.id, sound=sound,
+                    x=item.x, y=item.y, range=self._get_item_emit_range(item),
+                ),
+            )
         await self._broadcast_location(
             client.location_id,
             BroadcastChatMessagePacket(
@@ -8491,6 +9205,17 @@ class SignalingServer:
             else f"You sit on {item.title}."
         )
         await self._send_item_result(client, True, "use", self_message, item.id)
+        if self._is_vehicle_item(item):
+            sound = self._vehicle_sound(
+                item, "vehicleStartSound", "sounds/vehicles/vehicle-start.ogg"
+            )
+            await self._broadcast_location(
+                item.locationId,
+                ItemUseSoundPacket(
+                    type="item_use_sound", itemId=item.id, sound=sound,
+                    x=item.x, y=item.y, range=self._get_item_emit_range(item),
+                ),
+            )
         return True
 
     @staticmethod
@@ -8570,7 +9295,9 @@ class SignalingServer:
             return
         next_x, next_y = (target.x, target.y) if exact else self._adjacent_square_near_user(client, target)
         now_ms = self.item_service.now_ms()
-        path = [(next_x, next_y)] if exact else self._path_to_square(client.x, client.y, next_x, next_y)
+        path = [(next_x, next_y)] if exact else self._path_to_square(
+            client.x, client.y, next_x, next_y, client.location_id
+        )
         if not path:
             path = [(next_x, next_y)]
         for step_x, step_y in path:
@@ -8645,6 +9372,9 @@ class SignalingServer:
                 AdminBlindSoftwareSyncPacket,
                 AdminAmbienceCatalogPacket,
                 AdminLocationAmbienceSetPacket,
+                AdminAmbienceUploadBeginPacket,
+                AdminAmbienceUploadChunkPacket,
+                AdminAmbienceUploadCompletePacket,
                 AdminUserSetRolePacket,
                 AdminUserBanPacket,
                 AdminUserUnbanPacket,
@@ -8657,6 +9387,88 @@ class SignalingServer:
             await self._send_admin_action_result(
                 client, ok=False, action=action, message=message
             )
+
+        if isinstance(packet, (AdminAmbienceUploadBeginPacket, AdminAmbienceUploadChunkPacket, AdminAmbienceUploadCompletePacket)):
+            if not self._client_has_permission(client, "server.manage_settings"):
+                await deny("ambience_sound_upload", "Not authorized.")
+                return True
+            upload_dir = Path(__file__).resolve().parents[2] / "client" / "public" / "sounds" / "ambience" / "uploads"
+            staging_dir = Path(__file__).resolve().parents[1] / "runtime" / "ambience-uploads"
+            staging_dir.mkdir(parents=True, exist_ok=True)
+            if isinstance(packet, AdminAmbienceUploadBeginPacket):
+                if packet.uploadId in self._ambience_uploads:
+                    await deny("ambience_sound_upload", "That upload is already in progress.")
+                    return True
+                suffix = Path(packet.filename).suffix.lower()
+                allowed = {".ogg": "audio/ogg", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4", ".flac": "audio/flac"}
+                if suffix not in allowed or packet.contentType not in {allowed[suffix], "application/octet-stream"}:
+                    await deny("ambience_sound_upload", "Choose an OGG, MP3, WAV, M4A, or FLAC sound file.")
+                    return True
+                safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", Path(packet.filename).name).strip(".-") or "uploaded-sound"
+                staging_path = staging_dir / f"{packet.uploadId}.part"
+                staging_path.write_bytes(b"")
+                self._ambience_uploads[packet.uploadId] = {
+                    "clientId": client.id, "filename": safe_name, "suffix": suffix,
+                    "contentType": packet.contentType, "kind": packet.kind,
+                    "totalBytes": packet.totalBytes, "receivedBytes": 0,
+                    "nextIndex": 0, "path": staging_path,
+                }
+                await self._send_admin_action_result(client, ok=True, action="ambience_sound_upload", message="Upload started.")
+                return True
+            upload = self._ambience_uploads.get(packet.uploadId)
+            if not upload or upload["clientId"] != client.id:
+                await deny("ambience_sound_upload", "That upload is unavailable.")
+                return True
+            if isinstance(packet, AdminAmbienceUploadChunkPacket):
+                if packet.index != upload["nextIndex"]:
+                    await deny("ambience_sound_upload", "Upload chunks arrived out of order.")
+                    return True
+                try:
+                    chunk = base64.b64decode(packet.data, validate=True)
+                except (ValueError, base64.binascii.Error):
+                    await deny("ambience_sound_upload", "The sound upload contained invalid data.")
+                    return True
+                if not chunk or upload["receivedBytes"] + len(chunk) > upload["totalBytes"]:
+                    await deny("ambience_sound_upload", "The sound upload size is invalid.")
+                    return True
+                with upload["path"].open("ab") as stream:
+                    stream.write(chunk)
+                upload["receivedBytes"] += len(chunk)
+                upload["nextIndex"] += 1
+                return True
+            if upload["receivedBytes"] != upload["totalBytes"]:
+                await deny("ambience_sound_upload", "The sound upload is incomplete.")
+                return True
+            path = upload["path"]
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            if digest.lower() != packet.sha256.lower():
+                path.unlink(missing_ok=True)
+                self._ambience_uploads.pop(packet.uploadId, None)
+                await deny("ambience_sound_upload", "The sound checksum did not match.")
+                return True
+            upload_dir.mkdir(parents=True, exist_ok=True)
+            final_name = f"{Path(upload['filename']).stem}-{digest[:12]}{upload['suffix']}"
+            final_path = upload_dir / final_name
+            path.replace(final_path)
+            catalog_path = Path(__file__).resolve().parents[1] / "config" / "ambience_catalog.json"
+            catalog_data = json.loads(catalog_path.read_text(encoding="utf-8"))
+            kind = str(upload["kind"])
+            sound_id = f"uploaded-{digest[:16]}"
+            entry = {
+                "id": sound_id, "label": Path(upload["filename"]).stem.replace("_", " "),
+                "category": "Uploaded loop" if kind == "loop" else "Uploaded one-shot",
+                "url": f"sounds/ambience/uploads/{final_name}", "sourceFilename": upload["filename"],
+                "durationSeconds": 0.0, "loopStartSeconds": 0.0, "loopEndSeconds": 0.0,
+                "seamCrossfadeSeconds": 0.0, "kind": kind,
+            }
+            catalog_data["sounds"] = [entry for entry in catalog_data.get("sounds", []) if entry.get("id") != sound_id]
+            catalog_data["sounds"].append(entry)
+            temp_catalog = catalog_path.with_suffix(".json.tmp")
+            temp_catalog.write_text(json.dumps(catalog_data, indent=2) + "\n", encoding="utf-8")
+            temp_catalog.replace(catalog_path)
+            self._ambience_uploads.pop(packet.uploadId, None)
+            await self._send_admin_action_result(client, ok=True, action="ambience_sound_upload", message=f"Uploaded {entry['label']} as a {kind.replace('_', ' ')} sound. Refreshing the ambience library.")
+            return True
 
         if isinstance(packet, (AdminAmbienceCatalogPacket, AdminLocationAmbienceSetPacket)):
             if not self._client_has_permission(client, "server.manage_settings"):
@@ -8692,6 +9504,9 @@ class SignalingServer:
             sound = sounds_by_id.get(packet.soundId)
             if sound is None:
                 await deny("location_ambience_set", "Unknown ambience sound.")
+                return True
+            if sound.kind != "loop":
+                await deny("location_ambience_set", "One-shot sounds cannot be assigned as location ambience loops.")
                 return True
             item = self.item_service.items.get(f"seed-location-ambience-{packet.locationId}")
             if item is None:
@@ -9259,7 +10074,7 @@ class SignalingServer:
                     if not dialing["enabled"]:
                         await self._send(client.websocket, state(
                             "failed", target=target,
-                            message="Outbound dialing is disabled in your Endiginous phone settings.",
+                            message="Outbound dialing is disabled in your Indiginous phone settings.",
                         ))
                         return
                     if not os.getenv("CHGRID_FLEXPBX_BRIDGE_URL", "").strip():
@@ -9387,8 +10202,24 @@ class SignalingServer:
                     self._position_packet_for(client),
                 )
                 return
-            if client.seated_item_id and packet.x == client.x and packet.y == client.y:
+            seated_item = self.items.get(client.seated_item_id) if client.seated_item_id else None
+            driving_vehicle = self._is_vehicle_item(seated_item)
+            if client.seated_item_id and not driving_vehicle:
+                # A seated/lying user cannot move from the furniture by
+                # sending a position packet. Posture must be advanced through
+                # the furniture-use action first, then a later movement press
+                # may move after standing.
                 await self._send(client.websocket, self._position_packet_for(client))
+                seat = self.items.get(client.seated_item_id)
+                seat_title = seat.title if seat is not None else "the furniture"
+                await self._send(
+                    client.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message=f"You are still on {seat_title}. Use the movement key again to change posture or get up before moving.",
+                        system=True,
+                    ),
+                )
                 return
             now_ms = self.item_service.now_ms()
             requested_delta = max(abs(packet.x - client.x), abs(packet.y - client.y))
@@ -9422,11 +10253,33 @@ class SignalingServer:
                 if previous_seated_item_id
                 else None
             )
+            if driving_vehicle and seated_item is not None and self._vehicle_target_blocked(
+                client, packet.x, packet.y, seated_item
+            ):
+                await self._send(client.websocket, self._position_packet_for(client))
+                await self._send(
+                    client.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message="The vehicle stops: another person or occupied vehicle is in the way.",
+                        system=True,
+                    ),
+                )
+                return
             client.x = packet.x
             client.y = packet.y
-            client.seated_item_id = None
-            client.seated_offset = 0.0
-            client.posture = "standing"
+            if driving_vehicle and seated_item is not None:
+                seated_item.x = packet.x
+                seated_item.y = packet.y
+                seated_item.updatedAt = now_ms
+                seated_item.updatedBy = client.user_id or client.id
+                seated_item.updatedByName = client.nickname
+                seated_item.version += 1
+                await self._broadcast_item(seated_item)
+            else:
+                client.seated_item_id = None
+                client.seated_offset = 0.0
+                client.posture = "standing"
             client.last_position_update_ms = now_ms
             self._persist_client_position(client)
             await self._send(
@@ -9438,7 +10291,7 @@ class SignalingServer:
                 self._position_packet_for(client),
                 exclude=client.websocket,
             )
-            if previous_seated_item_id:
+            if previous_seated_item_id and not driving_vehicle:
                 label = (
                     previous_seated_item.title
                     if previous_seated_item is not None
@@ -9788,6 +10641,26 @@ class SignalingServer:
             if not pickup_item:
                 await self._send_item_result(client, False, "pickup", "Item not found.")
                 return
+            if client.seated_item_id:
+                await self._send_item_result(
+                    client,
+                    False,
+                    "pickup",
+                    "Stand up before picking up or moving items.",
+                    pickup_item.id,
+                )
+                return
+            if pickup_item.locationId != client.location_id or max(
+                abs(pickup_item.x - client.x), abs(pickup_item.y - client.y)
+            ) > 1:
+                await self._send_item_result(
+                    client,
+                    False,
+                    "pickup",
+                    "Move within reach of that item first.",
+                    pickup_item.id,
+                )
+                return
             move_as_surface = pickup_item.type == "furniture"
             linked_items = self._linked_relocation_items(
                 pickup_item, include_attached=packet.moveAttached or move_as_surface
@@ -9827,6 +10700,17 @@ class SignalingServer:
                     item, linked_ids
                 )
                 item.carrierId = client.id
+                held_by_keeper_id = str(item.params.get("heldByKeeperId") or "").strip()
+                if held_by_keeper_id:
+                    keeper = self.items.get(held_by_keeper_id)
+                    if keeper is not None and isinstance(keeper.params.get("heldKeyIds"), list):
+                        keeper.params = {
+                            **keeper.params,
+                            "heldKeyIds": [key_id for key_id in keeper.params["heldKeyIds"] if key_id != item.id],
+                        }
+                        keeper.version += 1
+                        await self._broadcast_item(keeper)
+                    item.params = {**item.params, "heldByKeeperId": ""}
                 item.x = client.x + (item.x - root_x)
                 item.y = client.y + (item.y - root_y)
                 if self._item_can_sit_on_surface(item) and not moves_with_surface:
@@ -9869,6 +10753,15 @@ class SignalingServer:
             drop_item = self.items.get(packet.itemId)
             if not drop_item:
                 await self._send_item_result(client, False, "drop", "Item not found.")
+                return
+            if client.seated_item_id:
+                await self._send_item_result(
+                    client,
+                    False,
+                    "drop",
+                    "Stand up before picking up or moving items.",
+                    drop_item.id,
+                )
                 return
             if drop_item.carrierId != client.id:
                 await self._send_item_result(
@@ -10349,6 +11242,18 @@ class SignalingServer:
                     use_item.id,
                 )
                 return
+            if str(use_item.params.get("objectKind") or "").strip().lower() == "wardrobe":
+                profile = self.auth_service.get_avatar_profile(client.user_id or "0")
+                wardrobe = ", ".join(str(entry) for entry in profile.get("wardrobe", [])) or "empty"
+                worn = ", ".join(str(entry) for entry in profile.get("wornClothing", [])) or "nothing"
+                await self._send_item_result(
+                    client,
+                    True,
+                    "use",
+                    f"Wardrobe. Clothing available: {wardrobe}. Wearing: {worn}. Use /wear <item>, /remove <item>, or /undress.",
+                    use_item.id,
+                )
+                return
             if (
                 self._is_raywonder_studio_entry_door(use_item)
                 and str(use_item.params.get("doorState", "unlocked")).strip().lower()
@@ -10371,6 +11276,17 @@ class SignalingServer:
                 return
             unlock_key = self._find_unlock_key_for(client, use_item)
             unlocked_with_key_message = ""
+            if unlock_key is None:
+                loose_key = self._find_key_on_item_square(use_item)
+                if loose_key is not None:
+                    await self._send_item_result(
+                        client,
+                        False,
+                        "use",
+                        f"Take {loose_key.title} first, then press Enter on {use_item.title}.",
+                        use_item.id,
+                    )
+                    return
             if unlock_key is not None:
                 use_item.params = {**use_item.params, "doorState": "unlocked"}
                 use_item.updatedAt = self.item_service.now_ms()

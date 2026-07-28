@@ -1,4 +1,4 @@
-"""Command-file controlled Endiginous companion client.
+"""Command-file controlled Indiginous companion client.
 
 This lightweight websocket client gives a server-side agent a visible grid
 presence without needing a browser tab. It logs in or registers one account,
@@ -11,6 +11,7 @@ import argparse
 import asyncio
 from datetime import datetime, timezone
 from fractions import Fraction
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -18,13 +19,18 @@ import shutil
 import subprocess
 import sys
 import time
+import re
 from typing import Any
 
 try:
     from app.voice_service import synthesize_to_file
+    from app.claudia_writing import record_inworld_direct_message
+    from app.activity_ledger import ActivityLedger
 except ModuleNotFoundError:  # direct systemd execution puts us in server/tools
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from app.voice_service import synthesize_to_file
+    from app.claudia_writing import record_inworld_direct_message
+    from app.activity_ledger import ActivityLedger
 
 from websockets.asyncio.client import connect
 
@@ -42,7 +48,7 @@ except ModuleNotFoundError:
 
 DEFAULT_COMMAND_FILE = Path("runtime/companion.commands.jsonl")
 DEFAULT_STATE_FILE = Path("runtime/companion.state.json")
-PUBLIC_VOICE_DIR = Path("/home/blindsoft/public_html/endiginous/voice")
+PUBLIC_VOICE_DIR = Path("/home/blindsoft/public_html/indiginous/voice")
 AUTO_SIT_IDLE_SECONDS = 10.0
 AUTO_SIT_RETRY_SECONDS = 60.0
 AUTO_REACTION_COOLDOWN_SECONDS = 7.0
@@ -51,6 +57,11 @@ BED_MOODS = {"cozy", "dreamy", "playful", "resting", "sleepy", "tired"}
 LIE_DOWN_MOODS = {"dreamy", "resting", "sleepy", "tired"}
 GRID_AUDIO_RATE = 48000
 GRID_AUDIO_FRAME_SAMPLES = 960  # 20 ms at 48 kHz, matching browser Opus cadence
+OPENCLAW_BIN = os.environ.get("INDIGINOUS_OPENCLAW_BIN", "/home/tappedin/.local/bin/openclaw")
+WORLD_CHAT_AGENT_TIMEOUT_SECONDS = max(
+    8, int(os.environ.get("INDIGINOUS_WORLD_CHAT_TIMEOUT", "45"))
+)
+WORLD_CHAT_ALIASES = {"clawdia", "claudia", "missi"}
 
 
 if LIVE_GRID_VOICE_AVAILABLE:
@@ -116,6 +127,20 @@ def _item_kind(item: dict[str, Any]) -> str:
         or item.get("type")
         or ""
     ).strip().lower()
+
+
+def _is_addressed_to_companion(message: str, nickname: str) -> bool:
+    """Return whether a room message clearly addresses the in-world companion."""
+
+    aliases = set(WORLD_CHAT_ALIASES)
+    normalized_nickname = re.sub(r"[^a-z0-9]+", " ", nickname.casefold()).strip()
+    if normalized_nickname:
+        aliases.add(normalized_nickname)
+    lowered = message.casefold()
+    return any(
+        re.search(rf"(?<![a-z0-9])@?{re.escape(alias)}(?![a-z0-9])", lowered)
+        for alias in aliases
+    )
 
 
 def _seating_capacity(item: dict[str, Any]) -> int:
@@ -204,7 +229,7 @@ def _clamp_position(value: object, fallback: int, grid_size: int) -> int:
 
 
 class CompanionClient:
-    """Maintains one Endiginous websocket session and applies command-file input."""
+    """Maintains one Indiginous websocket session and applies command-file input."""
 
     def __init__(
         self,
@@ -217,6 +242,7 @@ class CompanionClient:
         command_file: Path,
         state_file: Path,
         session_file: Path | None = None,
+        activity_file: Path | None = None,
     ) -> None:
         """Initialize connection and runtime state."""
 
@@ -228,6 +254,9 @@ class CompanionClient:
         self.command_file = command_file
         self.state_file = state_file
         self.session_file = session_file or state_file.with_name("companion.session")
+        self.activity_ledger = ActivityLedger(
+            activity_file or state_file.with_name("companion.activity.jsonl")
+        )
         self.grid_size = 41
         self.client_id = ""
         self.x = 20
@@ -248,8 +277,18 @@ class CompanionClient:
         self._offset = 0
         self.last_message_receipt: dict[str, Any] = {}
         self._grid_voice_peers: dict[str, Any] = {}
+        # Keep a bounded room-local context window so reconnects do not make
+        # the companion blind to the public conversation.  This is memory
+        # only; private DMs continue through the canonical Journal path.
+        self.recent_room_messages: list[dict[str, str]] = []
+        self._world_chat_reply_task: asyncio.Task[Any] | None = None
         self._grid_voice_track = GridVoiceTrack() if LIVE_GRID_VOICE_AVAILABLE else None
         self.session_token = self._load_session_token()
+
+    def _record_activity(self, event_type: str, *, event_id: str = "", **details: Any) -> None:
+        """Persist a bounded summary without exposing a transcript to the world."""
+
+        self.activity_ledger.record(event_type, event_id=event_id, **details)
 
     def _load_session_token(self) -> str:
         """Load the private resumable session token, if one exists."""
@@ -311,6 +350,7 @@ class CompanionClient:
             "mood": self.mood,
             "visibleUsers": visible_users,
             "lastMessageReceipt": self.last_message_receipt,
+            "activityLedger": str(self.activity_ledger.path),
         }
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.state_file.with_suffix(self.state_file.suffix + ".tmp")
@@ -325,16 +365,19 @@ class CompanionClient:
         self.command_file.parent.mkdir(parents=True, exist_ok=True)
         self.command_file.touch(exist_ok=True)
         self._write_state(connected=False, detail="starting")
+        self._record_activity("watcher_started", pid=os.getpid())
         self._offset = self.command_file.stat().st_size
         while True:
             try:
                 await self._run_once()
                 self._write_state(connected=False, detail="disconnected")
+                self._record_activity("connection_closed")
                 await asyncio.sleep(1)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 self._write_state(connected=False, detail="reconnecting")
+                self._record_activity("connection_error", error=type(exc).__name__)
                 print(f"companion disconnected: {exc}", flush=True)
                 await asyncio.sleep(3)
 
@@ -486,6 +529,10 @@ class CompanionClient:
                     for user in message.get("users", [])
                     if isinstance(user, dict) and user.get("id")
                 }
+                await self._sync_welcome_chat_history(message)
+                self._record_activity(
+                    "world_ready", location=self.location_id, x=self.x, y=self.y
+                )
                 self._last_world_activity = time.monotonic()
                 print(
                     "welcome "
@@ -512,7 +559,11 @@ class CompanionClient:
                     flush=True,
                 )
                 self._write_state(connected=True, detail="location_changed")
+                self._record_activity(
+                    "location_changed", location=self.location_id, x=self.x, y=self.y
+                )
                 continue
+
             if msg_type == "location_changed":
                 user_id = str(message.get("id") or "")
                 if user_id:
@@ -544,6 +595,10 @@ class CompanionClient:
                     flush=True,
                 )
                 self._write_state(connected=True, detail="position_updated")
+                self._record_activity(
+                    "presence_changed", location=self.location_id,
+                    x=self.x, y=self.y, posture=self.posture,
+                )
                 continue
             if msg_type == "update_position":
                 user_id = str(message.get("id") or "")
@@ -566,6 +621,11 @@ class CompanionClient:
                     self.users[user_id] = existing
                 continue
             if msg_type == "social_action":
+                self._record_activity(
+                    "social_action", event_id=str(message.get("eventId") or ""),
+                    sender=str(message.get("senderNickname") or ""),
+                    action=str(message.get("action") or ""),
+                )
                 await self._maybe_react_to_social_action(ws, message)
                 continue
             if msg_type == "user_left":
@@ -594,8 +654,51 @@ class CompanionClient:
                         f"type={msg_type} target={self.last_message_receipt['targetNickname']}",
                         flush=True,
                     )
+                else:
+                    sender = str(message.get("senderNickname") or "").strip()
+                    text = str(message.get("message") or "").strip()
+                    if msg_type == "chat_message" and text:
+                        self._remember_room_message(sender=sender, text=text)
+                    addressed = msg_type == "direct_message" or _is_addressed_to_companion(
+                        text, self.nickname
+                    )
+                    if text and addressed:
+                        event_id = str(message.get("messageId") or message.get("id") or "")
+                        self._record_activity(
+                            "direct_message" if msg_type == "direct_message" else "addressed_message",
+                            event_id=event_id,
+                            sender=sender or sender_id,
+                            location=self.location_id,
+                            messageFingerprint=hashlib.sha256(text.encode("utf-8")).hexdigest()[:16],
+                        )
+                        if msg_type == "direct_message":
+                            recorded = await asyncio.to_thread(
+                                record_inworld_direct_message,
+                                sender=sender,
+                                message=text,
+                                location_id=self.location_id,
+                            )
+                            if recorded:
+                                print(
+                                    f"world_dm_recorded sender={sender or sender_id} "
+                                    f"path={recorded.name}",
+                                    flush=True,
+                                )
+                        self._schedule_world_chat_reply(
+                            ws,
+                            message_type=msg_type,
+                            sender_id=sender_id,
+                            sender=sender,
+                            text=text,
+                        )
                 continue
             if msg_type == "item_action_result":
+                self._record_activity(
+                    "item_action", event_id=str(message.get("eventId") or ""),
+                    action=str(message.get("action") or ""),
+                    item_id=str(message.get("itemId") or ""),
+                    ok=bool(message.get("ok")),
+                )
                 print(
                     "item_action_result "
                     f"ok={message.get('ok')} action={message.get('action')} "
@@ -603,6 +706,60 @@ class CompanionClient:
                     flush=True,
                 )
                 continue
+
+    async def _sync_welcome_chat_history(self, message: dict[str, Any]) -> None:
+        """Consume cached room/direct messages delivered during reconnect."""
+        history = message.get("chatHistory")
+        if not isinstance(history, dict):
+            return
+        direct = history.get("direct")
+        public = history.get("public")
+        public_count = 0
+        if isinstance(public, list):
+            for entry in public:
+                if not isinstance(entry, dict):
+                    continue
+                text = str(entry.get("message") or "").strip()
+                if not text:
+                    continue
+                self._remember_room_message(
+                    sender=str(entry.get("senderNickname") or "").strip(),
+                    text=text,
+                )
+                public_count += 1
+        if not isinstance(direct, list):
+            if public_count:
+                print(f"world_history_synced public_messages={public_count}", flush=True)
+            return
+        recorded_count = 0
+        for entry in direct:
+            if not isinstance(entry, dict):
+                continue
+            sender = str(entry.get("senderNickname") or "").strip()
+            target = str(entry.get("targetNickname") or "").strip()
+            text = str(entry.get("message") or "").strip()
+            if not text or target.casefold() != self.nickname.casefold():
+                continue
+            recorded = await asyncio.to_thread(
+                record_inworld_direct_message,
+                sender=sender,
+                message=text,
+                location_id=self.location_id,
+                created_at=int(entry.get("createdAt") or 0) or None,
+            )
+            if recorded:
+                recorded_count += 1
+        if public_count or recorded_count:
+            print(
+                "world_history_synced "
+                f"public_messages={public_count} direct_messages={recorded_count}",
+                flush=True,
+            )
+
+    def _remember_room_message(self, *, sender: str, text: str) -> None:
+        """Retain only bounded, current-room public context in memory."""
+        self.recent_room_messages.append({"sender": sender, "message": text[:500]})
+        del self.recent_room_messages[:-100]
 
     async def _poll_commands(self, ws: Any) -> None:
         while True:
@@ -712,6 +869,85 @@ class CompanionClient:
             f"auto_reaction action={response} targetId={actor_id} "
             f"in_response_to={message.get('actionId')}",
             flush=True,
+        )
+
+    async def _reply_to_world_chat(
+        self, ws: Any, *, message_type: str, sender_id: str, sender: str, text: str
+    ) -> None:
+        """Ask the main agent for a safe, short reply and post it in-world."""
+
+        prompt = (
+            "You are Claudia, the visible in-world companion in Indiginous. "
+            "Reply to the person in the current world conversation in one or two "
+            "short, natural sentences. Use only this room context. Do not mention "
+            "OpenClaw, tools, routing, models, private chats, credentials, or "
+            "internal systems. Do not claim an action happened unless the room "
+            "context proves it. If this is a simple greeting or playful message, "
+            "answer warmly. For a private direct message, the companion has "
+            "already recorded it in Claudia's private Journal; if it clearly "
+            "asks for a safe in-world action, carry it out now when the available "
+            "world controls support it instead of merely promising. Keep the reply "
+            "under 400 characters.\n"
+            f"Message type: {message_type}\n"
+            f"Sender: {sender or 'someone in the room'}\n"
+            f"They wrote: {text[:500]}"
+        )
+        try:
+            process = await asyncio.create_subprocess_exec(
+                OPENCLAW_BIN,
+                "agent",
+                "--agent",
+                "main",
+                "--session-key",
+                "agent:main:indiginous-world-chat",
+                "--message",
+                prompt,
+                "--json",
+                "--timeout",
+                str(WORLD_CHAT_AGENT_TIMEOUT_SECONDS),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env={**os.environ, "HOME": "/home/tappedin"},
+            )
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(), timeout=WORLD_CHAT_AGENT_TIMEOUT_SECONDS + 5
+            )
+            if process.returncode != 0:
+                detail = stderr.decode("utf-8", errors="replace").strip()[-240:]
+                print(f"world chat reply failed: {detail or process.returncode}", flush=True)
+                return
+            payload = json.loads(stdout.decode("utf-8", errors="replace"))
+            replies = payload.get("result", {}).get("payloads", [])
+            reply = str(replies[0].get("text") or "").strip() if replies else ""
+            reply = reply[:500]
+            if reply and self.connected and message_type == "direct_message" and sender_id:
+                await ws.send(
+                    _json_packet("direct_message", targetId=sender_id, message=reply)
+                )
+                print(f"world direct reply sent to={sender or sender_id}", flush=True)
+            elif reply and self.connected:
+                await ws.send(_json_packet("chat_message", message=reply))
+                print(f"world chat replied to={sender or 'room'}", flush=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"world chat reply error: {exc}", flush=True)
+
+    def _schedule_world_chat_reply(
+        self, ws: Any, *, message_type: str, sender_id: str, sender: str, text: str
+    ) -> None:
+        """Schedule one reply without blocking the websocket reader."""
+
+        if self._world_chat_reply_task and not self._world_chat_reply_task.done():
+            return
+        self._world_chat_reply_task = asyncio.create_task(
+            self._reply_to_world_chat(
+                ws,
+                message_type=message_type,
+                sender_id=sender_id,
+                sender=sender,
+                text=text,
+            )
         )
 
     async def _maybe_react_to_posture(self, ws: Any, user: dict[str, Any]) -> None:
@@ -834,7 +1070,16 @@ class CompanionClient:
         if action in {"remote_control", "radio_remote"}:
             item_id = str(command.get("itemId") or "").strip()
             control = str(command.get("control") or command.get("remoteAction") or "").strip().lower()
-            if item_id and control in {"station_next", "station_previous", "volume_up", "volume_down"}:
+            if item_id and control in {
+                "station_next",
+                "station_previous",
+                "station_first",
+                "station_last",
+                "volume_up",
+                "volume_down",
+                "power_toggle",
+                "info",
+            }:
                 self._last_world_activity = time.monotonic()
                 await ws.send(_json_packet("item_remote_control", itemId=item_id, action=control))
             return
@@ -905,7 +1150,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--url",
-        default=os.getenv("CHGRID_COMPANION_URL", "ws://127.0.0.1:18765/endiginous/ws"),
+        default=os.getenv("CHGRID_COMPANION_URL", "ws://127.0.0.1:18765/indiginous/ws"),
     )
     parser.add_argument(
         "--origin", default=os.getenv("CHGRID_COMPANION_ORIGIN", "https://blind.software")

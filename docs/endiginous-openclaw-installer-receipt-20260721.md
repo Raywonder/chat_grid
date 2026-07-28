@@ -1,4 +1,4 @@
-# Endiginous OpenClaw installer receipt
+# Indiginous OpenClaw installer receipt
 
 Date: 2026-07-21
 

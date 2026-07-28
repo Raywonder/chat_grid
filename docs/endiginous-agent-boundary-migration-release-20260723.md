@@ -1,4 +1,4 @@
-# Endiginous agent boundary and migration release
+# Indiginous agent boundary and migration release
 
 Date: 2026-07-23
 Version: 0.4.4
@@ -6,19 +6,19 @@ Web revision: R517
 
 ## Product boundary
 
-Endiginous installers and desktop clients no longer bundle OpenClaw onboarding, gateway registration, agent scripts, agent credentials, or OpenClaw runtime files. The supported extension direction is documented in `docs/user-agent-extensions.md`; user-owned agents can be added later through a separate, user-controlled extension location and are not copied into the product installer.
+Indiginous installers and desktop clients no longer bundle OpenClaw onboarding, gateway registration, agent scripts, agent credentials, or OpenClaw runtime files. The supported extension direction is documented in `docs/user-agent-extensions.md`; user-owned agents can be added later through a separate, user-controlled extension location and are not copied into the product installer.
 
-The visible product spelling is Endiginous. `chatgrid` names remain only where they are required for legacy URLs, protocols, service identifiers, database/log compatibility, and migration. The only remaining `Indigenous` source references are deliberate legacy-name cleanup entries.
+The visible product spelling is Indiginous. `chatgrid` names remain only where they are required for legacy URLs, protocols, service identifiers, database/log compatibility, and migration. The only remaining `Indiginous` source references are deliberate legacy-name cleanup entries.
 
 ## Migration and cleanup
 
-Both desktop implementations migrate known legacy per-user state from old Chat Grid/ChatGrid/Indigenous locations into the current Endiginous application-data directory before startup. They remove only the exact legacy install directories and shortcuts listed by the migration module, write a `migration-receipt.json`, and preserve files when a copy fails. Startup cleanup also removes exact legacy autorun values. Windows installers use the current `%LOCALAPPDATA%\\Programs\\Endiginous` directory and do not reuse a stale previous install directory.
+Both desktop implementations migrate known legacy per-user state from old Chat Grid/ChatGrid/Indiginous locations into the current Indiginous application-data directory before startup. They remove only the exact legacy install directories and shortcuts listed by the migration module, write a `migration-receipt.json`, and preserve files when a copy fails. Startup cleanup also removes exact legacy autorun values. Windows installers use the current `%LOCALAPPDATA%\\Programs\\Indiginous` directory and do not reuse a stale previous install directory.
 
 ## Build and verification
 
 - Mac mini: full native test suite, 37 passed.
 - Windows 11 VM: full native test suite, 37 passed.
-- Windows installer: built with Inno Setup 6.7.3 from the local-disk source tree; installed successfully to `%LOCALAPPDATA%\\Programs\\Endiginous`; the exact stale build-cache install and old legacy shortcut checks were cleaned/verified.
+- Windows installer: built with Inno Setup 6.7.3 from the local-disk source tree; installed successfully to `%LOCALAPPDATA%\\Programs\\Indiginous`; the exact stale build-cache install and old legacy shortcut checks were cleaned/verified.
 - Mac ZIP: app extracted and passed `codesign --verify --deep --strict`.
 - Public downloads and manifests: all returned HTTP 200; the live Windows download SHA-256 matched the published manifest.
 
@@ -30,9 +30,9 @@ Artifacts:
 
 Public URLs:
 
-- https://blind.software/endiginous/downloads/EndiginousSetup-0.4.4.exe
-- https://blind.software/endiginous/downloads/Endiginous-0.4.4.dmg
-- https://blind.software/endiginous/downloads/Endiginous-0.4.4-macOS.zip
+- https://blind.software/indiginous/downloads/IndiginousSetup-0.4.4.exe
+- https://blind.software/indiginous/downloads/Indiginous-0.4.4.dmg
+- https://blind.software/indiginous/downloads/Indiginous-0.4.4-macOS.zip
 
 The active BlindSoftware download page labels were updated from the stale Mac 0.4.1 labels to 0.4.4. The Mac DMG remains unsigned; the app inside the ZIP passed local deep code-sign verification.
 

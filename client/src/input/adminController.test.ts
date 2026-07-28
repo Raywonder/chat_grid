@@ -8,6 +8,7 @@ function createHarness() {
   const sent: OutgoingMessage[] = [];
   const statuses: string[] = [];
   const announcements: Array<{ title: string; firstOption: string }> = [];
+  const uploads: Array<'loop' | 'one_shot'> = [];
   let blips = 0;
   let cancels = 0;
   const controller = createAdminController({
@@ -23,12 +24,14 @@ function createHarness() {
     },
     applyTextInputEdit: () => undefined,
     setReplaceTextOnNextType: () => undefined,
+    uploadAmbienceSound: (kind) => uploads.push(kind),
   });
   return {
     state,
     sent,
     statuses,
     announcements,
+    uploads,
     get blips() {
       return blips;
     },
@@ -146,5 +149,18 @@ describe('admin controller', () => {
 
     harness.controller.handleAdminUserListModeInput('End', 'End');
     expect(harness.statuses.at(-1)).toContain('User 2 of 2. bob.');
+  });
+
+  it('offers loop and one-shot uploads from the ambience sound list', () => {
+    const harness = createHarness();
+    harness.controller.handleAdminAmbienceCatalog({
+      type: 'admin_ambience_catalog',
+      locations: [{ id: 'town', name: 'Town', currentSoundId: 's1', currentSoundLabel: 'Town loop' }],
+      sounds: [{ id: 's1', label: 'Town loop', category: 'Built in', url: 'sounds/town.ogg', sourceFilename: 'town.ogg', durationSeconds: 3, loopStartSeconds: 0, loopEndSeconds: 3, seamCrossfadeSeconds: 0.2, kind: 'loop' }],
+    });
+    harness.controller.handleAdminAmbienceLocationListModeInput('Enter', 'Enter');
+    harness.controller.handleAdminAmbienceSoundListModeInput('KeyL', 'l');
+    harness.controller.handleAdminAmbienceSoundListModeInput('KeyO', 'o');
+    expect(harness.uploads).toEqual(['loop', 'one_shot']);
   });
 });

@@ -58,7 +58,7 @@ describe('item narration summaries', () => {
     });
 
     expect(formatItemInteractionHint(note)).toBe('press Enter to read');
-    expect(formatItemNarrationSummary([note])).toBe('a sealed note for Dom; press Enter to read');
+    expect(formatItemNarrationSummary([note])).toBe('a sealed note for Dom');
   });
 
   it('uses explicit interaction hints when provided', () => {

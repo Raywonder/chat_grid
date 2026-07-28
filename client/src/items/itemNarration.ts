@@ -79,13 +79,10 @@ export function formatItemInteractionHint(item: WorldItem): string {
   if (paperVerb) return `press Enter to ${paperVerb}`;
   if (objectKind === 'sign') return 'press Enter to read the sign';
   if (objectKind === 'mailbox') return 'press Enter to check it';
+  if (objectKind === 'keys') return 'press D to take it; carry it before using a locked door';
   if (objectKind === 'phone') return 'press Enter to inspect it; carry it and press Control P to dial';
+  if (objectKind === 'computer') return 'press Enter to wake or sleep it; press Space to inspect it';
   return '';
-}
-
-function appendInteractionHint(label: string, item: WorldItem): string {
-  const hint = formatItemInteractionHint(item);
-  return hint ? `${label}; ${hint}` : label;
 }
 
 export function formatItemNarrationLabel(item: WorldItem): string {
@@ -109,7 +106,11 @@ export function formatItemNarrationSummary(items: WorldItem[]): string {
       const owner = itemOwnerName(item);
       if (count === 1) {
         const label = owner ? title : `${indefiniteArticle(title)} ${lowerFirst(title)}`;
-        return appendInteractionHint(label, item);
+        // Nearby/location summaries are descriptive, not command prompts. The
+        // focused-item reader adds the interaction hint when the user actually
+        // targets the item, so books and notes do not sound as though they were
+        // already activated merely because they are in the room.
+        return label;
       }
       if (owner) {
         const rawTitle = cleanText(item.title) || 'item';

@@ -1,4 +1,4 @@
-"""Small durable chat history store for Endiginous room and direct messages."""
+"""Small durable chat history store for Indiginous room and direct messages."""
 
 from __future__ import annotations
 

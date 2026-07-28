@@ -7,8 +7,8 @@ import sys
 
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-RUN_VALUE = "Endiginous"
-LEGACY_RUN_VALUES = ("Endiginous", "Chat Grid", "ChatGrid", "Indigenous")
+RUN_VALUE = "Indiginous"
+LEGACY_RUN_VALUES = ("Indiginous", "Endiginous", "Indigenous", "Chat Grid", "ChatGrid")
 
 
 def executable_path() -> Path:

@@ -1,14 +1,14 @@
-# Endiginous native macOS setup scaffold receipt
+# Indiginous native macOS setup scaffold receipt
 
 Date: 2026-07-21
 
 ## Implemented
 
-- Added `desktop/native/macos/EndiginousSetup/`, a native SwiftUI executable
+- Added `desktop/native/macos/IndiginousSetup/`, a native SwiftUI executable
   package separate from the existing wxPython/WebView client.
 - Added Recommended and Custom setup modes.
 - Added component choices for Tailscale/Headscale, OpenClaw, gateway-device
-  registration, per-user startup, and the Endiginous client.
+  registration, per-user startup, and the Indiginous client.
 - Reused the approved token-free defaults:
   - Headscale: `https://headscale.tappedin.fm`
   - OpenClaw installer: `https://tappedin.fm/downloads/openclaw/openclaw-join-macos.sh`

@@ -1,3 +1,4 @@
+import { sha256 } from '@noble/hashes/sha2.js';
 import './styles.css';
 import { AudioEngine, type LocationAmbienceProfile } from './audio/audioEngine';
 import {
@@ -87,7 +88,7 @@ const MIC_CALIBRATION_ACTIVE_RMS_THRESHOLD = 0.003;
 const MIC_INPUT_GAIN_SCALE_MULTIPLIER = 2;
 const MIC_INPUT_GAIN_STEP = 0.05;
 
-const PENDING_EXTERNAL_AUTH_STORAGE_KEY = 'endiginousPendingExternalAuth';
+const PENDING_EXTERNAL_AUTH_STORAGE_KEY = 'indiginousPendingExternalAuth';
 
 /** Reads a one-time external auth assertion and keeps it across a forced reload. */
 function consumeExternalAuthAssertion(): string {
@@ -165,11 +166,19 @@ type Dom = {
   gridHere: HTMLSpanElement;
   worldSummary: HTMLParagraphElement;
   canvas: HTMLCanvasElement;
+  movementControls: HTMLDivElement;
   interactiveItemPanel: HTMLElement;
   interactiveItemTitle: HTMLHeadingElement;
+  interactiveItemEnterButton: HTMLButtonElement;
+  interactiveItemExternalLink: HTMLAnchorElement;
+  interactiveItemOrigin: HTMLParagraphElement;
   interactiveItemCloseButton: HTMLButtonElement;
   interactiveItemFrame: HTMLIFrameElement;
   status: HTMLDivElement;
+  gameInvitePanel: HTMLElement;
+  gameInviteText: HTMLParagraphElement;
+  gameInviteOpenButton: HTMLButtonElement;
+  gameInviteDismissButton: HTMLButtonElement;
   instructions: HTMLDivElement;
 };
 
@@ -218,11 +227,19 @@ const dom: Dom = {
   gridHere: requiredById('gridHere'),
   worldSummary: requiredById('worldSummary'),
   canvas: requiredById('gameCanvas'),
+  movementControls: requiredById('movementControls'),
   interactiveItemPanel: requiredById('interactiveItemPanel'),
   interactiveItemTitle: requiredById('interactiveItemTitle'),
+  interactiveItemEnterButton: requiredById('interactiveItemEnterButton'),
+  interactiveItemExternalLink: requiredById('interactiveItemExternalLink'),
+  interactiveItemOrigin: requiredById('interactiveItemOrigin'),
   interactiveItemCloseButton: requiredById('interactiveItemCloseButton'),
   interactiveItemFrame: requiredById('interactiveItemFrame'),
   status: requiredById('status'),
+  gameInvitePanel: requiredById('gameInvitePanel'),
+  gameInviteText: requiredById('gameInviteText'),
+  gameInviteOpenButton: requiredById('gameInviteOpenButton'),
+  gameInviteDismissButton: requiredById('gameInviteDismissButton'),
   instructions: requiredById('instructions'),
 };
 
@@ -258,6 +275,8 @@ type WorldLocationOption = {
   spawnY: number;
   ambienceKey?: string;
   ambienceName?: string;
+  roomLayout?: string;
+  footstepSurface?: string;
 };
 
 type FootstepCue = {
@@ -397,13 +416,13 @@ const STARTED_FROM_VERSION_RELOAD = isVersionReloadedSession();
 const IS_NATIVE_CLIENT = new URLSearchParams(window.location.search).has('native_client');
 document.documentElement.classList.toggle('chatgrid-native', IS_NATIVE_CLIENT);
 dom.appVersion.textContent = APP_DISPLAY_VERSION
-  ? `${IS_NATIVE_CLIENT ? 'Endiginous desktop client' : 'Another AI experiment with Jage'}. Version ${APP_DISPLAY_VERSION}`
-  : `${IS_NATIVE_CLIENT ? 'Endiginous desktop client' : 'Another AI experiment with Jage'}. Version unknown`;
-const DEFAULT_GRID_NAME = 'Endiginous';
+  ? `${IS_NATIVE_CLIENT ? 'Indiginous desktop client' : 'Indiginous web client'}. Version ${APP_DISPLAY_VERSION}`
+  : `${IS_NATIVE_CLIENT ? 'Indiginous desktop client' : 'Indiginous web client'}. Version unknown`;
+const DEFAULT_GRID_NAME = 'Indiginous';
 const DEFAULT_WELCOME_MESSAGE =
   IS_NATIVE_CLIENT
-    ? 'Welcome to Endiginous, your immersive audio playground. Use the File menu for sign-in, settings, updates, and desktop settings.'
-    : 'Welcome to Endiginous, your immersive audio playground. Configure your audio, then sign in with blind.software to join the grid.';
+    ? 'Welcome to Indiginous, your immersive audio playground. Use the File menu for sign-in, settings, updates, and desktop settings.'
+    : 'Welcome to Indiginous, your immersive audio playground. Configure your audio, then sign in with blind.software to join the grid.';
 const APP_BASE_URL = import.meta.env.BASE_URL || '/';
 /** Resolves an app-relative path against the configured Vite base path. */
 function withBase(path: string): string {
@@ -423,8 +442,8 @@ function scheduleClientUpdateReload(metadata: ClientVersionMetadata): void {
   reloadScheduledForVersionMismatch = true;
   const label = [metadata.releaseVersion, metadata.clientRevision].filter((value) => value.length > 0).join(' ');
   const message = label
-    ? `New Endiginous ${IS_NATIVE_CLIENT ? 'world runtime' : 'update'} ${label} found. Reloading...`
-    : `New Endiginous ${IS_NATIVE_CLIENT ? 'world runtime update' : 'update'} found. Reloading...`;
+    ? `New Indiginous ${IS_NATIVE_CLIENT ? 'world runtime' : 'update'} ${label} found. Reloading...`
+    : `New Indiginous ${IS_NATIVE_CLIENT ? 'world runtime update' : 'update'} found. Reloading...`;
   setConnectionStatus(message);
   pushChatMessage(message);
   window.setTimeout(
@@ -490,10 +509,19 @@ const ITEM_BEACON_RADIUS = 3.5;
 const ITEM_BEACON_INTERVAL_MS = 3200;
 const RUNTIME_RECOVERY_STATUS_INTERVAL_MS = 5_000;
 const SEAT_INTERACTION_RADIUS = 1.5;
+const VEHICLE_ENGINE_SOUND_URLS = {
+  car: withBase('sounds/vehicles/car-engine-idle.ogg'),
+  suv: withBase('sounds/vehicles/suv-engine-idle.ogg'),
+  van: withBase('sounds/vehicles/car-engine-idle.ogg'),
+} as const;
 
 const state = createInitialState();
+let pendingGameLaunchItem: WorldItem | null = null;
 const renderer = new CanvasRenderer(dom.canvas);
 const audio = new AudioEngine();
+let activeVehicleEngineStop: (() => void) | null = null;
+let activeVehicleEngineItemId = '';
+let vehicleEngineStartInFlight = '';
 const settings = new SettingsStore();
 const initialAuthUsername = settings.loadAuthUsername();
 let worldGridSize = GRID_SIZE;
@@ -501,6 +529,8 @@ let worldGridWidth = GRID_SIZE;
 let worldGridHeight = GRID_SIZE;
 let movementTickMs = MOVE_COOLDOWN_MS;
 let lastWallCollisionDirection: string | null = null;
+// Prevent a held arrow from cycling furniture posture repeatedly.
+let seatedMovementPressConsumed = false;
 let statusTimeout: number | null = null;
 let pendingDoorCloseCue: { x: number; y: number; expiresAt: number } | null = null;
 let lastFocusedElement: Element | null = null;
@@ -514,6 +544,7 @@ let activeGridName = DEFAULT_GRID_NAME;
 let activeWelcomeMessage = DEFAULT_WELCOME_MESSAGE;
 let currentLocationId = '';
 let currentLocationName = '';
+let lastWorldSummary = '';
 let worldLocationOptions: WorldLocationOption[] = [];
 const messageBuffer: string[] = [];
 let messageCursor = -1;
@@ -959,6 +990,21 @@ function preloadLocationAmbienceSounds(): void {
     withBase('sounds/teleport_pad_loop.ogg'),
     withBase('sounds/portal_spatial_loop.ogg'),
   ]);
+  // Keep the complete published ambience library warm in the browser cache in
+  // the background. This is deliberately fire-and-forget: startup and the
+  // currently audible room must never wait for the full library.
+  void preloadPublishedSoundCatalog();
+}
+
+async function preloadPublishedSoundCatalog(): Promise<void> {
+  try {
+    const response = await fetch(withBase('ambience-catalog.json'), { cache: 'default' });
+    if (!response.ok) return;
+    const catalog = await response.json() as { sounds?: Array<{ url?: string }> };
+    audio.preloadSamples((catalog.sounds ?? []).map((sound) => sound.url));
+  } catch {
+    // A missing/offline catalog must not affect world entry or local audio.
+  }
 }
 
 function locationOptionForId(locationId?: string | null): WorldLocationOption | undefined {
@@ -979,7 +1025,7 @@ function locationNameForId(locationId?: string | null): string {
 }
 
 function profileForLocationFootsteps(location: WorldLocationOption | undefined): FootstepSurfaceProfile {
-  const surfaceKey = (location?.ambienceKey || location?.kind || location?.id || '').trim();
+  const surfaceKey = (location?.footstepSurface || location?.ambienceKey || location?.kind || location?.id || '').trim();
   const profiles: Record<string, FootstepSurfaceProfile> = {
     city_plaza: { label: 'pavement', sampleIndexes: [1, 2, 3, 4, 6], gain: 0.72, pitchMin: 0.96, pitchMax: 1.06 },
     forest_canopy: { label: 'gravel and leaves', sampleIndexes: [7, 8, 9, 10, 11], gain: 0.84, pitchMin: 1.02, pitchMax: 1.18 },
@@ -991,6 +1037,7 @@ function profileForLocationFootsteps(location: WorldLocationOption | undefined):
     living_room_warmth: { label: 'living room rug', sampleIndexes: [1, 2, 3], gain: 0.52, pitchMin: 0.8, pitchMax: 0.93, fadeInMs: 18 },
     studio_current: { label: 'studio floor', sampleIndexes: [5, 6, 9, 11], gain: 0.62, pitchMin: 0.9, pitchMax: 1.05 },
     kitchen_soft_clatter: { label: 'kitchen tile', sampleIndexes: [4, 5, 6, 9], gain: 0.74, pitchMin: 1.04, pitchMax: 1.18 },
+    bathroom_tile: { label: 'bathroom tile', sampleIndexes: [4, 5, 6, 9, 10], gain: 0.78, pitchMin: 1.02, pitchMax: 1.16 },
     bedroom_quiet: { label: 'bedroom carpet', sampleIndexes: [1, 2], gain: 0.42, pitchMin: 0.76, pitchMax: 0.86, fadeInMs: 24 },
     relaxation_ocean: { label: 'soft relaxation room carpet', sampleIndexes: [1, 2], gain: 0.38, pitchMin: 0.72, pitchMax: 0.84, fadeInMs: 26 },
   };
@@ -1000,6 +1047,12 @@ function profileForLocationFootsteps(location: WorldLocationOption | undefined):
 async function syncLocationAmbience(forceRestart = false): Promise<void> {
   const location = currentLocationOption();
   await audio.setLocationAmbience(profileForLocationAmbience(location), audioLayers.world, forceRestart);
+}
+
+/** Unlocks and rebuilds the listener's world ambience graph from a real action. */
+async function startWorldAudio(forceRestart = false): Promise<void> {
+  await audio.ensureContext();
+  await syncLocationAmbience(forceRestart);
 }
 
 /** Re-primes world audio when a browser/tab/audio-context pause has recovered. */
@@ -1020,6 +1073,13 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') resumeWorldAudioAfterFocus();
 });
 document.addEventListener('pointerdown', () => resumeWorldAudioAfterFocus(false), { passive: true });
+// Screen-reader and keyboard users may never generate a pointer event. Treat
+// a real key press as the user gesture that can resume the listener-local
+// AudioContext and start any ambience prepared during login.
+document.addEventListener('keydown', (event) => {
+  if (event.isComposing) return;
+  resumeWorldAudioAfterFocus(false);
+}, { passive: true });
 
 async function loadClientBranding(): Promise<void> {
   try {
@@ -1161,6 +1221,76 @@ const authController = createAuthController({
     adminController.setServerAdminMenuActions(actions);
   },
 });
+
+/** Opens the native/browser file picker and streams one admin sound to the server. */
+function uploadAdminAmbienceSound(kind: 'loop' | 'one_shot'): void {
+  const maxUploadBytes = 5 * 1024 * 1024 * 1024;
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'audio/ogg,audio/mpeg,audio/wav,audio/mp4,audio/flac,.ogg,.mp3,.wav,.m4a,.flac';
+  input.setAttribute('aria-label', kind === 'loop' ? 'Choose an ambience loop sound' : 'Choose a one-shot ambience sound');
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    input.remove();
+    // The temporary file input can leave focus on a detached control. Return
+    // focus to the world before the asynchronous upload begins so keyboard
+    // movement and accessible shortcuts remain available.
+    dom.canvas.focus({ preventScroll: true });
+    if (!file) {
+      updateStatus('Sound upload cancelled.');
+      return;
+    }
+    if (file.size <= 0 || file.size > maxUploadBytes) {
+      updateStatus('Choose a sound file no larger than 5 gigabytes.');
+      return;
+    }
+    void streamAdminAmbienceSound(file, kind);
+  }, { once: true });
+  document.body.appendChild(input);
+  input.click();
+}
+
+async function streamAdminAmbienceSound(file: File, kind: 'loop' | 'one_shot'): Promise<void> {
+  const uploadId = crypto.randomUUID();
+  const chunkSize = 180_000;
+  const statusIntervalMs = 5_000;
+  let nextStatusAt = Date.now();
+  // Hash each upload chunk as it is read so a 1–5 GB file does not need to be
+  // copied into one browser-sized ArrayBuffer before streaming begins.
+  const digest = sha256.create();
+  if (!signaling.send({ type: 'admin_ambience_upload_begin', uploadId, filename: file.name, contentType: file.type || 'application/octet-stream', kind, totalBytes: file.size })) {
+    updateStatus('Sound upload could not start because the server connection is unavailable.');
+    return;
+  }
+  updateStatus(`Uploading ${file.name} as a ${kind === 'loop' ? 'loop' : 'one-shot'} sound. 0 percent.`);
+  nextStatusAt = Date.now() + statusIntervalMs;
+  for (let offset = 0, index = 0; offset < file.size; offset += chunkSize, index += 1) {
+    const bytes = new Uint8Array(await file.slice(offset, offset + chunkSize).arrayBuffer());
+    digest.update(bytes);
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    const data = btoa(binary);
+    if (!signaling.send({ type: 'admin_ambience_upload_chunk', uploadId, index, data })) {
+      updateStatus('Sound upload interrupted. Please try again.');
+      return;
+    }
+    const now = Date.now();
+    if (now >= nextStatusAt) {
+      const percent = Math.round(((offset + bytes.length) / file.size) * 100);
+      updateStatus(`Please wait. Uploading ${file.name}. ${percent} percent complete.`);
+      nextStatusAt = now + statusIntervalMs;
+    }
+    // Keep the renderer responsive for large files. Without an explicit
+    // scheduling point, repeated hashing/base64 conversion can starve keydown
+    // handling until the entire upload finishes.
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+  }
+  const checksum = Array.from(digest.digest(), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  if (!signaling.send({ type: 'admin_ambience_upload_complete', uploadId, sha256: checksum })) {
+    updateStatus('Sound upload could not be completed because the server connection is unavailable.');
+  }
+}
+
 const adminController = createAdminController({
   state,
   signalingSend: (message) => signaling.send(message),
@@ -1173,6 +1303,7 @@ const adminController = createAdminController({
   setReplaceTextOnNextType: (value) => {
     replaceTextOnNextType = value;
   },
+  uploadAmbienceSound: uploadAdminAmbienceSound,
 });
 const itemInteractionController = createItemInteractionController({
   state,
@@ -1939,11 +2070,20 @@ function updateGridDashboard(): void {
   const itemSummary = itemsHere.length > 0 ? formatItemNarrationSummary(itemsHere) : '';
   const hereSummary = [...namesHere, itemSummary].filter(Boolean).join(', ') || 'just you';
 
-  dom.gridPosition.textContent = `${state.player.x}, ${state.player.y}`;
-  dom.gridPeople.textContent = peerCount === 1 ? '1 other user' : `${peerCount} other users`;
-  dom.gridItems.textContent = itemCount === 1 ? '1 item' : `${itemCount} items`;
-  dom.gridHere.textContent = hereSummary;
-  dom.worldSummary.textContent = `You are at ${state.player.x}, ${state.player.y}. ${hereSummary}. ${dom.gridPeople.textContent}; ${dom.gridItems.textContent}.`;
+  const positionText = `${formatCoordinate(state.player.x)}, ${formatCoordinate(state.player.y)}`;
+  const peopleText = peerCount === 1 ? '1 other user' : `${peerCount} other users`;
+  const itemsText = itemCount === 1 ? '1 item' : `${itemCount} items`;
+  const worldSummary = `You are at ${positionText}. ${hereSummary}. ${peopleText}; ${itemsText}.`;
+  if (dom.gridPosition.textContent !== positionText) dom.gridPosition.textContent = positionText;
+  if (dom.gridPeople.textContent !== peopleText) dom.gridPeople.textContent = peopleText;
+  if (dom.gridItems.textContent !== itemsText) dom.gridItems.textContent = itemsText;
+  if (dom.gridHere.textContent !== hereSummary) dom.gridHere.textContent = hereSummary;
+  // This is a live region. Avoid rewriting it on every animation frame or
+  // screen readers will repeat unchanged item counts and room contents.
+  if (lastWorldSummary !== worldSummary) {
+    lastWorldSummary = worldSummary;
+    dom.worldSummary.textContent = worldSummary;
+  }
 }
 
 /** Classifies a system chat line into a corresponding notification sound, when applicable. */
@@ -2038,25 +2178,28 @@ function openInteractiveItem(item: WorldItem): boolean {
     updateStatus(
       versionTab
         ? `Opened ${item.title} in a new browser tab.`
-        : `Your browser blocked the ${item.title} tab. Allow pop-ups for Endiginous and try again.`,
+        : `Your browser blocked the ${item.title} tab. Allow pop-ups for Indiginous and try again.`,
     );
     audio.sfxUiConfirm();
     return Boolean(versionTab);
   }
   dom.interactiveItemTitle.textContent = item.title;
   dom.interactiveItemFrame.title = item.title;
+  dom.interactiveItemExternalLink.href = url;
+  dom.interactiveItemExternalLink.textContent = `Open ${item.title} in a new tab`;
+  let origin = url;
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    // Keep the resolved URL visible if it is not a standard URL.
+  }
+  dom.interactiveItemOrigin.textContent = `The game is hosted at ${origin}. Choose Enter game to play here, or open it in a new tab.`;
   dom.interactiveItemFrame.src = interactiveItemFrameUrl(item, url);
   dom.interactiveItemPanel.classList.remove('hidden');
   dom.interactiveItemPanel.hidden = false;
   dom.interactiveItemPanel.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  dom.interactiveItemFrame.addEventListener(
-    'load',
-    () => {
-      focusInteractiveItemFrame(true);
-    },
-    { once: true },
-  );
-  updateStatus(serviceKind === 'game' ? `You opened ${item.title}. The game is ready in Endiginous.` : `You opened ${item.title} in Endiginous.`);
+  window.setTimeout(() => dom.interactiveItemEnterButton.focus(), 0);
+  updateStatus(serviceKind === 'game' ? `You opened ${item.title}. The game is ready in Indiginous.` : `You opened ${item.title} in Indiginous.`);
   audio.sfxUiConfirm();
   return true;
 }
@@ -2085,7 +2228,12 @@ function openGameLaunchInvite(message: Extract<IncomingMessage, { type: 'item_ga
           },
           carrierId: null,
         };
-  return openInteractiveItem(launchItem);
+  pendingGameLaunchItem = launchItem;
+  dom.gameInviteText.textContent = `${message.actorNickname || 'A player'} invited you to open ${launchItem.title}. Nothing will open or take focus until you choose it.`;
+  dom.gameInvitePanel.classList.remove('hidden');
+  dom.gameInvitePanel.hidden = false;
+  updateStatus(`Game invitation received from ${message.actorNickname || 'another player'}.`);
+  return true;
 }
 
 function isDoorTransitionItem(item: WorldItem | null | undefined): boolean {
@@ -2138,7 +2286,6 @@ function closeInteractiveItem(): boolean {
 
 dom.interactiveItemPanel.addEventListener('pointerdown', (event) => {
   if (event.target instanceof HTMLElement && event.target.closest('button, a')) return;
-  window.setTimeout(() => focusInteractiveItemFrame(true), 0);
 });
 
 document.addEventListener(
@@ -2307,7 +2454,41 @@ function isSeatableItem(item: WorldItem): boolean {
   const posture = String(item.params.postureMode ?? '').trim().toLowerCase();
   const capacity = Number(item.params.seatingCapacity);
   if (Number.isFinite(capacity) && capacity <= 0) return false;
-  return posture === 'sit' || posture === 'lie' || posture === 'sit_lie' || ['chair', 'couch', 'sofa', 'bench', 'stool', 'loveseat', 'bed'].includes(kind);
+  return posture === 'sit' || posture === 'lie' || posture === 'sit_lie' || ['chair', 'couch', 'sofa', 'bench', 'stool', 'loveseat', 'bed', 'car', 'suv', 'van'].includes(kind);
+}
+
+/** Cars keep the driver seated while movement keys move the car itself. */
+function isDrivingVehicle(item: WorldItem | null | undefined): boolean {
+  if (!item) return false;
+  const kind = String(item.params.furnitureKind ?? item.params.objectKind ?? '').trim().toLowerCase();
+  return ['car', 'suv', 'van'].includes(kind);
+}
+
+/** Keeps the driver's local engine loop attached to the currently driven car. */
+function syncVehicleEngineAudio(): void {
+  const vehicle = state.player.seatedItemId ? state.items.get(state.player.seatedItemId) : null;
+  if (!isDrivingVehicle(vehicle)) {
+    if (activeVehicleEngineStop) activeVehicleEngineStop();
+    activeVehicleEngineStop = null;
+    activeVehicleEngineItemId = '';
+    vehicleEngineStartInFlight = '';
+    return;
+  }
+  if (activeVehicleEngineItemId === vehicle.id || vehicleEngineStartInFlight === vehicle.id) return;
+  if (activeVehicleEngineStop) activeVehicleEngineStop();
+  activeVehicleEngineStop = null;
+  const kind = String(vehicle.params.vehicleType ?? vehicle.params.furnitureKind ?? 'car').trim().toLowerCase();
+  const url = VEHICLE_ENGINE_SOUND_URLS[kind as keyof typeof VEHICLE_ENGINE_SOUND_URLS] ?? VEHICLE_ENGINE_SOUND_URLS.car;
+  vehicleEngineStartInFlight = vehicle.id;
+  void audio.startLoopingSample(url, 0.16, { fadeInSeconds: 0.18, fadeOutSeconds: 0.22 }).then((stop) => {
+    if (vehicleEngineStartInFlight !== vehicle.id) {
+      stop?.();
+      return;
+    }
+    vehicleEngineStartInFlight = '';
+    activeVehicleEngineItemId = vehicle.id;
+    activeVehicleEngineStop = stop;
+  });
 }
 
 /** Finds the nearest couch/chair-like item close enough for space-to-sit. */
@@ -2546,6 +2727,10 @@ function recomputeActiveItemPropertyKeys(itemId: string): void {
 
 /** Sends an item-use request for the selected item. */
 function useItem(item: WorldItem): void {
+  // An item action is a real user gesture. Use it to unlock room ambience so
+  // doors, switches, radios, and other world interactions do not need a
+  // separate audio-start button.
+  void startWorldAudio();
   focusItemForAction(item);
   if (item.type === 'house_alarm') {
     pendingAlarmItemId = item.id;
@@ -3210,12 +3395,13 @@ function gameLoop(): void {
     const now = performance.now();
     if (now - lastRuntimeRecoveryStatusAt >= RUNTIME_RECOVERY_STATUS_INTERVAL_MS) {
       lastRuntimeRecoveryStatusAt = now;
-      console.error('Endiginous movement loop recovered after an error.', error);
+      console.error('Indiginous movement loop recovered after an error.', error);
       state.keysPressed = {};
       activeTeleport = null;
     }
   }
   try {
+    syncVehicleEngineAudio();
     const listenerPosition = getListenerPosition();
     if (!activeTeleport) {
       void refreshAudioSubscriptions();
@@ -3234,7 +3420,7 @@ function gameLoop(): void {
     const now = performance.now();
     if (now - lastRuntimeRecoveryStatusAt >= RUNTIME_RECOVERY_STATUS_INTERVAL_MS) {
       lastRuntimeRecoveryStatusAt = now;
-      console.error('Endiginous presentation loop recovered after an error.', error);
+      console.error('Indiginous presentation loop recovered after an error.', error);
     }
   } finally {
     if (state.running) {
@@ -3266,15 +3452,26 @@ function handleMovement(): void {
   if (dx === 0 && dy === 0) {
     lastWallCollisionDirection = null;
     lastAutoSeatItemId = '';
+    seatedMovementPressConsumed = false;
     return;
   }
 
-  if (state.player.posture !== 'standing') {
-    // Ordinary arrows must recover a seated reconnect. The server treats an
-    // update_position packet as both standing up and moving, while keeping
-    // horizontal arrows in a local offset mode made users appear stuck.
-    signaling.send({ type: 'update_position', x: state.player.x + dx, y: state.player.y + dy });
-    updateStatus('You stand up and move away from the furniture.');
+  // Movement is also a real user gesture and is the natural fallback for
+  // keyboard and screen-reader users who do not activate an item first.
+  void startWorldAudio();
+
+  const seatedItem = state.player.seatedItemId ? state.items.get(state.player.seatedItemId) : null;
+  if (state.player.posture !== 'standing' && !isDrivingVehicle(seatedItem)) {
+    // Furniture posture changes happen before movement. One released arrow
+    // press advances the posture; a later press can move after standing.
+    if (seatedMovementPressConsumed) return;
+    seatedMovementPressConsumed = true;
+    state.player.lastMoveTime = now;
+    const seat = state.player.seatedItemId ? state.items.get(state.player.seatedItemId) : null;
+    if (seat) {
+      signaling.send({ type: 'item_use', itemId: seat.id });
+      updateStatus(`Changing your posture on ${seat.title}.`);
+    }
     audio.sfxUiBlip();
     return;
   }
@@ -3297,10 +3494,15 @@ function handleMovement(): void {
   lastWallCollisionDirection = null;
   state.player.lastMoveTime = now;
   void refreshAudioSubscriptions(true);
-  const footstep = randomFootstepCue();
-  void audio.playSample(footstep.url, footstep.gain, footstep.fadeInMs, footstep.playbackRate);
-  audio.playStepSignature({ identity: footstep.identity, nickname: footstep.nickname });
-  signaling.send({ type: 'update_position', x: nextX, y: nextY });
+  const drivingVehicle = state.player.seatedItemId ? state.items.get(state.player.seatedItemId) : null;
+  if (!isDrivingVehicle(drivingVehicle)) {
+    const footstep = randomFootstepCue();
+    void audio.playSample(footstep.url, footstep.gain, footstep.fadeInMs, footstep.playbackRate);
+    audio.playStepSignature({ identity: footstep.identity, nickname: footstep.nickname });
+  }
+  if (!signaling.send({ type: 'update_position', x: nextX, y: nextY })) {
+    updateStatus('Movement is waiting for the world connection to recover.');
+  }
 
   const namesOnTile = getPeerNamesAtPosition(nextX, nextY);
   const itemsOnTile = getItemsAtPosition(nextX, nextY);
@@ -3311,6 +3513,9 @@ function handleMovement(): void {
     audio.sfxTileItemPing();
   }
   narrateLocalMovement(nextX, nextY, dx, dy);
+  if (isDrivingVehicle(drivingVehicle)) {
+    updateStatus(`Driving ${drivingVehicle.title}. ${movementDirectionPhrase(dx, dy)}.`);
+  }
   const nearestSeat = getNearestSeatableItem();
   if (nearestSeat && nearestSeat.id !== lastAutoSeatItemId) {
     lastAutoSeatItemId = nearestSeat.id;
@@ -3319,6 +3524,25 @@ function handleMovement(): void {
     updateStatus(`You are close to ${nearestSeat.title}; you ${posture}.`);
     signaling.send({ type: 'item_use', itemId: nearestSeat.id });
   }
+}
+
+/** Moves one square from an accessible on-page control when browser arrow keys are reserved by assistive technology. */
+function moveOneSquareFromControl(code: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight'): void {
+  if (!state.running || state.mode !== 'normal') return;
+  const invokingControl = document.activeElement instanceof HTMLButtonElement
+    ? document.activeElement
+    : null;
+  const previousRemoteFocus = state.remoteControlsFocused;
+  state.remoteControlsFocused = false;
+  state.keysPressed[code] = true;
+  try {
+    handleMovement();
+  } finally {
+    state.keysPressed[code] = false;
+    state.remoteControlsFocused = previousRemoteFocus;
+  }
+  if (invokingControl?.isConnected) invokingControl.focus({ preventScroll: true });
+  else dom.canvas.focus({ preventScroll: true });
 }
 
 /** Checks microphone permission state when Permissions API support is available. */
@@ -3512,7 +3736,7 @@ function handleAdminActionResult(message: Extract<IncomingMessage, { type: 'admi
   audio.sfxUiConfirm();
 }
 
-/** Applies server-backed ntfy preferences for the signed-in Endiginous identity. */
+/** Applies server-backed ntfy preferences for the signed-in Indiginous identity. */
 function handleNtfyPreferences(message: Extract<IncomingMessage, { type: 'ntfy_preferences' }>): void {
   dom.ntfyNotificationsToggle.disabled = !message.configured;
   dom.ntfyNotificationsToggle.checked = message.enabled;
@@ -3597,6 +3821,12 @@ function disconnect(intentional = true): void {
   if (intentional) {
     autoReconnectEnabled = false;
   }
+  if (activeVehicleEngineStop) {
+    activeVehicleEngineStop();
+    activeVehicleEngineStop = null;
+  }
+  activeVehicleEngineItemId = '';
+  vehicleEngineStartInFlight = '';
   stopHeartbeat();
   runDisconnectFlow(getConnectionFlowDeps());
   setConnectionStatus('Disconnected.');
@@ -3949,6 +4179,14 @@ function toggleMute(): void {
 
 function getCurrentSquareItems(): WorldItem[] {
   return getItemsAtPosition(state.player.x, state.player.y, true);
+}
+
+/** Returns loose items on this or an adjacent square that a standing user can reach. */
+function getReachablePickupItems(): WorldItem[] {
+  return Array.from(state.items.values()).filter((item) => {
+    if (item.carrierId || isItemQuiet(item) || item.locationId !== currentLocationId) return false;
+    return Math.max(Math.abs(item.x - state.player.x), Math.abs(item.y - state.player.y)) <= 1;
+  });
 }
 
 function getUsableItemsOnCurrentSquare(): WorldItem[] {
@@ -4457,6 +4695,11 @@ function updateItemBeacon(): void {
 }
 
 function pickupDropItemCommand(moveAttached = false): void {
+  if (state.player.posture !== 'standing' && state.player.seatedItemId) {
+    updateStatus('Stand up before picking up or moving items from the furniture.');
+    audio.sfxUiCancel();
+    return;
+  }
   const carriedItems = getCarriedItems();
   const carriedSurface = carriedItems.find((item) => item.type === 'furniture') ?? null;
   const carried = carriedSurface ?? getCarriedItem();
@@ -4484,17 +4727,17 @@ function pickupDropItemCommand(moveAttached = false): void {
     });
     return;
   }
-  const squareItems = getCurrentSquareItems();
-  if (squareItems.length === 0) {
+  const reachableItems = getReachablePickupItems();
+  if (reachableItems.length === 0) {
     updateStatus('No items to pick up.');
     audio.sfxUiCancel();
     return;
   }
   const focused = getFocusedActionItem();
-  const pickupTarget = focused && squareItems.some((item) => item.id === focused.id)
+  const pickupTarget = focused && reachableItems.some((item) => item.id === focused.id)
     ? focused
-    : squareItems.length === 1
-      ? squareItems[0]
+    : reachableItems.length === 1
+      ? reachableItems[0]
       : null;
   if (pickupTarget) {
     focusItemForAction(pickupTarget);
@@ -4505,7 +4748,7 @@ function pickupDropItemCommand(moveAttached = false): void {
     });
     return;
   }
-  beginItemSelection('pickup', squareItems);
+  beginItemSelection('pickup', reachableItems);
 }
 
 function pickupDropAttachedItemsCommand(): void {
@@ -4896,7 +5139,8 @@ function executeCommandPaletteSelection(): void {
 }
 
 /** Handles command-mode keybindings while in main gameplay mode. */
-function handleNormalModeInput(code: string, shiftKey: boolean, ctrlKey: boolean): void {
+function handleNormalModeInput(input: ModeInput): void {
+  const { code, shiftKey, ctrlKey } = input;
   if (code !== 'Escape' && pendingEscapeDisconnect) {
     pendingEscapeDisconnect = false;
   }
@@ -4933,56 +5177,55 @@ function handleNormalModeInput(code: string, shiftKey: boolean, ctrlKey: boolean
       escapeCommand();
       return;
     }
-    if (!state.remoteControlsFocused) {
-      return;
-    }
-    if (code === 'Home') {
-      radioRemoteButtonCommand('station_first');
-      return;
-    }
-    if (code === 'End') {
-      radioRemoteButtonCommand('station_last');
-      return;
-    }
-    if (code === 'KeyO') {
-      radioRemoteButtonCommand('power_toggle');
-      return;
-    }
-    if (code === 'KeyI') {
-      radioRemoteButtonCommand('info');
-      return;
-    }
-    if (code === 'KeyC' || (shiftKey && code === 'KeyK')) {
-      void castToNearestDevice();
-      return;
-    }
-    if (code === 'Space') {
-      radioRemoteControlCommand(shiftKey ? 'station_previous' : 'station_next');
-      return;
-    }
-    if (code === 'ArrowRight') {
-      radioRemoteControlCommand('station_next');
-      return;
-    }
-    if (code === 'ArrowLeft') {
-      radioRemoteControlCommand('station_previous');
-      return;
-    }
-    if (code === 'ArrowUp') {
-      radioRemoteControlCommand('volume_up');
-      return;
-    }
-    if (code === 'ArrowDown') {
-      radioRemoteControlCommand('volume_down');
-      return;
-    }
-    if (code === 'Period') {
-      radioRemoteControlCommand('station_next');
-      return;
-    }
-    if (code === 'Comma') {
-      radioRemoteControlCommand('station_previous');
-      return;
+    if (state.remoteControlsFocused) {
+      if (code === 'Home') {
+        radioRemoteButtonCommand('station_first');
+        return;
+      }
+      if (code === 'End') {
+        radioRemoteButtonCommand('station_last');
+        return;
+      }
+      if (code === 'KeyO') {
+        radioRemoteButtonCommand('power_toggle');
+        return;
+      }
+      if (code === 'KeyI') {
+        radioRemoteButtonCommand('info');
+        return;
+      }
+      if (code === 'KeyC' || (shiftKey && code === 'KeyK')) {
+        void castToNearestDevice();
+        return;
+      }
+      if (code === 'Space') {
+        radioRemoteControlCommand(shiftKey ? 'station_previous' : 'station_next');
+        return;
+      }
+      if (code === 'ArrowRight') {
+        radioRemoteControlCommand('station_next');
+        return;
+      }
+      if (code === 'ArrowLeft') {
+        radioRemoteControlCommand('station_previous');
+        return;
+      }
+      if (code === 'ArrowUp') {
+        radioRemoteControlCommand('volume_up');
+        return;
+      }
+      if (code === 'ArrowDown') {
+        radioRemoteControlCommand('volume_down');
+        return;
+      }
+      if (code === 'Period') {
+        radioRemoteControlCommand('station_next');
+        return;
+      }
+      if (code === 'Comma') {
+        radioRemoteControlCommand('station_previous');
+        return;
+      }
     }
   }
   if (code === 'Tab') {
@@ -5727,6 +5970,15 @@ setupKeyboardInputHandlers({
   closeInteractiveItem,
 });
 
+for (const control of Array.from(dom.movementControls.querySelectorAll<HTMLButtonElement>('[data-movement-code]'))) {
+  control.addEventListener('click', () => {
+    const code = control.dataset.movementCode;
+    if (code === 'ArrowUp' || code === 'ArrowDown' || code === 'ArrowLeft' || code === 'ArrowRight') {
+      moveOneSquareFromControl(code);
+    }
+  });
+}
+
 dom.readGuideButton.addEventListener('click', () => {
   if (joinGuideReaderActive) {
     closeJoinGuideReader();
@@ -5753,6 +6005,26 @@ midiControllerHandle = setupMidiInputHandlers({
 
 dom.interactiveItemCloseButton.addEventListener('click', () => {
   closeInteractiveItem();
+});
+
+dom.interactiveItemEnterButton.addEventListener('click', () => {
+  focusInteractiveItemFrame(true);
+  updateStatus('Game focused. Use the game controls. Return to Indiginous with the Close interactive item button.');
+});
+
+dom.gameInviteOpenButton.addEventListener('click', () => {
+  const item = pendingGameLaunchItem;
+  pendingGameLaunchItem = null;
+  dom.gameInvitePanel.classList.add('hidden');
+  dom.gameInvitePanel.hidden = true;
+  if (item) openInteractiveItem(item);
+});
+
+dom.gameInviteDismissButton.addEventListener('click', () => {
+  pendingGameLaunchItem = null;
+  dom.gameInvitePanel.classList.add('hidden');
+  dom.gameInvitePanel.hidden = true;
+  updateStatus('Game invitation dismissed.');
 });
 setupDomUiHandlers({
   dom,

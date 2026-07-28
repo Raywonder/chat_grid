@@ -2,7 +2,7 @@ const { app, BrowserWindow, Menu, Tray, desktopCapturer, dialog, nativeImage, sh
 const fs = require('fs');
 const path = require('path');
 
-const DEFAULT_ENDIGINOUS_URL = 'https://blind.software/endiginous/?native_client=electron';
+const DEFAULT_INDIGINOUS_URL = 'https://blind.software/indiginous/?native_client=electron';
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:']);
 
 let mainWindow = null;
@@ -21,12 +21,12 @@ function settingsPath() {
   return path.join(app.getPath('userData'), 'settings.json');
 }
 
-function normalizeEndiginousUrl(value) {
+function normalizeIndiginousUrl(value) {
   const raw = String(value || '').trim();
-  if (!raw) return DEFAULT_ENDIGINOUS_URL;
+  if (!raw) return DEFAULT_INDIGINOUS_URL;
   const url = new URL(raw);
   if (!ALLOWED_PROTOCOLS.has(url.protocol)) {
-    throw new Error('Endiginous URL must start with http:// or https://.');
+    throw new Error('Indiginous URL must start with http:// or https://.');
   }
   // Keep the shared client on its native-shell accessibility contract: the
   // browser sign-in link and duplicate canvas chrome stay out of the desktop
@@ -38,14 +38,14 @@ function normalizeEndiginousUrl(value) {
 function readSettings() {
   const fromEnv = process.env.CHGRID_DESKTOP_URL;
   if (fromEnv) {
-    return { endiginousUrl: normalizeEndiginousUrl(fromEnv) };
+    return { indiginousUrl: normalizeIndiginousUrl(fromEnv) };
   }
   try {
     const raw = fs.readFileSync(settingsPath(), 'utf8');
     const parsed = JSON.parse(raw);
-    return { endiginousUrl: normalizeEndiginousUrl(parsed.endiginousUrl ?? parsed.chatGridUrl) };
+    return { indiginousUrl: normalizeIndiginousUrl(parsed.indiginousUrl ?? parsed.chatGridUrl) };
   } catch {
-    return { endiginousUrl: DEFAULT_ENDIGINOUS_URL };
+    return { indiginousUrl: DEFAULT_INDIGINOUS_URL };
   }
 }
 
@@ -64,17 +64,17 @@ function appendRuntimeLog(event, details = {}) {
 }
 
 function getCurrentUrl() {
-  return readSettings().endiginousUrl;
+  return readSettings().indiginousUrl;
 }
 
-function loadEndiginous(url = getCurrentUrl()) {
+function loadIndiginous(url = getCurrentUrl()) {
   if (!mainWindow) return;
   mainWindow.loadURL(url).catch((error) => {
     appendRuntimeLog('load-url-failed', { message: error?.message || String(error) });
   });
 }
 
-function recoverEndiginousView() {
+function recoverIndiginousView() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     if (app.isReady()) createWindow();
     return;
@@ -87,7 +87,7 @@ function recoverEndiginousView() {
   mainWindow.show();
   mainWindow.focus();
   if (mainWindow.webContents.isCrashed()) {
-    loadEndiginous();
+    loadIndiginous();
     return;
   }
   mainWindow.webContents.reloadIgnoringCache();
@@ -103,7 +103,7 @@ function showMainWindow({ recover = false } = {}) {
   // though navigation had failed, and could surface renderer recovery UI
   // before the window was visible.
   if (recover && (mainWindowUnresponsive || mainWindow.webContents.isCrashed())) {
-    recoverEndiginousView();
+    recoverIndiginousView();
     return;
   }
   if (mainWindow.isMinimized()) mainWindow.restore();
@@ -129,14 +129,14 @@ function createTrayIcon() {
 function createTray() {
   if (tray) return;
   tray = new Tray(createTrayIcon());
-  tray.setToolTip('Endiginous');
+  tray.setToolTip('Indiginous');
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Open Endiginous', click: () => showMainWindow() },
-    { label: 'Reload Endiginous', click: () => loadEndiginous() },
-    { label: 'Recover frozen view', click: recoverEndiginousView },
+    { label: 'Open Indiginous', click: () => showMainWindow() },
+    { label: 'Reload Indiginous', click: () => loadIndiginous() },
+    { label: 'Recover frozen view', click: recoverIndiginousView },
     { type: 'separator' },
     {
-      label: 'Quit Endiginous',
+      label: 'Quit Indiginous',
       click: () => {
         isQuitting = true;
         app.quit();
@@ -147,35 +147,35 @@ function createTray() {
   tray.on('double-click', () => showMainWindow());
 }
 
-async function promptForEndiginousUrl() {
+async function promptForIndiginousUrl() {
   if (!mainWindow) return;
   const current = getCurrentUrl();
   const result = await dialog.showMessageBox(mainWindow, {
     type: 'question',
-    title: 'Endiginous URL',
-    message: 'Choose which Endiginous to open.',
+    title: 'Indiginous URL',
+    message: 'Choose which Indiginous to open.',
     detail: `Current URL:\n${current}`,
-    buttons: ['Use live Endiginous', 'Use local development', 'Cancel'],
+    buttons: ['Use live Indiginous', 'Use local development', 'Cancel'],
     defaultId: 0,
     cancelId: 2,
     noLink: true,
   });
   if (result.response === 2) return;
-  const endiginousUrl = result.response === 1 ? 'http://localhost:5173/' : DEFAULT_ENDIGINOUS_URL;
-  writeSettings({ endiginousUrl });
-  loadEndiginous(endiginousUrl);
+  const indiginousUrl = result.response === 1 ? 'http://localhost:5173/' : DEFAULT_INDIGINOUS_URL;
+  writeSettings({ indiginousUrl });
+  loadIndiginous(indiginousUrl);
 }
 
 function createApplicationMenu() {
   const template = [
     {
-      label: 'Endiginous',
+      label: 'Indiginous',
       submenu: [
         { label: 'Reload', click: () => mainWindow?.reload() },
-        { label: 'Recover Frozen View', accelerator: 'Ctrl+Shift+R', click: recoverEndiginousView },
+        { label: 'Recover Frozen View', accelerator: 'Ctrl+Shift+R', click: recoverIndiginousView },
         { label: 'Focus Grid', accelerator: 'Ctrl+G', click: () => mainWindow?.webContents.send('chat-grid-focus') },
         { label: 'Settings...', accelerator: 'Ctrl+,', click: () => mainWindow?.webContents.executeJavaScript('window.chatGridNativeOpenSettings?.()') },
-        { label: 'Endiginous URL...', accelerator: 'Ctrl+Shift+U', click: promptForEndiginousUrl },
+        { label: 'Indiginous URL...', accelerator: 'Ctrl+Shift+U', click: promptForIndiginousUrl },
         { label: 'Cast to device...', accelerator: 'Ctrl+Shift+C', click: () => mainWindow?.webContents.executeJavaScript("window.dispatchEvent(new Event('chatgrid-cast-to-device'));") },
         { type: 'separator' },
         { label: 'Open Current Page in Browser', click: () => mainWindow && shell.openExternal(mainWindow.webContents.getURL()) },
@@ -227,7 +227,7 @@ async function chooseDisplayMediaSource() {
   const result = await dialog.showMessageBox(mainWindow || undefined, {
     type: 'question',
     title: 'Cast Local Media',
-    message: 'Choose a screen, window, browser tab, or open media app to cast into Endiginous.',
+    message: 'Choose a screen, window, browser tab, or open media app to cast into Indiginous.',
     detail: 'For app audio such as YouTube, pick the window or screen that is playing it. Windows system audio is requested when the platform allows it.',
     buttons,
     defaultId: 0,
@@ -244,7 +244,7 @@ function createWindow() {
     height: 820,
     minWidth: 720,
     minHeight: 520,
-    title: 'Endiginous',
+    title: 'Indiginous',
     backgroundColor: '#111827',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -329,7 +329,7 @@ function createWindow() {
     mainWindow = null;
   });
 
-  loadEndiginous();
+  loadIndiginous();
 }
 
 app.on('second-instance', () => {

@@ -8,7 +8,7 @@ This is behavior-focused documentation for item types and their defaults.
 - Item placement, visibility, containment, attachment, and carry/drop rules should
   follow real-world plausibility. If an object would not sensibly be inside,
   outside, hidden in, attached to, carried from, or separated from another object
-  in a real scenario, Endiginous should not model it that way. Examples: internal
+  in a real scenario, Indiginous should not model it that way. Examples: internal
   speaker components can be hidden/attached as part of one radio system, but a
   freestanding billboard should not be treated as being inside a pocket-like
   object; room fixtures should stay in their room unless a feature explicitly
@@ -50,6 +50,33 @@ This is behavior-focused documentation for item types and their defaults.
   move the user through the normal server-owned `location_changed` flow so the
   user is visibly inside the destination and can navigate there, not only hear an
   "entered" status line.
+
+### Physical room keys
+
+- A locked room or door only accepts its matching physical key after the user
+  has taken the key. A matching key merely lying on the door square is not
+  silently used.
+- Unlocking does not consume or duplicate the key. The user may carry it, put
+  it on a supported furniture surface, or give it to a nearby house keeper for
+  safekeeping.
+- A house keeper moves with keys entrusted to it. Taking the key back returns
+  it to the user's carry state.
+- The world does not create a spare key automatically. If the only key is left
+  inside a room and that room is locked again, a person outside needs a second
+  physical key or another authorized means of entry, just as in real life.
+
+### Generated bathroom rooms
+
+- A `room` with `roomLayout=bathroom` is shared by default and is usable by men
+  and women. Its existing `doorState` controls entry: locking the door provides
+  privacy, rather than imposing a gender restriction.
+- When the server generates the room interior, it assigns a toilet, sink,
+  shower, mirror, towel rack, and soap dispenser to that room. Each generated
+  element carries `roomId` and `roomRole`, so house keepers can repair the
+  fixtures without losing their room relationship.
+- Bathroom locations advertise tile footsteps. Enterable room and door items
+  use the real door-open one-shot, and the client plays the matching door-close
+  one-shot after arrival.
 
 ## `radio_station`
 
@@ -150,7 +177,7 @@ This is behavior-focused documentation for item types and their defaults.
 - Bank items are fixed service counters. They are intentionally not carryable;
   users navigate to bank branches on the map the same way they navigate to other
   places and items.
-- Logged-in users are auto-linked to an eCrypto account by their Endiginous user id.
+- Logged-in users are auto-linked to an eCrypto account by their Indiginous user id.
 - `use` reports the current user's linked eCrypto status, including internal
   test-chain `TEST-ECR` balance and connected wallet counts.
 - `secondary use` reports bank details and command help.
@@ -158,12 +185,12 @@ This is behavior-focused documentation for item types and their defaults.
 - `/ecrypto wallets` lists connected test and real-chain wallet records.
 - `/ecrypto connect <test|real> <chain> <address> [label]` links a wallet record
   to the current user's eCrypto account. Real-chain links are stored for account
-  use, but Endiginous does not send real-chain transactions until an approved
+  use, but Indiginous does not send real-chain transactions until an approved
   provider/signature flow is wired.
 - `/ecrypto faucet [amount]` credits internal test-chain `TEST-ECR` for grid
   testing.
 - `/ecrypto transfer <username> <amount> [memo]` transfers internal test-chain
-  `TEST-ECR` between Endiginous accounts.
+  `TEST-ECR` between Indiginous accounts.
 
 ### Validation
 - `serviceScope`: `wallets | wallets_transfers | deposits_withdrawals | full_service | information_only`
@@ -351,7 +378,22 @@ This is behavior-focused documentation for item types and their defaults.
 - In `auto_repair` mode, supported radio repairs include powering a room radio back on, normalizing a bad preset index, restoring a missing or typo-broken `streamUrl` from presets, and clearing stale typo-broken `playbackUrl` values so the server can resolve playback again.
 - Supported household-object repairs currently mark `broken` or `cracked` modeled objects as `repaired`.
 - In `inspect` mode, the keeper reports what it checked without changing item state.
-- House keepers do not silently contact outside services, send messages, touch accounts, or claim to fix real physical devices.
+- When `autonomyEnabled` is true, the keeper also acts as a bounded in-world NPC:
+  it may walk around its private room, use a nearby open door or portal to visit
+  another private interior, greet nearby people, notice other keepers, and add
+  useful ideas to its task board. It never leaves private interiors on its own.
+- When `localModelEnabled` is true, a localhost-only Ollama-compatible model may
+  suggest one of `wait`, `move`, `inspect`, `say`, or `task`. The server validates
+  the result and applies only those in-world effects; model timeouts fall back to
+  deterministic movement/inspection.
+- Reviewed web discoveries may be supplied through the local JSON file named by
+  `CHGRID_HOUSE_KEEPER_DISCOVERIES_FILE` when `webDiscoveryEnabled` is true.
+  The file contains a list of short task ideas (or `{\"discoveries\": [...]}`),
+  and the keeper stores them on its bounded task board. The world server never
+  fetches URLs, executes discovered code, sends outside messages, or changes
+  accounts from that file.
+- House keepers do not silently contact outside services, send messages, touch
+  accounts, or claim to fix real physical devices.
 
 ### Validation
 - `keeperName`, `houseName`: max 80 chars; blank names fall back to useful defaults
@@ -363,6 +405,14 @@ This is behavior-focused documentation for item types and their defaults.
 - `voicePrompt`, `description`: max 240 chars
 - `lastAutoCheckAt`: server-managed Unix millisecond timestamp
 - `lastAutoCheckSummary`: server-managed summary, max 240 chars
+- `autonomyEnabled`: boolean; allow quiet NPC movement and interaction
+- `localModelEnabled`: boolean; allow localhost-only action suggestions
+- `localModelUrl`: localhost model endpoint, max 240 chars
+- `localModelName`: local model name, max 80 chars
+- `interactionRadius`: nearby interaction distance from 1 to 12
+- `webDiscoveryEnabled`: boolean; allow reviewed local task intake
+- `taskBoard`: server-managed list of up to 12 short ideas
+- `lastAutonomyAt`, `lastAutonomySummary`: server-managed autonomy receipt fields
 
 ## `service_link`
 
@@ -412,7 +462,7 @@ This is behavior-focused documentation for item types and their defaults.
 ### Validation
 - `serviceKind`: `app | door | game | house | room | service | site | station | tool | portal`
 - `url`: empty, absolute public `http/https` URL, or site-relative path
-- `targetLocation`: optional Endiginous location id or room entered when the service is used
+- `targetLocation`: optional Indiginous location id or room entered when the service is used
 - `portalDestinationMode`: `random | static`
 - `portalLocationPool`: optional comma-separated location ids
 - `doorState`: `unlocked | locked`
@@ -428,13 +478,13 @@ This is behavior-focused documentation for item types and their defaults.
 - `enabled`: boolean or on/off style input
 
 ### Built-In Seeds
-- City: `Endiginous Radio` with SoulFoodRadio, DivineCreations radio, Chris Mix Radio, StreamMadness, Tony Gebhard Radio, VoiceLink-popular streams, and ACB Media 1 through 10 as knob presets, plus `AAAStreamer`, `blind.software`, `tappedin.fm`, and portals to Town, Arcade, Offices, and Houses
+- City: `Indiginous Radio` with SoulFoodRadio, DivineCreations radio, Chris Mix Radio, StreamMadness, Tony Gebhard Radio, VoiceLink-popular streams, and ACB Media 1 through 10 as knob presets, plus `AAAStreamer`, `blind.software`, `tappedin.fm`, and portals to Town, Arcade, Offices, and Houses
 - Town: `tCast`, `Bema Media Player`, `Thrive Messenger`, and a return portal to Main City
 
 ### BlindSoftware Catalog Placement
 - Software catalog entries should credit the software author or publisher in `softwareAuthor`; verification status is a trust marker, not a substitute for attribution.
 - Public-safe software can be discoverable spatially through grid locations, forums/squares, portals, and billboards. A town-square billboard may rotate a showcase of software entries, while forum-style areas may let guests and members browse nearby software through normal item interaction.
-- Town Square has a public café interior with accessible clear approaches, two tables, four usable chairs, a service counter, a spatial café ambience bed, a wall-mounted World Cup TV, and an adjacent accessible live-score billboard. The score board refreshes from FIFA's official public match-calendar JSON feed and links to FIFA's schedule/results page. No match video or commentary audio is restreamed by Endiginous; broadcaster rights and regional availability remain external.
+- Town Square has a public café interior with accessible clear approaches, two tables, four usable chairs, a service counter, a spatial café ambience bed, a wall-mounted World Cup TV, and an adjacent accessible live-score billboard. The score board refreshes from FIFA's official public match-calendar JSON feed and links to FIFA's schedule/results page. No match video or commentary audio is restreamed by Indiginous; broadcaster rights and regional availability remain external.
 
 ### FIFA live-score provider dependency
 
@@ -443,7 +493,7 @@ This is behavior-focused documentation for item types and their defaults.
 - Authentication/secrets: none.
 - Cost: none known for the public endpoint.
 - Refresh: every 30 seconds; the last good in-world text remains if FIFA is temporarily unavailable.
-- Viewing: the board links to FIFA's official schedule/results and where-to-watch information; Endiginous does not rebroadcast protected match media.
+- Viewing: the board links to FIFA's official schedule/results and where-to-watch information; Indiginous does not rebroadcast protected match media.
 - Signed-in users can monitor content they own from the owned-content overview, which lists their items and grid coordinates without granting broader admin powers.
 - Arcade: `Moonstep Runner`, `Future games shelf`, `Clawdia's toolkit`, and a return portal to Main City
 - Offices: `VoiceLink`, `OpenLink`, `OpenClaw and Clawdia`, `FlexPBX`, and a return portal to Main City
@@ -487,10 +537,11 @@ This is behavior-focused documentation for item types and their defaults.
 
 ## `house_object`
 
-- `objectKind` includes everyday objects plus `remote`, `speaker`, `radio`, and `tv`.
+- `objectKind` includes everyday objects plus `remote`, `speaker`, `radio`, `tv`, and `computer`.
+- Personal computers are persistent household objects. They keep their own platform, operating system, power state, and optional profile settings in world item state; using one reports its configuration and toggles it between awake and sleeping.
 - TV objects follow the same shared-media power rule as radios: disconnecting, switching users, or reconnecting must not turn a TV off. Only an explicit user action should change the TV object's `enabled` state.
 - Video-capable TV sources expose a visible native-controls screen while program audio stays spatial and synchronized. Audio-described MP3 programs remain audio-first and do not create a blank video panel.
-- TV objects can be mounted with `placement="wall"`. Every TV receives the shared server-managed channel catalog: the 14 live TV channels from `https://2.onj.me/guide.html`, followed by the existing Endiginous stream presets. The guide is also exposed as a browseable `tvProviderSources` entry, and the universal TV remote tunes this shared preset list across linked TVs.
+- TV objects can be mounted with `placement="wall"`. Every TV receives the shared server-managed channel catalog: the 14 live TV channels from `https://2.onj.me/guide.html`, followed by the existing Indiginous stream presets. The guide is also exposed as a browseable `tvProviderSources` entry, and the universal TV remote tunes this shared preset list across linked TVs.
 - Radio remotes expose `remoteControlLinkedRadios`. When true, the remote tunes/adjusts compatible connected radios and speakers in the current location; Raywonder house radios may additionally share their explicitly linked set across house rooms. When false, it controls only the nearest/current-location radio.
 - TV remotes expose `remoteControlLinkedTvs`. When true, remote channel and volume controls apply to the connected house TV system; when false, they target the nearest/current-room TV.
 - `tvLibrarySources` describes approved movie, show, and miscellaneous libraries; `tvProviderSources` describes approved online sources such as Jellyfin and Pluto TV. These entries are server-managed metadata and must not contain credentials.
@@ -790,3 +841,12 @@ A minimal new item type usually needs:
   - validate params on update
   - build self/others use messages
   - optionally return delayed result text
+# Clothing and wardrobe
+
+Authenticated users carry a server-owned wardrobe profile. BlindSoftware's
+verified gender/self-description follows the account into Indiginous; it is
+not inferred from a nickname. In the bedroom, a generated Wardrobe object
+provides a sensible place to change clothes. `/clothes` lists owned and worn
+items, `/wear <item>` puts one on, `/remove <item>` removes one, and
+`/undress` removes all worn clothing. The server remains authoritative and
+broadcasts avatar changes to other clients.

@@ -109,6 +109,7 @@ def test_login_external_assertion_creates_user_and_session(tmp_path: Path) -> No
                 "username": "Blind Member",
                 "email": "member@example.com",
                 "displayName": "Blind Member",
+                "gender": "Woman",
                 "role": "editor",
                 "nonce": "nonce-1",
                 "iat": now,
@@ -124,6 +125,11 @@ def test_login_external_assertion_creates_user_and_session(tmp_path: Path) -> No
         assert session.user.username == "blind-member"
         assert session.user.email == "member@example.com"
         assert session.user.role == "editor"
+        profile = service.get_avatar_profile(session.user.id)
+        assert profile["gender"] == "Woman"
+        assert profile["wornClothing"] == ["everyday-top", "everyday-bottom", "shoes"]
+        saved = service.save_worn_clothing(session.user.id, ["shoes"])
+        assert saved["wornClothing"] == ["shoes"]
         resumed = service.resume(session.token)
         assert resumed.user.id == session.user.id
     finally:

@@ -1,4 +1,4 @@
-# Indigenous native movement fallback — 2026-07-24
+# Indiginous native movement fallback — 2026-07-24
 
 ## Finding
 
@@ -12,7 +12,7 @@ announce held items but arrow movement did nothing.
 
 The native wxPython shell now installs its existing foreground-only
 `WindowsWorldKeyHook` when Windows global arrow registration fails. The hook
-only captures arrows while the Indigenous process is foreground, forwards the
+only captures arrows while the Indiginous process is foreground, forwards the
 same `chatGridNativeKey` path as the normal native bridge, and is closed again
 when world hotkeys are deactivated.
 

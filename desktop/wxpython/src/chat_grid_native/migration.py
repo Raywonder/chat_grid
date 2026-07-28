@@ -1,4 +1,4 @@
-"""Migrate known legacy client state into Endiginous-owned user paths."""
+"""Migrate known legacy client state into Indiginous-owned user paths."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import sys
 
 from .config import app_data_dir
 
-LEGACY_APP_NAMES = ("Chat Grid", "ChatGrid", "Indigenous")
+LEGACY_APP_NAMES = ("Indiginous", "Endiginous", "Indigenous", "Chat Grid", "ChatGrid")
 
 
 def _paths() -> tuple[list[Path], list[Path], list[Path]]:
@@ -37,6 +37,12 @@ def _paths() -> tuple[list[Path], list[Path], list[Path]]:
     data += [roaming / name for name in LEGACY_APP_NAMES]
     installs = [local / "Programs" / name for name in LEGACY_APP_NAMES]
     installs += [root / name for root in program_files for name in LEGACY_APP_NAMES]
+    installs += [root / "BlindSoftware" / name for root in program_files for name in LEGACY_APP_NAMES]
+    # Never remove the directory containing the currently running frozen app.
+    # This matters now that the default is Program Files/BlindSoftware/Indiginous.
+    current_install = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else None
+    if current_install is not None:
+        installs = [path for path in installs if path.resolve() != current_install]
     names = [f"{name}.lnk" for name in LEGACY_APP_NAMES]
     shortcut_dirs = [home / "Desktop", roaming / "Microsoft" / "Windows" / "Start Menu" / "Programs"]
     shortcuts = [directory / name for directory in shortcut_dirs for name in names]

@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Push-Location $Root
 try {
-$BuildCacheRoot = if ($env:ENDIGINOUS_BUILD_CACHE) { $env:ENDIGINOUS_BUILD_CACHE } else { "C:\BuildCache\Endiginous" }
+$BuildCacheRoot = if ($env:INDIGINOUS_BUILD_CACHE) { $env:INDIGINOUS_BUILD_CACHE } else { "C:\BuildCache\Indiginous" }
 New-Item -ItemType Directory -Force -Path $BuildCacheRoot | Out-Null
 $Venv = Join-Path $BuildCacheRoot "venv"
 $Python = Join-Path $Venv "Scripts\python.exe"
@@ -29,7 +29,7 @@ if (-not (Test-Path $Python)) {
 }
 & $Python -m pip install --upgrade pip
 & $Python -m pip install -e "$Root[build,test]"
-$PytestBase = "C:\BuildCache\EndiginousPytestTemp"
+$PytestBase = "C:\BuildCache\IndiginousPytestTemp"
 if (Test-Path $PytestBase) {
     Remove-Item -Recurse -Force $PytestBase
 }
@@ -44,7 +44,7 @@ if (-not (Test-Path $Assets)) {
 }
 $Args = @(
     "-m", "PyInstaller", "--noconfirm", "--clean", "--windowed",
-    "--name", "Endiginous", "--collect-all", "wx", "--hidden-import", "wx.html2",
+    "--name", "Indiginous", "--collect-all", "wx", "--hidden-import", "wx.html2",
     "--paths", (Join-Path $Root "src"),
     "--distpath", (Join-Path $Root "dist"), "--workpath", (Join-Path $Root "build"),
     "--specpath", $Root
@@ -64,8 +64,9 @@ if (Test-Path $Assets) {
 }
 $Args += (Join-Path $Root "src\chat_grid_native\__main__.py")
 & $Python @Args
-$DistRoot = Join-Path $Root "dist\Endiginous"
+$DistRoot = Join-Path $Root "dist\Indiginous"
 Copy-Item (Join-Path $Root "..\..\LICENSE") (Join-Path $DistRoot "LICENSE.txt") -Force
+Copy-Item (Join-Path $Root "..\..\INDIGINOUS_APPLICATION_LICENSE.txt") (Join-Path $DistRoot "INDIGINOUS_APPLICATION_LICENSE.txt") -Force
 Copy-Item (Join-Path $Root "..\..\THIRD_PARTY_NOTICES.md") (Join-Path $DistRoot "THIRD_PARTY_NOTICES.md") -Force
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" (Join-Path $Root "installer\ChatGrid.iss")
 }

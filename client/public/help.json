@@ -1,11 +1,11 @@
 {
   "sections": [
     {
-      "title": "Endiginous Help",
+      "title": "Indiginous Help",
       "items": [
         {
           "keys": "Admin menu, Location ambience",
-          "description": "Choose a location, browse all categorized FX ambience loops, press Space for source and loop details, and Enter to assign"
+          "description": "Choose a location, browse categorized ambience sounds, press L to upload a loop or O to upload a one-shot sound, Space for sound details, and Enter to assign a loop"
         },
         {
           "keys": "Arrow Keys",
@@ -78,7 +78,7 @@
         },
         {
           "keys": "Slash commands",
-          "description": "In chat, use /me <action>, /mood <mood> to share how you feel, /up for uptime, /version for server version, /go <location> to travel, and social commands like /hug, /hi, /tap, /cuddle, /kiss, /handshake, /holdhands, /highfive, /fistbump, /cheer, /clap, /laugh, /smile, /wink, /nod, /blush, /cry, /yawn, /apologize, /forgive, /bow, /dance, /comfort, /pat, /poke, /boop, /salute, /thumbsup, /heart, /sparkle, /celebrate, /tease, /smack, /whisper, and /listen. Furniture is manually controlled during normal use; after two hours away, the Grid may choose sensible nearby available seating or a bed based on mood and local time."
+          "description": "In chat, use /me <action>, /clothes to inspect your wardrobe, /wear <item>, /remove <item>, or /undress to change clothes, plus /mood <mood> to share how you feel, /up for uptime, /version for server version, /go <location> to travel, or /home, /bed, or /rest to let an authorized Raywonder resident return safely home and settle onto the bedroom bed. Social commands include /hug, /hi, /tap, /cuddle, /kiss, /handshake, /holdhands, /highfive, /fistbump, /cheer, /clap, /laugh, /smile, /wink, /nod, /blush, /cry, /yawn, /apologize, /forgive, /bow, /dance, /comfort, /pat, /poke, /boop, /salute, /thumbsup, /heart, /sparkle, /celebrate, /tease, /smack, /whisper, and /listen. Furniture is manually controlled during normal use; after two hours away, the Grid may choose sensible nearby available seating or a bed based on mood and local time."
         },
         {
           "keys": "Shift+Z",
@@ -218,7 +218,7 @@
         },
         {
           "keys": "AAAStreamer and radio",
-          "description": "Endiginous Radio holds SoulFoodRadio, DivineCreations, Chris Mix Radio, StreamMadness, VoiceLink-popular streams, and ACB Media presets in one tunable radio item"
+          "description": "Indiginous Radio holds SoulFoodRadio, DivineCreations, Chris Mix Radio, StreamMadness, VoiceLink-popular streams, and ACB Media presets in one tunable radio item"
         },
         {
           "keys": "Moonstep Runner and games",

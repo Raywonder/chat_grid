@@ -1,8 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_all
 
 datas, binaries, hiddenimports = collect_all("wx")
 hiddenimports.append("wx.html2")
+
+# Ship the complete local sound library with signed macOS packages. The web
+# client still uses its published HTTPS assets, but the bundle remains useful
+# for offline repair/asset recovery and never depends on a partial cache.
+sound_root = Path(SPECPATH).resolve().parents[2] / "client" / "public" / "sounds"
+if sound_root.is_dir():
+    datas.append((str(sound_root), "sounds"))
 
 a = Analysis(
     ["macos_entry.py"],
@@ -17,7 +26,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="Endiginous",
+    name="Indiginous",
     console=False,
     target_arch="x86_64",
 )
@@ -27,22 +36,22 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    name="Endiginous",
+    name="Indiginous",
 )
 app = BUNDLE(
     coll,
-    name="Endiginous.app",
+    name="Indiginous.app",
     bundle_identifier="fm.tappedin.chatgrid",
-    version="0.4.6",
+    version="0.4.13",
     info_plist={
-        "CFBundleDisplayName": "Endiginous",
-        "CFBundleShortVersionString": "0.4.6",
-        "CFBundleVersion": "0.4.5",
+        "CFBundleDisplayName": "Indiginous",
+        "CFBundleShortVersionString": "0.4.13",
+        "CFBundleVersion": "0.4.9",
         "LSMinimumSystemVersion": "14.0",
         "NSHighResolutionCapable": True,
         "CFBundleURLTypes": [{
-            "CFBundleURLName": "Endiginous Connect",
-            "CFBundleURLSchemes": ["endiginous", "chatgrid"],
+            "CFBundleURLName": "Indiginous Connect",
+            "CFBundleURLSchemes": ["indiginous", "chatgrid"],
         }],
     },
 )

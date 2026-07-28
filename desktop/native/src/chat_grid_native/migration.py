@@ -1,4 +1,4 @@
-"""Migrate known legacy client state into Endiginous-owned user paths."""
+"""Migrate known legacy client state into Indiginous-owned user paths."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ def migrate_legacy_state() -> dict[str, list[str]]:
     import os
     import shutil
 
-    names = ("Chat Grid", "ChatGrid", "Indigenous")
+    names = ("Indiginous", "Endiginous", "Indigenous", "Chat Grid", "ChatGrid")
     home = Path.home()
     if sys.platform == "darwin":
         data_dirs = [home / "Library" / "Application Support" / name for name in names]
@@ -40,6 +40,10 @@ def migrate_legacy_state() -> dict[str, list[str]]:
         data_dirs += [local / name for name in names] + [roaming / name for name in names]
         install_dirs = [local / "Programs" / name for name in names]
         install_dirs += [root / name for root in program_files for name in names]
+        install_dirs += [root / "BlindSoftware" / name for root in program_files for name in names]
+        current_install = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else None
+        if current_install is not None:
+            install_dirs = [path for path in install_dirs if path.resolve() != current_install]
         shortcuts = [directory / f"{name}.lnk" for directory in (home / "Desktop", roaming / "Microsoft" / "Windows" / "Start Menu" / "Programs") for name in names]
     destination = app_data_dir()
     destination.mkdir(parents=True, exist_ok=True)

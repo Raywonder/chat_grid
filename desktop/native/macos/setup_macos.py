@@ -1,4 +1,4 @@
-"""py2app bundle definition for the official Endiginous macOS client."""
+"""py2app bundle definition for the official Indiginous macOS client."""
 
 from setuptools import setup
 
@@ -6,15 +6,15 @@ OPTIONS = {
     "argv_emulation": False,
     "packages": ["chat_grid_native", "requests", "packaging", "certifi"],
     "plist": {
-        "CFBundleName": "Endiginous",
-        "CFBundleDisplayName": "Endiginous",
+        "CFBundleName": "Indiginous",
+        "CFBundleDisplayName": "Indiginous",
         "CFBundleIdentifier": "fm.tappedin.chatgrid",
-        "CFBundleShortVersionString": "0.4.5",
-        "CFBundleVersion": "0.4.5",
+        "CFBundleShortVersionString": "0.4.13",
+        "CFBundleVersion": "0.4.13",
         "LSMinimumSystemVersion": "12.0",
         "CFBundleURLTypes": [{
-            "CFBundleURLName": "Endiginous Connect",
-        "CFBundleURLSchemes": ["endiginous", "chatgrid"],
+            "CFBundleURLName": "Indiginous Connect",
+            "CFBundleURLSchemes": ["indiginous", "chatgrid"],
         }],
         "NSHighResolutionCapable": True,
     },
@@ -22,8 +22,8 @@ OPTIONS = {
 
 setup(
     app=["macos/macos_entry.py"],
-    name="Endiginous",
-        version="0.4.5",
+    name="Indiginous",
+    version="0.4.13",
     options={"py2app": OPTIONS},
     setup_requires=["py2app"],
 )

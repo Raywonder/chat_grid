@@ -1,7 +1,7 @@
-# Endiginous R516 macOS build receipt
+# Indiginous R516 macOS build receipt
 
 Date: 2026-07-22
-Source: `/Users/admin/git/Raywonder/Endiginous/desktop/native` on the owner Mac mini
+Source: `/Users/admin/git/Raywonder/Indiginous/desktop/native` on the owner Mac mini
 Version: 0.4.4
 Revision: R516
 
@@ -11,8 +11,8 @@ Revision: R516
 - PyInstaller produced a fresh unsigned x86_64 application bundle.
 - Launch smoke started the exact 0.4.4 application process and the test process was cleaned up afterward.
 - Fresh artifacts were copied to the server staging folder:
-  - `Endiginous-0.4.4-macOS.zip`
-  - `Endiginous-0.4.4.dmg`
+  - `Indiginous-0.4.4-macOS.zip`
+  - `Indiginous-0.4.4.dmg`
 
 Checksums:
 

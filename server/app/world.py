@@ -10,7 +10,7 @@ DEFAULT_LOCATION_ID = "city"
 
 @dataclass(frozen=True)
 class WorldLocation:
-    """One travel destination/room in the larger Endiginous world."""
+    """One travel destination/room in the larger Indiginous world."""
 
     id: str
     name: str
@@ -20,6 +20,8 @@ class WorldLocation:
     spawn_y: int
     ambience_key: str
     ambience_name: str
+    room_layout: str = ""
+    footstep_surface: str = ""
     width: int = 41
     height: int = 41
 
@@ -35,6 +37,8 @@ class WorldLocation:
             "spawnY": self.spawn_y,
             "ambienceKey": self.ambience_key,
             "ambienceName": self.ambience_name,
+            "roomLayout": self.room_layout,
+            "footstepSurface": self.footstep_surface,
             "width": self.width,
             "height": self.height,
         }
@@ -88,7 +92,7 @@ WORLD_LOCATIONS: tuple[WorldLocation, ...] = (
         id="arcade",
         name="Arcade",
         kind="arcade",
-        description="A playful game room for Moonstep Runner and future playable experiments.",
+        description="A playful game room for Moonstep Runner, Shaftfall, and future playable experiments.",
         spawn_x=20,
         spawn_y=20,
         ambience_key="arcade_glow",
@@ -182,8 +186,10 @@ WORLD_LOCATIONS: tuple[WorldLocation, ...] = (
         spawn_y=18,
         ambience_key="bedroom_quiet",
         ambience_name="Bedroom quiet",
-        width=28,
-        height=26,
+        # Keep the full usable bedroom footprint. Several furniture items,
+        # including the wall clock, live beyond the old 28x26 shrink-wrap.
+        width=34,
+        height=36,
     ),
     WorldLocation(
         id="raywonder_house_relaxation_room",

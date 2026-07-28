@@ -1,4 +1,4 @@
-# Endiginous R516 movement and desktop authentication receipt
+# Indiginous R516 movement and desktop authentication receipt
 
 Date: 2026-07-22 CDT
 
@@ -21,20 +21,20 @@ Date: 2026-07-22 CDT
 
 Live trees were backed up before publishing under:
 
-`/home/tappedin/.openclaw/workspace/projects/chat_grid/recovery/endiginous-r516-before-movement-auth-20260722-004409/`
+`/home/tappedin/.openclaw/workspace/projects/chat_grid/recovery/indiginous-r516-before-movement-auth-20260722-004409/`
 
 ## Proof
 
 - Web client lint passed.
-- Web client build passed for both `/endiginous/` and `/chatgrid/` base paths.
+- Web client build passed for both `/indiginous/` and `/chatgrid/` base paths.
 - Web client tests passed: 25 tests in 6 files.
 - Native source/keyboard/menu checks passed: 8 tests.
 - Native Python source passed `py_compile` and `git diff --check` passed.
-- Public `/endiginous/version.js` reports R516.
+- Public `/indiginous/version.js` reports R516.
 - Public `/chatgrid/version.js` reports R516.
-- Public `/endiginous/` resolves its R516 JavaScript and CSS assets with HTTP
+- Public `/indiginous/` resolves its R516 JavaScript and CSS assets with HTTP
   200.
-- Public `/endiginous/ws` upgrades with HTTP 101 and returns an authentication
+- Public `/indiginous/ws` upgrades with HTTP 101 and returns an authentication
   challenge advertising expected client revision R516.
 
 ## Remaining verification

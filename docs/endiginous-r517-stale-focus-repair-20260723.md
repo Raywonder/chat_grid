@@ -1,4 +1,4 @@
-# Endiginous R517 stale-focus movement repair
+# Indiginous R517 stale-focus movement repair
 
 Date: 2026-07-23 CDT
 
@@ -29,6 +29,6 @@ Client candidate revision: `R517`.
 - Native keyboard/accessibility checks: 4 native tests and 3 wxPython tests
   passed through an isolated `uvx pytest` runner; a real Windows/macOS launch
   test remains required on the target OS.
-- Public Endiginous remains on R516; R517 is not published yet.
-- Endiginous publication remains sequenced after the next tCast release and
+- Public Indiginous remains on R516; R517 is not published yet.
+- Indiginous publication remains sequenced after the next tCast release and
   requires real target-client keyboard proof.

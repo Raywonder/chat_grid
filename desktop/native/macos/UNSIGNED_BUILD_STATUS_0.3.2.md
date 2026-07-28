@@ -1,4 +1,4 @@
-# Endiginous macOS 0.3.2 unsigned build status
+# Indiginous macOS 0.3.2 unsigned build status
 
 Date: 2026-07-15
 

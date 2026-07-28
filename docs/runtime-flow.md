@@ -15,7 +15,7 @@
    the preferred browser/native flow asks the BlindSoftware portal for an
    account-auth route, lets the user use any login method enabled on that
    account such as local login or Mastodon/fediverse authentication, and returns
-   a short-lived Endiginous authorization code or handoff for the canonical
+   a short-lived Indiginous authorization code or handoff for the canonical
    account.
 7. Server sends `auth_result`.
    - includes role + permissions for authenticated session.

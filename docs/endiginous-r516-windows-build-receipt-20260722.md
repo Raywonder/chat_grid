@@ -1,9 +1,9 @@
-# Endiginous R516 Windows build receipt
+# Indiginous R516 Windows build receipt
 
 Date: 2026-07-22 CDT
 Host: `OPENCLAW-WIN11` (`192.168.188.147`), account `openclaw-win11\\clawadmin`
-Source stage: `C:\\BuildCache\\Endiginous-R516-20260722-1505`
-Build cache: `C:\\BuildCache\\Endiginous-R516-build-20260722-1505`
+Source stage: `C:\\BuildCache\\Indiginous-R516-20260722-1505`
+Build cache: `C:\\BuildCache\\Indiginous-R516-build-20260722-1505`
 Version: 0.4.4
 Revision: R516
 
@@ -18,16 +18,16 @@ Revision: R516
   to the existing OpenClaw post-install `[Run]` entry in
   `desktop/wxpython/installer/ChatGrid.iss`.
 - Installer:
-  `C:\\BuildCache\\Endiginous-R516-20260722-1505\\desktop\\wxpython\\release\\EndiginousSetup-0.4.4.exe`
+  `C:\\BuildCache\\Indiginous-R516-20260722-1505\\desktop\\wxpython\\release\\IndiginousSetup-0.4.4.exe`
 - Installer size: 27,376,460 bytes.
 - Installer SHA-256:
   `732a7aee35018a0cfdb1b091e2bbf8425206bcbcc7196eb61a3e6e505b2ec32a`
 - Fresh silent install exited 0 into
-  `C:\\BuildCache\\EndiginousInstall-0.4.4-R516-20260722-1505`.
-- The installed `Endiginous.exe` stayed alive for five seconds; the test
-  process was then stopped and no Endiginous process remained.
+  `C:\\BuildCache\\IndiginousInstall-0.4.4-R516-20260722-1505`.
+- The installed `Indiginous.exe` stayed alive for five seconds; the test
+  process was then stopped and no Indiginous process remained.
 - Local preserved copy:
-  `tmp/endiginous-r516-windows-20260722/EndiginousSetup-0.4.4-R516.exe`
+  `tmp/indiginous-r516-windows-20260722/IndiginousSetup-0.4.4-R516.exe`
 
 ## Still not a release approval
 

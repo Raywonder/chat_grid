@@ -3,9 +3,9 @@ requires = ["setuptools>=75", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "endiginous-desktop"
-version = "0.4.6"
-description = "Official accessible wxPython desktop client for Endiginous"
+name = "indiginous-desktop"
+version = "0.4.13"
+description = "Official accessible wxPython desktop client for Indiginous"
 requires-python = ">=3.11"
 dependencies = [
   "wxPython>=4.2.2,<4.3",

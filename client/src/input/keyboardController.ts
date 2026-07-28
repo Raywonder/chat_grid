@@ -50,7 +50,7 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     // Keep the accessible UI usable even if a hidden command handler throws.
     // Do not announce a retry prompt from a hidden/minimized desktop renderer;
     // the next input frame will be clean after the pressed-key state is reset.
-    console.error('Endiginous input handler recovered after an error.', error);
+    console.error('Indiginous input handler recovered after an error.', error);
     // Recovery is deliberately silent. A transient input exception must not
     // turn an ordinary arrow press into a repeated retry alert.
   }
@@ -171,9 +171,19 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
   function shouldMoveFocusToCanvas(event: KeyboardEvent, code: string): boolean {
     if (code === 'Tab') return false;
     if (event.altKey || event.ctrlKey || event.metaKey) return false;
-    if (isEditableElement(event.target)) return false;
     if (deps.isTextEditingMode(deps.state.mode)) return false;
     if (deps.dom.settingsModal.contains(event.target as Node | null)) return false;
+    // Arrow keys are the world's movement controls. Chrome can leave focus on
+    // the sign-in link, a connect/focus button, or another visible control
+    // after authentication; do not let that stale focus strand the player in
+    // place. Text fields, selects, dialogs, and embedded media remain owned by
+    // their controls through the checks above and below.
+    if (code.startsWith('Arrow')) {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target?.closest('select, textarea, input, [contenteditable="true"], iframe')) return false;
+      return true;
+    }
+    if (isEditableElement(event.target)) return false;
     return (
       code.startsWith('Arrow') ||
       code === 'Enter' ||
@@ -190,6 +200,9 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     return document.documentElement.classList.contains('chatgrid-native') || nativeWindow.chatGridDesktop != null;
   }
 
+  // Capture world keys before a stale sign-in/connect control or browser-level
+  // focus behavior can consume them. The handler still returns early for text
+  // fields, dialogs, and other controls that legitimately own the key.
   document.addEventListener('keydown', (event) => {
     const code = normalizeInputCode(event);
     if (!code) return;
@@ -221,6 +234,7 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
       deps.state.mode === 'normal' &&
       (code === 'KeyG' ||
         code === 'KeyM' ||
+        code === 'KeyK' ||
         (isDesktopClient() && code === 'KeyR') ||
         code === 'Comma' ||
         code === 'Period' ||
@@ -269,7 +283,7 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
 
     const opensCommandPalette =
       deps.canOpenCommandPaletteInMode(deps.state.mode) &&
-      ((code === 'KeyK' && event.shiftKey) || code === 'ContextMenu' || (code === 'F10' && event.shiftKey));
+      ((code === 'KeyK' && (event.ctrlKey || event.shiftKey)) || code === 'ContextMenu' || (code === 'F10' && event.shiftKey));
     if (opensCommandPalette) {
       deps.openCommandPalette();
       deps.state.keysPressed[code] = true;
@@ -285,7 +299,7 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     } catch (error) {
       recoverFromInputError(error);
     }
-  });
+  }, true);
 
   document.addEventListener('keyup', (event) => {
     const code = normalizeInputCode(event);
@@ -302,7 +316,7 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     if (event.code && event.code !== code) {
       deps.state.keysPressed[event.code] = false;
     }
-  });
+  }, true);
 
   document.addEventListener('paste', (event) => {
     if (document.activeElement !== deps.dom.canvas) return;

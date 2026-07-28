@@ -54,7 +54,10 @@ def _details_for(item: WorldItem) -> str:
     if target_location:
         parts.append(f"Destination: {target_location}")
     if url:
-        parts.append(f"URL: {url}")
+        if kind.lower() == "game":
+            parts.append("Play link available in Indiginous")
+        else:
+            parts.append(f"URL: {url}")
     return ". ".join(parts) + "."
 
 

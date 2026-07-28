@@ -37,6 +37,9 @@ FURNITURE_KIND_OPTIONS: tuple[str, ...] = (
     "dresser",
     "plant_stand",
     "rug",
+    "car",
+    "suv",
+    "van",
 )
 MATERIAL_OPTIONS: tuple[str, ...] = (
     "wood",

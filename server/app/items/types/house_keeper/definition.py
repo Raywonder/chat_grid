@@ -17,6 +17,15 @@ EDITABLE_PROPERTIES: tuple[str, ...] = (
     "description",
     "lastAutoCheckAt",
     "lastAutoCheckSummary",
+    "autonomyEnabled",
+    "localModelEnabled",
+    "localModelUrl",
+    "localModelName",
+    "interactionRadius",
+    "webDiscoveryEnabled",
+    "taskBoard",
+    "lastAutonomyAt",
+    "lastAutonomySummary",
 )
 CAPABILITIES: tuple[str, ...] = ("editable", "carryable", "deletable", "usable")
 USE_SOUND: str | None = "sounds/actions/ui-confirm.mp3"
@@ -38,6 +47,16 @@ DEFAULT_PARAMS: dict = {
     "description": "A small helper agent for in-world house repairs.",
     "lastAutoCheckAt": 0,
     "lastAutoCheckSummary": "",
+    "autonomyEnabled": True,
+    "localModelEnabled": False,
+    "localModelUrl": "http://127.0.0.1:11434/api/chat",
+    "localModelName": "llama3.2:3b",
+    "interactionRadius": 4,
+    "webDiscoveryEnabled": False,
+    "taskBoard": [],
+    "lastAutonomyAt": 0,
+    "lastAutonomySummary": "",
+    "heldKeyIds": [],
 }
 PARAM_KEYS: tuple[str, ...] = (
     "keeperName",
@@ -51,6 +70,16 @@ PARAM_KEYS: tuple[str, ...] = (
     "description",
     "lastAutoCheckAt",
     "lastAutoCheckSummary",
+    "autonomyEnabled",
+    "localModelEnabled",
+    "localModelUrl",
+    "localModelName",
+    "interactionRadius",
+    "webDiscoveryEnabled",
+    "taskBoard",
+    "lastAutonomyAt",
+    "lastAutonomySummary",
+    "heldKeyIds",
 )
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
@@ -123,4 +152,13 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "tooltip": "Server-managed summary of the most recent scheduled keeper check.",
         "maxLength": 240,
     },
+    "autonomyEnabled": {"valueType": "boolean", "label": "Autonomous NPC", "tooltip": "Allow quiet movement and bounded in-world interaction."},
+    "localModelEnabled": {"valueType": "boolean", "label": "Use local model", "tooltip": "Let a localhost-only model suggest the next safe in-world action."},
+    "localModelUrl": {"valueType": "text", "label": "Local model URL", "maxLength": 240},
+    "localModelName": {"valueType": "text", "label": "Local model name", "maxLength": 80},
+    "interactionRadius": {"valueType": "number", "label": "Interaction radius", "range": {"min": 1, "max": 12, "step": 1}},
+    "webDiscoveryEnabled": {"valueType": "boolean", "label": "Discovery task intake", "tooltip": "Allow reviewed web discoveries to become local task-board ideas."},
+    "taskBoard": {"valueType": "text", "label": "Task board", "tooltip": "Server-managed bounded in-world tasks."},
+    "lastAutonomyAt": {"valueType": "number", "label": "Last autonomy cycle", "range": {"min": 0, "max": 9999999999999, "step": 1}},
+    "lastAutonomySummary": {"valueType": "text", "label": "Last autonomy summary", "maxLength": 240},
 }

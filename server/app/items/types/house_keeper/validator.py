@@ -62,6 +62,19 @@ def _int_range(raw: object, fallback: int, *, minimum: int, maximum: int, field_
     return value
 
 
+def _bounded_list(raw: object, *, limit: int = 12) -> list[str]:
+    """Normalize a small server-managed task list."""
+
+    if not isinstance(raw, list):
+        return []
+    result: list[str] = []
+    for value in raw:
+        text = " ".join(str(value or "").split())[:240]
+        if text and text not in result:
+            result.append(text)
+    return result[:limit]
+
+
 def validate_update(item: WorldItem, next_params: dict) -> dict:
     """Validate and normalize house-keeper params."""
 
@@ -127,4 +140,19 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
         fallback="",
         max_length=240,
     )
+    next_params["autonomyEnabled"] = _bool_value(next_params.get("autonomyEnabled", item.params.get("autonomyEnabled", True)), True)
+    next_params["localModelEnabled"] = _bool_value(next_params.get("localModelEnabled", item.params.get("localModelEnabled", False)), False)
+    next_params["localModelUrl"] = _text(item, next_params, "localModelUrl", fallback="http://127.0.0.1:11434/api/chat", max_length=240)
+    next_params["localModelName"] = _text(item, next_params, "localModelName", fallback="llama3.2:3b", max_length=80)
+    next_params["interactionRadius"] = _int_range(next_params.get("interactionRadius", item.params.get("interactionRadius", 4)), 4, minimum=1, maximum=12, field_name="interactionRadius")
+    next_params["webDiscoveryEnabled"] = _bool_value(next_params.get("webDiscoveryEnabled", item.params.get("webDiscoveryEnabled", False)), False)
+    next_params["taskBoard"] = _bounded_list(next_params.get("taskBoard", item.params.get("taskBoard", [])))
+    next_params["lastAutonomyAt"] = _int_range(next_params.get("lastAutonomyAt", item.params.get("lastAutonomyAt", 0)), 0, minimum=0, maximum=9999999999999, field_name="lastAutonomyAt")
+    next_params["lastAutonomySummary"] = _text(item, next_params, "lastAutonomySummary", fallback="", max_length=240)
+    raw_held_keys = next_params.get("heldKeyIds", item.params.get("heldKeyIds", []))
+    if not isinstance(raw_held_keys, list):
+        raw_held_keys = []
+    next_params["heldKeyIds"] = [
+        str(key_id).strip()[:128] for key_id in raw_held_keys if str(key_id).strip()
+    ][:32]
     return keep_only_known_params(next_params, PARAM_KEYS)

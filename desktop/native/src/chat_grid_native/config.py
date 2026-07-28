@@ -9,22 +9,22 @@ from pathlib import Path
 import sys
 
 
-APP_NAME = "Endiginous"
+APP_NAME = "Indiginous"
 APP_ID = "fm.tappedin.chatgrid.wxpython"
-DEFAULT_URL = "https://blind.software/endiginous/"
+DEFAULT_URL = "https://blind.software/indiginous/"
 DEFAULT_UPDATE_URL = (
-    "https://blind.software/endiginous/updates/latest-macos.json"
+    "https://blind.software/downloads/public/4Lm9sR2vX7qT5nK8dP1hG6/latest-macos.json"
     if sys.platform == "darwin"
-    else "https://blind.software/endiginous/updates/latest-windows.json"
+    else "https://blind.software/downloads/public/7Kp3mN8vQ2xL5rT9cW6yH1/latest-windows.json"
 )
 
 
 def app_data_dir() -> Path:
     """Return the per-user application data directory."""
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "Endiginous"
+        return Path.home() / "Library" / "Application Support" / "Indiginous"
     root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-    return root / "TappedIn" / "Endiginous"
+    return root / "TappedIn" / "Indiginous"
 
 
 @dataclass(slots=True)

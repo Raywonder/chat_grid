@@ -3,8 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${1:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
-PUBLISH_DIR="${2:-$REPO_ROOT/deploy/publish/endiginous}"
-BASE_PATH="${3:-/endiginous/}"
+PUBLISH_DIR="${2:-$REPO_ROOT/deploy/publish/indiginous}"
+BASE_PATH="${3:-/indiginous/}"
 SERVICE_NAME="${4:-chat-grid.service}"
 SERVER_CONFIG_PATH="${5:-$REPO_ROOT/server/config.toml}"
 

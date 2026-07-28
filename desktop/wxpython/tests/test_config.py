@@ -4,6 +4,12 @@ from chat_grid_native.config import Settings, SettingsStore
 import chat_grid_native.migration as migration
 
 
+def test_installer_policy_file_uses_blindsoftware_vendor_root() -> None:
+    installer = Path(__file__).parents[1] / "installer" / "ChatGrid.iss"
+    source = installer.read_text(encoding="utf-8")
+    assert "DefaultDirName={autopf}\\BlindSoftware\\{#MyAppName}" in source
+
+
 def test_settings_round_trip(tmp_path: Path) -> None:
     store = SettingsStore(tmp_path)
     expected = Settings(auto_connect=False, start_with_windows=True)
@@ -32,7 +38,7 @@ def test_legacy_state_is_migrated_and_old_shortcut_removed(tmp_path: Path, monke
     shortcut.write_text("legacy", encoding="utf-8")
     monkeypatch.setenv("LOCALAPPDATA", str(local))
     monkeypatch.setenv("APPDATA", str(roaming))
-    destination = local / "TappedIn" / "Endiginous"
+    destination = local / "TappedIn" / "Indiginous"
     monkeypatch.setattr(migration, "app_data_dir", lambda: destination)
     # The Linux test runner uses the same exact user-owned path logic as the
     # Windows client; replace HOME only for the shortcut assertion.
@@ -56,9 +62,40 @@ def test_legacy_install_roots_are_removed_when_accessible(tmp_path: Path, monkey
     monkeypatch.setenv("ProgramFiles", str(program_files))
     monkeypatch.setenv("ProgramW6432", "")
     monkeypatch.setenv("ProgramFiles(x86)", "")
-    destination = local / "TappedIn" / "Endiginous"
+    destination = local / "TappedIn" / "Indiginous"
     monkeypatch.setattr(migration, "app_data_dir", lambda: destination)
     _, installs, _ = migration._paths()
     receipt = migration.migrate_legacy_state()
     assert not old_install.exists()
     assert str(old_install) in receipt["removed"]
+
+
+def test_blindsoftware_install_root_is_removed_when_accessible(tmp_path: Path, monkeypatch) -> None:
+    local = tmp_path / "local"
+    roaming = tmp_path / "roaming"
+    program_files = tmp_path / "Program Files"
+    old_install = program_files / "BlindSoftware" / "Indiginous"
+    old_install.mkdir(parents=True)
+    (old_install / "old.exe").write_bytes(b"old")
+    monkeypatch.setenv("LOCALAPPDATA", str(local))
+    monkeypatch.setenv("APPDATA", str(roaming))
+    monkeypatch.setenv("ProgramFiles", str(program_files))
+    monkeypatch.setenv("ProgramW6432", "")
+    monkeypatch.setenv("ProgramFiles(x86)", "")
+    destination = local / "TappedIn" / "Indiginous"
+    monkeypatch.setattr(migration, "app_data_dir", lambda: destination)
+    receipt = migration.migrate_legacy_state()
+    assert not old_install.exists()
+    assert str(old_install) in receipt["removed"]
+
+
+def test_frozen_active_install_is_not_classified_as_legacy(tmp_path: Path, monkeypatch) -> None:
+    program_files = tmp_path / "Program Files"
+    active_executable = program_files / "BlindSoftware" / "Indiginous" / "Indiginous.exe"
+    monkeypatch.setenv("ProgramFiles", str(program_files))
+    monkeypatch.setenv("ProgramW6432", "")
+    monkeypatch.setenv("ProgramFiles(x86)", "")
+    monkeypatch.setattr(migration.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(migration.sys, "executable", str(active_executable))
+    _, installs, _ = migration._paths()
+    assert active_executable.parent not in installs

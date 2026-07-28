@@ -1,10 +1,10 @@
-# Endiginous Next-Version Federation Plan
+# Indiginous Next-Version Federation Plan
 
 ## Goal
 
-Let a user sign in once through the official portal and enter Endiginous without
+Let a user sign in once through the official portal and enter Indiginous without
 knowing which domain currently hosts the selected world. A client may begin at
-`blind.software` and be quietly handed to any approved, healthy Endiginous
+`blind.software` and be quietly handed to any approved, healthy Indiginous
 instance, provided that instance is federated, current, and has the assets
 required by the destination world.
 
@@ -68,8 +68,8 @@ complete.
 - If BlindSoftware local login is disabled for a user but Mastodon login is
   enabled and verified, the same browser/native connect flow must still work.
 - Provider callbacks resolve to the canonical BlindSoftware account before any
-  Endiginous handoff is issued. Provider display names, handles, or domains are
-  never treated as standalone Endiginous identity.
+  Indiginous handoff is issued. Provider display names, handles, or domains are
+  never treated as standalone Indiginous identity.
 - Handoff grants contain canonical account claims only. They may include a
   non-secret provider label for UI clarity, but never provider tokens, secrets,
   or raw OAuth callback parameters.
@@ -82,7 +82,7 @@ complete.
 
 ### Account notification routing
 
-- Endiginous notifications are account features. The client should surface the
+- Indiginous notifications are account features. The client should surface the
   notification destinations enabled on the signed-in BlindSoftware account,
   such as in-grid notifications and private ntfy topics, rather than requiring
   each client install to configure its own unrelated destination.
@@ -265,7 +265,7 @@ reports.
 
 - No password database replication between hosted servers.
 - No arbitrary user-entered server URLs in the standard UI.
-- No automatic trust of a domain merely because it runs Endiginous software.
+- No automatic trust of a domain merely because it runs Indiginous software.
 - No transparent migration of volatile live-world state unless that state has a
   separately designed, tested replication contract.
 - No production rollout before the multi-topology development federation passes

@@ -1,4 +1,4 @@
-# Endiginous 0.4.4 / R516 release preflight — no-ship receipt
+# Indiginous 0.4.4 / R516 release preflight — no-ship receipt
 
 Date: 2026-07-22 CDT
 
@@ -13,8 +13,8 @@ versions.
 - Native macOS candidate synced to the Intel Mac mini with a recovery copy.
 - Mac native tests: 36 passed.
 - Mac build completed for unsigned internal artifacts:
-  - `Endiginous-0.4.4.dmg`
-  - `Endiginous-0.4.4-macOS.zip`
+  - `Indiginous-0.4.4.dmg`
+  - `Indiginous-0.4.4-macOS.zip`
 - Mac artifact SHA-256:
   - DMG: `089d6b089ea598096f5658b3ea5a384a463d15f2fc8e27ff15c46d2106e10b6e`
   - ZIP: `a29e99c758128c1aef869b12da576773527d30f3f8f2332f0ee758bda3038104`

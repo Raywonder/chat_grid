@@ -20,7 +20,7 @@ EDITABLE_PROPERTIES: tuple[str, ...] = (
     "welcomeMessage",
 )
 CAPABILITIES: tuple[str, ...] = ("editable", "carryable", "deletable", "usable")
-USE_SOUND: str | None = "sounds/door_soft_loop.ogg"
+USE_SOUND: str | None = "sounds/doors/door-open.mp3?v=20260714-real-door"
 EMIT_SOUND: str | None = None
 USE_COOLDOWN_MS = 1000
 EMIT_RANGE = 12
@@ -107,7 +107,7 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
     },
     "targetLocation": {
         "valueType": "text",
-        "tooltip": "Optional Endiginous location id entered when this room is used.",
+        "tooltip": "Optional Indiginous location id entered when this room is used.",
         "maxLength": 64,
     },
     "description": {"valueType": "text", "tooltip": "Short room description.", "maxLength": 360},

@@ -1,4 +1,4 @@
-"""Built-in service/station items for the default Endiginous world."""
+"""Built-in service/station items for the default Indiginous world."""
 
 from __future__ import annotations
 
@@ -294,7 +294,7 @@ def furniture_params(
 ) -> dict[str, str | int | bool]:
     """Return complete seed params for one furniture item."""
 
-    return {
+    params: dict[str, str | int | bool] = {
         "furnitureKind": kind,
         "material": material,
         "style": style,
@@ -305,6 +305,21 @@ def furniture_params(
         "postureMode": posture_mode,
         "surfaceNote": surface_note,
     }
+    if kind in {"car", "suv", "van"}:
+        vehicle_name = "SUV" if kind == "suv" else "car"
+        params.update(
+            {
+                "vehicleType": kind,
+                "vehicleControls": "Arrow keys or WASD drive one square at a time; Enter exits.",
+                "vehicleAccessibilityNote": f"Accessible shared {vehicle_name}. One driver per vehicle; other people hear its movement and engine.",
+                "engineIdleSound": f"sounds/vehicles/{'suv' if kind == 'suv' else 'car'}-engine-idle.ogg",
+                "vehicleStartSound": "sounds/vehicles/vehicle-start.ogg",
+                "vehicleStopSound": "sounds/vehicles/vehicle-stop.ogg",
+                "vehicleHornSound": "sounds/vehicles/vehicle-horn.ogg",
+                "vehicleMaxStep": 1,
+            }
+        )
+    return params
 
 
 def house_object_params(
@@ -375,7 +390,7 @@ BUILTIN_WORLD_ITEMS: tuple[SeedItem, ...] = (
     SeedItem(
         id="seed-city-chat-grid-radio",
         type="radio_station",
-        title="Endiginous Radio",
+        title="Indiginous Radio",
         location_id="city",
         x=5,
         y=8,
@@ -469,9 +484,9 @@ BUILTIN_WORLD_ITEMS: tuple[SeedItem, ...] = (
         y=17,
         params={
             **DEFAULT_BILLBOARD_PARAMS,
-            "headline": "Welcome to Endiginous",
+            "headline": "Welcome to Indiginous",
             "body": "Walk the squares, hear nearby people and items, and use portals to visit the Town, Arcade, Offices, and Houses.",
-            "announcementText": "Welcome to Endiginous. The portals around you lead to the public rooms and games.",
+            "announcementText": "Welcome to Indiginous. The portals around you lead to the public rooms and games.",
             "voiceAssetUrl": "sounds/billboards/clawdia-welcome.mp3",
             "bannerText": "Town portal south-west|Arcade portal south-east|Offices portal north|Houses portal south",
         },
@@ -552,6 +567,57 @@ BUILTIN_WORLD_ITEMS: tuple[SeedItem, ...] = (
             "url": "https://tappedin.fm/tcast-support/",
             "description": "Podcast and media player app support entry for tCast.",
         },
+    ),
+    SeedItem(
+        id="seed-city-shared-car-blue",
+        type="furniture",
+        title="Blue shared car",
+        location_id="city",
+        x=22,
+        y=20,
+        params=furniture_params(
+            kind="car",
+            material="metal",
+            style="accessible blue shared car",
+            supports_objects=False,
+            seating_capacity=1,
+            posture_mode="sit",
+            surface_note="A shared drivable car. Press Enter to get in or out; movement keys drive it.",
+        ),
+    ),
+    SeedItem(
+        id="seed-city-shared-car-red",
+        type="furniture",
+        title="Red shared car",
+        location_id="city",
+        x=24,
+        y=20,
+        params=furniture_params(
+            kind="car",
+            material="metal",
+            style="accessible red shared car",
+            supports_objects=False,
+            seating_capacity=1,
+            posture_mode="sit",
+            surface_note="A shared drivable car. Press Enter to get in or out; movement keys drive it.",
+        ),
+    ),
+    SeedItem(
+        id="seed-city-shared-suv",
+        type="furniture",
+        title="Green shared SUV",
+        location_id="city",
+        x=22,
+        y=22,
+        params=furniture_params(
+            kind="suv",
+            material="metal",
+            style="accessible green shared SUV",
+            supports_objects=False,
+            seating_capacity=1,
+            posture_mode="sit",
+            surface_note="A shared drivable SUV. Press Enter to get in or out; movement keys drive it.",
+        ),
     ),
     SeedItem(
         id="seed-town-announcements-billboard",
@@ -2394,6 +2460,23 @@ BUILTIN_WORLD_ITEMS: tuple[SeedItem, ...] = (
         },
     ),
     SeedItem(
+        id="seed-arcade-shaftfall",
+        type="service_link",
+        title="Shaftfall: Elevator Echoes Quest",
+        location_id="arcade",
+        x=22,
+        y=18,
+        params={
+            "serviceKind": "game",
+            "url": "https://elevator-echoes-quest.lovable.app/",
+            "description": (
+                "An accessible elevator adventure game. Open it here in Indiginous "
+                "and explore Elevator Echoes Quest."
+            ),
+            "launchMessage": "Shaftfall is ready to play.",
+        },
+    ),
+    SeedItem(
         id="seed-arcade-moonstep-billboard",
         type="billboard",
         title="Arcade billboard",
@@ -2436,10 +2519,10 @@ BUILTIN_WORLD_ITEMS: tuple[SeedItem, ...] = (
         title="Future games shelf",
         location_id="arcade",
         x=22,
-        y=18,
+        y=20,
         params={
             "serviceKind": "game",
-            "description": "A placeholder shelf for future Endiginous games and playful experiments.",
+            "description": "A placeholder shelf for future Indiginous games and playful experiments.",
             "launchMessage": "Future games will appear here as they are added.",
         },
     ),

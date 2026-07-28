@@ -3,8 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${1:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
-PUBLISH_DIR="${2:-$REPO_ROOT/deploy/publish/endiginous}"
-BASE_PATH="${3:-/endiginous/}"
+PUBLISH_DIR="${2:-$REPO_ROOT/deploy/publish/indiginous}"
+BASE_PATH="${3:-/indiginous/}"
 SERVER_CONFIG_PATH="${4:-$REPO_ROOT/server/config.toml}"
 CLIENT_DIR="$REPO_ROOT/client"
 PHP_PROXY_DIR="$REPO_ROOT/deploy/php"
@@ -66,9 +66,9 @@ except ModuleNotFoundError:  # pragma: no cover - compatibility fallback
     import tomli as tomllib
 
 config_path = Path(sys.argv[1])
-grid_name = "Endiginous"
+grid_name = "Indiginous"
 welcome_message = (
-    "Welcome to Endiginous, your immersive audio playground. "
+    "Welcome to Indiginous, your immersive audio playground. "
     "Configure your audio, then Log in or register to join the grid."
 )
 if config_path.exists():
