@@ -1738,11 +1738,14 @@ BUILTIN_WORLD_ITEMS: tuple[SeedItem, ...] = (
             replacement_hint="A wall-mounted TV belongs inside the living room, not outside.",
             giftable=False,
             description="A living room TV mounted on the wall with spatial room audio.",
-            streamUrl=RADIO_STATION_PRESETS[0]["streamUrl"],
-            stationName=RADIO_STATION_PRESETS[0]["title"],
+            # TV audio must use a direct playable source.  The old
+            # AAAStreamer station-page URLs are HTML pages (and currently
+            # return 404), so browsers cannot play them as media.
+            streamUrl=RADIO_STATION_PRESETS[6]["streamUrl"],
+            stationName=RADIO_STATION_PRESETS[6]["title"],
             stationIndex=0,
-            stationPresets=list(RADIO_STATION_PRESETS[:2]),
-            linkedMediaGroup="raywonder-house-tv",
+            stationPresets=list(RADIO_STATION_PRESETS[6:]),
+            linkedMediaGroup="raywonder-house-radios",
             tvChannelMode="live_and_on_demand",
             tvLibrarySources=[
                 {
