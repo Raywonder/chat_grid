@@ -492,6 +492,12 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
         max_length=2048,
         field_name="stationSwitchSound",
     )
+    for sound_key in ("mediaPowerSound", "mediaVolumeSound", "mediaGuideSound", "mediaInfoSound"):
+        next_params[sound_key] = enforce_max_length(
+            normalize_sound_reference(param_value(sound_key, "")),
+            max_length=2048,
+            field_name=sound_key,
+        )
     next_params["linkedMediaGroup"] = enforce_max_length(
         str(param_value("linkedMediaGroup", "") or "").strip(),
         max_length=80,

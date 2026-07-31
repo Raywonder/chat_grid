@@ -33,7 +33,7 @@ def use_item(
         parts.append("No wallet address is set yet.")
     if description:
         parts.append(description)
-    parts.append("Pick it up to carry it with you. Use an eCrypto bank branch or /ecrypto to manage account links and balances.")
+    parts.append("Pick it up to carry it with you. Use an eCrypto bank branch, the eCrypto menu, or /ecrypto to manage account links and balances.")
     return ItemUseResult(self_message=" ".join(parts), others_message="")
 
 

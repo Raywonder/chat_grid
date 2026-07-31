@@ -304,8 +304,7 @@ async def test_house_radio_remote_tunes_nearest_room_radio(
         item
         for item in server.items.values()
         if item.type == "radio_station"
-        and item.locationId.startswith("raywonder_house_")
-        and item.locationId != "raywonder_house_relaxation_room"
+        and item.locationId == radio.locationId
     ]
     relaxation_radio = server.items["seed-raywonder-relaxation-ocean-radio"]
     bedroom_radio = server.items["seed-raywonder-bedroom-bedside-radio"]
@@ -473,8 +472,7 @@ async def test_house_radio_remote_syncs_all_house_radios_to_target_station(
         item
         for item in server.items.values()
         if item.type == "radio_station"
-        and item.locationId.startswith("raywonder_house_")
-        and item.locationId != "raywonder_house_relaxation_room"
+        and item.locationId == living_radio.locationId
     ]
     relaxation_radio = server.items["seed-raywonder-relaxation-ocean-radio"]
     bedroom_radio = server.items["seed-raywonder-bedroom-bedside-radio"]

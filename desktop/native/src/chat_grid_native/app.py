@@ -241,6 +241,8 @@ class MainFrame(wx.Frame):
         self.force_exit = False
         self.screen_reader = ScreenReaderSpeech()
         self.signed_in = False
+        self.native_menu_open = False
+        self.suppress_auto_browser_auth = False
         self.auto_browser_auth_call: wx.CallLater | None = None
         self.pending_external_auth = False
 
@@ -338,6 +340,7 @@ class MainFrame(wx.Frame):
         self.SetMenuBar(menu_bar)
         self.SetName("Indiginous main window")
         self.Bind(wx.EVT_MENU_OPEN, self._on_menu_open)
+        self.Bind(wx.EVT_MENU_CLOSE, self._on_menu_close)
         self.Bind(wx.EVT_MENU_HIGHLIGHT, self._on_menu_highlight)
         self.Bind(wx.EVT_MENU, self._login_default, id=self.browser_sign_in_id)
         self.Bind(wx.EVT_MENU, self._prompt_server_sign_in, id=self.browser_server_sign_in_id)
@@ -389,8 +392,20 @@ class MainFrame(wx.Frame):
         if speak:
             self.screen_reader.speak(text, interrupt=True)
 
+    def _announce_menu(self, text: str) -> None:
+        """Update menu status immediately without blocking wx menu handling."""
+        self._announce(text)
+        threading.Thread(
+            target=self.screen_reader.speak,
+            args=(text,),
+            kwargs={"interrupt": True},
+            daemon=True,
+            name="indiginous-menu-speech",
+        ).start()
+
     def _on_menu_open(self, event: wx.MenuEvent) -> None:
         """Keep native menu opening visible to keyboard and screen-reader users."""
+        self.native_menu_open = True
         menu = event.GetMenu()
         if menu is not None and self.GetMenuBar() is not None:
             index = next(
@@ -399,16 +414,26 @@ class MainFrame(wx.Frame):
                 -1,
             )
             if index == 0:
-                self._announce("File menu opened. Use the arrow keys to choose an action.", speak=True)
+                self._announce_menu("File menu opened. Use the arrow keys to choose an action.")
+        event.Skip()
+
+    def _on_menu_close(self, event: wx.MenuEvent) -> None:
+        self.native_menu_open = False
         event.Skip()
 
     def _on_menu_highlight(self, event: wx.MenuEvent) -> None:
         """Speak the highlighted native action so VoiceOver/NVDA can follow it."""
-        item = event.GetMenuItem()
+        item = None
+        menu = event.GetMenu()
+        try:
+            if menu is not None:
+                item = menu.FindItem(event.GetMenuId())
+        except (AttributeError, TypeError, ValueError):
+            item = event.GetMenuItem()
         if item is not None:
             label = item.GetItemLabelText().replace('&', '').strip()
             if label:
-                self._announce(label, speak=True)
+                self._announce_menu(label)
         event.Skip()
 
     @staticmethod
@@ -453,6 +478,7 @@ class MainFrame(wx.Frame):
 
     def _login_default(self, _event: wx.CommandEvent) -> None:
         if self.signed_in:
+            self.suppress_auto_browser_auth = True
             self.web.RunScript("document.getElementById('logoutButton')?.click();")
             return
         self._start_browser_auth("https://blind.software", "https://blind.software/indiginous/")
@@ -629,8 +655,10 @@ class MainFrame(wx.Frame):
         if signed_in and self.auto_browser_auth_call is not None:
             self.auto_browser_auth_call.Stop()
             self.auto_browser_auth_call = None
-        elif not signed_in:
+        elif not signed_in and not self.suppress_auto_browser_auth:
             self._schedule_automatic_browser_auth()
+        if signed_in:
+            self.suppress_auto_browser_auth = False
 
     def _on_error(self, event: wx.html2.WebViewEvent) -> None:
         LOGGER.warning("WebView load error: %s", event.GetString())
@@ -780,6 +808,9 @@ class MainFrame(wx.Frame):
             self.default_login.SetFocus()
 
     def _on_char_hook(self, event: wx.KeyEvent) -> None:
+        if self.native_menu_open:
+            event.Skip()
+            return
         key = event.GetKeyCode()
         unicode_key = event.GetUnicodeKey()
         if ((event.ControlDown() and event.AltDown()) or (event.MetaDown() and event.AltDown())) and (

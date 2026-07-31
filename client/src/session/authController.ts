@@ -306,6 +306,8 @@ export function createAuthController(deps: AuthControllerDeps): {
     }
     applyAuthPermissions(message.role, message.permissions);
     deps.onServerAdminMenuActions(message.adminMenuActions);
+    // Keep native File-menu authentication state aligned with successful auth.
+    updateConnectAvailability();
     deps.setConnectionStatus('Authenticated. Joining world...');
   }
 

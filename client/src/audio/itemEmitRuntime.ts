@@ -14,6 +14,11 @@ import { volumePercentToGain } from './volume';
 
 type EmitOutput = {
   soundUrl: string;
+  trackSignature: string;
+  trackUrls: string[];
+  trackIndex: number;
+  loopMode: 'repeat' | 'shuffle';
+  crossfadeSeconds: number;
   element: HTMLAudioElement;
   onEnded: () => void;
   source: MediaElementAudioSourceNode;
@@ -51,6 +56,24 @@ const PORTAL_PRELOAD_EXTRA_SQUARES = 8;
 const STREAM_PLAY_RETRY_MS = 5000;
 const STREAM_PLAY_MAX_RETRIES = 6;
 const STREAM_PLAY_RESET_COOLDOWN_MS = 60000;
+
+/** Accepts the picker format while keeping old single-reference widgets valid. */
+function resolveEmitTrackReferences(raw: unknown): string[] {
+  return String(raw ?? '')
+    .split('||')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
+function resolveEmitLoopMode(item: WorldItem): 'repeat' | 'shuffle' {
+  return String(item.params.emitLoopMode ?? 'repeat').trim().toLowerCase() === 'shuffle' ? 'shuffle' : 'repeat';
+}
+
+function resolveEmitCrossfadeSeconds(item: WorldItem): number {
+  const raw = Number(item.params.emitCrossfade ?? 0);
+  return Number.isFinite(raw) ? Math.max(0, Math.min(10, raw)) : 0;
+}
 
 /** Maps a 0-100 speed control to playback-rate range used by emitted audio. */
 function resolveEmitPlaybackRate(raw: unknown): number {
@@ -255,8 +278,9 @@ export class ItemEmitRuntime {
         continue;
       }
       const emitSound = String(item.params.emitSound ?? item.emitSound ?? '').trim();
+      const trackReferences = resolveEmitTrackReferences(emitSound);
       const enabled = item.params.enabled !== false;
-      const soundUrl = enabled ? this.resolveSoundUrl(emitSound) : '';
+      const soundUrl = enabled ? this.resolveSoundUrl(trackReferences[0] ?? '') : '';
       if (!soundUrl) {
         this.cleanup(item.id);
         continue;
@@ -267,7 +291,7 @@ export class ItemEmitRuntime {
       }
       validIds.add(item.id);
       const existing = this.outputs.get(item.id);
-      if (existing && existing.soundUrl === soundUrl) {
+      if (existing && existing.trackSignature === emitSound) {
         this.resumeStateByItemId.delete(item.id);
         this.tryStartEmitPlayback(item.id, existing.element);
         continue;
@@ -301,12 +325,18 @@ export class ItemEmitRuntime {
       element.playbackRate = initialRates.playbackRate;
       const initialDelaySeconds = resolveEmitInitialDelaySeconds(item);
       const loopDelaySeconds = resolveEmitLoopDelaySeconds(item);
-      element.loop = loopDelaySeconds <= 0;
+      const loopMode = resolveEmitLoopMode(item);
+      const crossfadeSeconds = resolveEmitCrossfadeSeconds(item);
+      element.loop = trackReferences.length <= 1 && loopDelaySeconds <= 0;
       const resumeState = this.resumeStateByItemId.get(item.id);
       const matchingResumeState = resumeState && resumeState.soundUrl === soundUrl ? resumeState : null;
       const onEnded = () => {
         const current = this.outputs.get(item.id);
         if (!current || current.element !== element) return;
+        if (current.trackUrls.length > 1) {
+          this.advanceTrack(item.id, element);
+          return;
+        }
         const delaySeconds = current.loopDelaySeconds ?? 0;
         if (delaySeconds <= 0) {
           this.nextEmitStartAtMs.delete(item.id);
@@ -404,6 +434,11 @@ export class ItemEmitRuntime {
       const reflections = connectDistanceReflections(audioCtx, gain, destination, this.audio.supportsStereoPanner());
       this.outputs.set(item.id, {
         soundUrl,
+        trackSignature: emitSound,
+        trackUrls: trackReferences.map((reference) => this.resolveSoundUrl(reference)),
+        trackIndex: 0,
+        loopMode,
+        crossfadeSeconds,
         element,
         onEnded,
         source,
@@ -589,5 +624,43 @@ export class ItemEmitRuntime {
       .finally(() => {
         this.pendingEmitStarts.delete(itemId);
       });
+  }
+
+  /** Advances a multi-track widget without interrupting the item's spatial graph. */
+  private advanceTrack(itemId: string, element: HTMLAudioElement): void {
+    const output = this.outputs.get(itemId);
+    if (!output || output.element !== element || output.trackUrls.length < 2) return;
+    const previousUrl = output.trackUrls[output.trackIndex];
+    let nextIndex: number;
+    if (output.loopMode === 'shuffle') {
+      const choices = output.trackUrls.map((_, index) => index).filter((index) => index !== output.trackIndex);
+      nextIndex = choices[Math.floor(Math.random() * choices.length)] ?? 0;
+    } else {
+      nextIndex = (output.trackIndex + 1) % output.trackUrls.length;
+    }
+    output.trackIndex = nextIndex;
+    output.soundUrl = output.trackUrls[nextIndex] ?? previousUrl;
+    const fadeSeconds = Math.max(0, output.crossfadeSeconds);
+    const audioCtx = this.audio.context;
+    if (audioCtx && fadeSeconds > 0) {
+      output.gain.gain.cancelScheduledValues(audioCtx.currentTime);
+      output.gain.gain.setValueAtTime(Math.max(0.001, output.gain.gain.value), audioCtx.currentTime);
+      output.gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + fadeSeconds / 2);
+    }
+    element.src = output.soundUrl;
+    element.loop = false;
+    element.load();
+    let started = false;
+    const start = () => {
+      if (started) return;
+      started = true;
+      try { element.currentTime = 0; } catch { /* metadata may not be ready yet */ }
+      void element.play().catch(() => undefined);
+      if (audioCtx && fadeSeconds > 0) {
+        output.gain.gain.linearRampToValueAtTime(1, audioCtx.currentTime + fadeSeconds);
+      }
+    };
+    element.addEventListener('loadedmetadata', start, { once: true });
+    window.setTimeout(start, Math.max(0, fadeSeconds * 500));
   }
 }

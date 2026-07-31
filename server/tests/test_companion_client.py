@@ -208,3 +208,36 @@ async def test_companion_reacts_to_nearby_person_lying_down() -> None:
     assert socket.sent == [
         {"type": "user_action", "actionId": "listen", "targetId": "dom-id"}
     ]
+
+
+@pytest.mark.asyncio
+async def test_companion_command_loop_supports_autonomous_move_and_social_action(tmp_path) -> None:
+    """The in-world channel can drive movement and human social actions directly."""
+
+    client = CompanionClient(
+        url="ws://example.invalid",
+        origin="https://example.invalid",
+        username="clawdia",
+        password="secret-for-test",
+        nickname="Claudia",
+        command_file=tmp_path / "commands.jsonl",
+        state_file=tmp_path / "state.json",
+    )
+    client.connected = True
+    client.client_id = "clawdia-id"
+    client.x = 20
+    client.y = 20
+    socket = FakeWebSocket()
+
+    await client._apply_command(socket, {"action": "move", "dx": 1, "dy": -1})
+    await client._apply_command(
+        socket,
+        {"action": "user_action", "actionId": "wave", "targetId": "dom-id"},
+    )
+
+    assert client.x == 21
+    assert client.y == 19
+    assert socket.sent == [
+        {"type": "update_position", "x": 21, "y": 19},
+        {"type": "user_action", "actionId": "wave", "targetId": "dom-id"},
+    ]

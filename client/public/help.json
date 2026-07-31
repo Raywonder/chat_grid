@@ -120,6 +120,27 @@
       ]
     },
     {
+      "title": "eCrypto",
+      "items": [
+        {
+          "keys": "Commands menu",
+          "description": "Open the Commands menu with Control+K, Shift+K, the Applications key, or Shift+F10, then choose eCrypto account balance, wallet connections, help, test funds, connect wallet, or send test funds."
+        },
+        {
+          "keys": "/ecrypto /ecr /ecripto /ecr*",
+          "description": "These command prefixes are accepted as aliases. eCrypto is pronounced ee crypto."
+        },
+        {
+          "keys": "eCrypto wallet connections",
+          "description": "Use the Commands menu to review linked wallets, or connect a test or real wallet address without typing a slash command. Real-chain records remain non-custodial connection records."
+        },
+        {
+          "keys": "eCrypto test funds and transfers",
+          "description": "Use the Commands menu to request test funds or send internal TEST-ECR funds to a username."
+        }
+      ]
+    },
+    {
       "title": "Items",
       "items": [
         {

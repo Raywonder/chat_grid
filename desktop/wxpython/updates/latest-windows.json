@@ -1,12 +1,12 @@
 {
-  "version": "0.4.16",
-  "revision": "R539",
-  "releaseNotes": "Indiginous Windows 0.4.15 hardens the native JavaScript bridge so startup and focus recovery cannot surface an opaque JavaScript error dialog.",
+  "version": "0.4.17",
+  "revision": "R540",
+  "releaseNotes": "Indiginous Windows 0.4.17 consolidates the accessible controls, room-scoped media remotes, gamepad support, and duplicate-announcement repair in the current R540 web runtime.",
   "platforms": {
     "windows": {
       "url": "https://blind.software/downloads/public/7Kp3mN8vQ2xL5rT9cW6yH1/windows",
       "fileName": "Indiginous_Setup.exe",
-      "sha256": "b75cd73b0e2a995a612cc749e0a8c6f5054cc69e8594840467ab143e912cb9c9",
+      "sha256": "4b59ba02e429cdadcb77295c030fc56ff96a4abc4117352ff46b824f2de348dc",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }
   }

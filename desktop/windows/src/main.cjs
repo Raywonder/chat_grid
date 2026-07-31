@@ -228,7 +228,7 @@ async function chooseDisplayMediaSource() {
     type: 'question',
     title: 'Cast Local Media',
     message: 'Choose a screen, window, browser tab, or open media app to cast into Indiginous.',
-    detail: 'For app audio such as YouTube, pick the window or screen that is playing it. Windows system audio is requested when the platform allows it.',
+    detail: 'Indiginous casts video only. World audio and desktop/system audio are never included, so other people cannot hear a feedback loop.',
     buttons,
     defaultId: 0,
     cancelId: buttons.length - 1,
@@ -352,9 +352,10 @@ if (hasSingleInstanceLock) app.whenReady().then(async () => {
         callback({});
         return;
       }
-      const selection = { video: source };
-      if (process.platform === 'win32') selection.audio = 'loopback';
-      callback(selection);
+      // Never request Windows/system loopback audio here. A screen/window
+      // capture can contain Indiginous world audio, which would send the
+      // world back into the room and create a feedback loop for everyone.
+      callback({ video: source });
     } catch (error) {
       appendRuntimeLog('display-media-picker-failed', { message: error?.message || String(error) });
       callback({});

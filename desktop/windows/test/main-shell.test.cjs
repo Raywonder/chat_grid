@@ -23,3 +23,10 @@ test('native shell uses the shared settings bridge and native client marker', ()
   assert.match(source, /window\.chatGridNativeOpenSettings\?\.\(\)/);
   assert.doesNotMatch(source, /settingsButton.*click/);
 });
+
+test('desktop screen casting never requests or forwards system audio', () => {
+  assert.match(source, /Indiginous casts video only/);
+  assert.match(source, /callback\(\{ video: source \}\)/);
+  assert.doesNotMatch(source, /selection\.audio\s*=\s*['"]loopback['"]/);
+  assert.doesNotMatch(source, /systemAudio\s*:\s*['"]include['"]/);
+});

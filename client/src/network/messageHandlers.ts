@@ -557,7 +557,12 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         if (message.ok) {
           if (message.action === 'use' || message.action === 'secondary_use') {
             const item = message.itemId ? deps.getItemById(message.itemId) : null;
-            const announce = item?.type !== 'radio_station' || deps.shouldAnnounceRadioAction();
+            // Clock uses its own spatial speech sequence. The accompanying
+            // textual result is still retained in history, but sending it
+            // through nativeSpeak makes NVDA repeat the time immediately.
+            const announce = item?.type === 'clock'
+              ? false
+              : item?.type !== 'radio_station' || deps.shouldAnnounceRadioAction();
             if (text) {
               deps.pushChatMessage(text, announce);
             }

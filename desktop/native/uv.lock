@@ -118,7 +118,7 @@ wheels = [
 
 [[package]]
 name = "indiginous-desktop"
-version = "0.4.14"
+version = "0.4.17"
 source = { editable = "." }
 dependencies = [
     { name = "packaging" },

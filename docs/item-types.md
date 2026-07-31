@@ -181,6 +181,10 @@ This is behavior-focused documentation for item types and their defaults.
 - `use` reports the current user's linked eCrypto status, including internal
   test-chain `TEST-ECR` balance and connected wallet counts.
 - `secondary use` reports bank details and command help.
+- `/ecrypto`, `/ecr`, and `/ecripto` are accepted command prefixes; `/ecr*` is
+  also accepted as a compatibility spelling.
+- The Commands menu exposes the common eCrypto actions without requiring users
+  to type slash commands.
 - `/ecrypto balance` reports the current logged-in user's account status.
 - `/ecrypto wallets` lists connected test and real-chain wallet records.
 - `/ecrypto connect <test|real> <chain> <address> [label]` links a wallet record

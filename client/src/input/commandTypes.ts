@@ -5,7 +5,7 @@ export type ModeInput = {
   key: string;
   ctrlKey: boolean;
   shiftKey: boolean;
-  source?: 'web' | 'native';
+  source?: 'web' | 'native' | 'gamepad';
 };
 
 export type CommandDescriptor<CommandId extends string = string> = {

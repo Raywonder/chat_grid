@@ -48,6 +48,7 @@ export type GameMode =
   | 'itemProperties'
   | 'itemPropertyEdit'
   | 'itemPropertyOptionSelect'
+  | 'itemSoundLibrarySelect'
   | 'itemManageOptions'
   | 'itemManageTransferUser'
   | 'confirmYesNo'

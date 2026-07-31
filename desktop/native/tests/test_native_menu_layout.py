@@ -19,6 +19,7 @@ def test_shared_settings_are_file_menu_only_in_native_client():
     assert "event.Skip()" in source
     assert 'self.SetName("Indiginous main window")' in source
     assert "EVT_MENU_OPEN" in source
+    assert "EVT_MENU_CLOSE" in source
     assert "SetForegroundWindow" in source
     assert "SingleInstanceActivation" in source
 
@@ -51,7 +52,15 @@ def test_native_menu_highlight_is_spoken():
     source = (Path(__file__).parents[1] / "src" / "chat_grid_native" / "app.py").read_text(encoding="utf-8")
     assert "EVT_MENU_HIGHLIGHT" in source
     assert "GetMenuItem" in source
-    assert "self._announce(label, speak=True)" in source
+    assert "self._announce_menu(label)" in source
+    assert 'name="indiginous-menu-speech"' in source
+    assert "menu.FindItem(event.GetMenuId())" in source
+
+
+def test_native_world_arrows_do_not_steal_open_menu_navigation():
+    source = (Path(__file__).parents[1] / "src" / "chat_grid_native" / "app.py").read_text(encoding="utf-8")
+    assert "if self.native_menu_open:" in source
+    assert "self.native_menu_open = False" in source
 
 
 def test_native_world_surface_hides_web_chrome_but_keeps_navigation():

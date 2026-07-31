@@ -86,7 +86,8 @@ This is a behavior guide for packet semantics beyond raw schemas.
   Bank items are stationary, non-carryable service counters seeded across map
   locations; `ecrypto_wallet` items are carryable wallet markers users can keep
   on them while navigating. Logged-in
-  users can run `/ecrypto ...` commands for balance, wallet links, test deposits,
+  users can run `/ecrypto ...` (or `/ecr`/`/ecripto`) commands, or use the
+  Commands menu, for balance, wallet links, test deposits,
   and test transfers; using an `ecrypto_bank` item returns account-specific
   status through `item_action_result`.
 - `item_use_sound` contains absolute item world coordinates (`x`, `y`) and sound path.

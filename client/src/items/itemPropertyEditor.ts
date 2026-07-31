@@ -64,6 +64,8 @@ type EditorDeps = {
   isItemPropertyEditable: (item: WorldItem, key: string) => boolean;
   getItemPropertyOptionValues: (item: WorldItem, key: string) => string[] | undefined;
   openItemPropertyOptionSelect: (item: WorldItem, key: string) => void;
+  openItemSoundSelect: (item: WorldItem, key: string) => void;
+  handleItemSoundSelection?: (item: WorldItem, key: string, value: string) => boolean;
   describeItemPropertyHelp: (item: WorldItem, key: string) => string;
   getItemPropertyMetadata: (
     itemType: WorldItem['type'],
@@ -165,6 +167,10 @@ export function createItemPropertyEditor(deps: EditorDeps): {
         return;
       }
       const metadata = deps.getItemPropertyMetadata(item.type, selectedKey);
+      if (metadata?.valueType === 'sound') {
+        deps.openItemSoundSelect(item, selectedKey);
+        return;
+      }
       if (metadata?.valueType === 'boolean') {
         const current = deps.getItemPropertyValue(item, selectedKey).toLowerCase() === 'on';
         const nextValue = !current;
@@ -458,8 +464,11 @@ export function createItemPropertyEditor(deps: EditorDeps): {
 
     if (control.type === 'select') {
       const selectedValue = deps.state.itemPropertyOptionValues[deps.state.itemPropertyOptionIndex];
-      deps.signalingSend({ type: 'item_update', itemId, params: { [propertyKey]: selectedValue } });
       const item = deps.state.items.get(itemId);
+      if (item && deps.handleItemSoundSelection?.(item, propertyKey, selectedValue)) {
+        return;
+      }
+      deps.signalingSend({ type: 'item_update', itemId, params: { [propertyKey]: selectedValue } });
       if (item) {
         deps.onPreviewPropertyChange?.(item, propertyKey, selectedValue);
       }

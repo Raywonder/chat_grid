@@ -1969,13 +1969,13 @@ async def test_carried_radio_remote_station_previous_syncs_connected_radios(
 
     result = _last_packet_of_type(sent_payloads, ItemActionResultPacket)
     assert result.ok is True
-    assert "Remote tuned 2 connected radios to Three." == result.message
+    assert "Remote tuned 1 connected radio to Three." == result.message
     assert primary.params["stationIndex"] == 2
-    assert kitchen.params["stationIndex"] == 2
+    assert kitchen.params["stationIndex"] == 0
     assert primary.params["stationSwitchSound"] == ""
     assert primary.params["playStartedAt"] > 0
-    assert kitchen.params["playStartedAt"] == primary.params["playStartedAt"]
-    assert set(broadcast_items) == {"living-radio", "kitchen-radio"}
+    assert kitchen.params.get("playStartedAt", 0) != primary.params["playStartedAt"]
+    assert set(broadcast_items) == {"living-radio"}
 
 
 @pytest.mark.asyncio
@@ -2062,7 +2062,7 @@ async def test_carried_radio_remote_preserves_individual_radio_power(
     assert result.ok is True
     assert primary.params["stationIndex"] == 1
     assert primary.params["enabled"] is True
-    assert bedroom.params["stationIndex"] == 1
+    assert bedroom.params["stationIndex"] == 0
     assert bedroom.params["enabled"] is False
 
 
@@ -2193,7 +2193,7 @@ async def test_radio_remote_sync_all_uses_linked_playing_station_when_nearest_sp
     source = server.item_service.default_item(client, "radio_station")
     source.id = "kitchen-source-radio"
     source.title = "Kitchen source radio"
-    source.locationId = "raywonder_house_kitchen"
+    source.locationId = client.location_id
     source.params["linkedMediaGroup"] = "test-house-radios"
     source.params["speakerRole"] = "primary"
     source.params["stationPresets"] = presets
@@ -2312,9 +2312,9 @@ async def test_carried_radio_remote_volume_down_syncs_connected_radios(
 
     result = _last_packet_of_type(sent_payloads, ItemActionResultPacket)
     assert result.ok is True
-    assert result.message == "Remote adjusted 2 connected radios by -5, range 15 to 65."
+    assert result.message == "Remote adjusted 1 connected radio to volume 15."
     assert primary.params["mediaVolume"] == 15
-    assert kitchen.params["mediaVolume"] == 65
+    assert kitchen.params["mediaVolume"] == 70
 
 
 @pytest.mark.asyncio

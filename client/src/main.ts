@@ -26,10 +26,12 @@ import {
 import { formatCommandMenuLabel, type CommandDescriptor, type ModeInput } from './input/commandTypes';
 import { getAvailableMainModeCommands } from './input/mainModeCommands';
 import { resolveMainModeCommand, type MainModeCommand } from './input/mainCommandRouter';
+import { spokenAnnouncementText } from './input/spokenText';
 import { dispatchModeInput } from './input/modeDispatcher';
 import { handleListControlKey } from './input/listController';
 import { createAdminController, type AdminMenuAction } from './input/adminController';
 import { setupKeyboardInputHandlers } from './input/keyboardController';
+import { setupGamepadInputHandlers } from './input/gamepadController';
 import { setupMidiInputHandlers, type MidiControllerHandle } from './input/midiController';
 import { getEditSessionAction } from './input/editSession';
 import { formatSteppedNumber, snapNumberToStep } from './input/numeric';
@@ -502,7 +504,10 @@ const TELEPORT_START_GAIN = 0.1;
 const TELEPORT_SOUND_URL = withBase('sounds/teleport.ogg');
 const DOOR_CLOSE_SOUND_URL = withBase('sounds/doors/door-close.mp3?v=20260714-real-door');
 const WALL_SOUND_URL = withBase('sounds/wall.ogg');
-const MOVEMENT_NARRATION_INTERVAL_MS = 650;
+// Walking should remain usable with a screen reader without turning every
+// held-arrow step into an interrupting spoken paragraph. Meaningful arrivals
+// still announce, but repeated movement context is coalesced.
+const MOVEMENT_NARRATION_INTERVAL_MS = 1200;
 const RUN_MOVEMENT_TICK_MULTIPLIER = 0.55;
 const CAREFUL_MOVEMENT_TICK_MULTIPLIER = 1.25;
 const ITEM_BEACON_RADIUS = 3.5;
@@ -536,9 +541,11 @@ let pendingDoorCloseCue: { x: number; y: number; expiresAt: number } | null = nu
 let lastFocusedElement: Element | null = null;
 let lastAnnouncementText = '';
 let lastAnnouncementAt = 0;
+const ANNOUNCEMENT_DEDUPE_WINDOW_MS = 1_500;
 let lastRuntimeRecoveryStatusAt = 0;
 let lastMovementNarrationAt = 0;
 let lastMovementNarrationDirection = '';
+let lastMovementNarrationContext = '';
 let outputMode = settings.loadOutputMode();
 let activeGridName = DEFAULT_GRID_NAME;
 let activeWelcomeMessage = DEFAULT_WELCOME_MESSAGE;
@@ -822,6 +829,9 @@ let lastSubscriptionRefreshTileY = Math.round(state.player.y);
 let subscriptionRefreshInFlight = false;
 let subscriptionRefreshPending = false;
 let suppressItemPropertyEchoUntilMs = 0;
+let pendingItemSoundSelection: { itemId: string; key: string } | null = null;
+const SOUND_PICKER_URL = '__sound_picker_url__';
+const SOUND_PICKER_UPLOAD = '__sound_picker_upload__';
 let activeTeleportLoopStop: (() => void) | null = null;
 let activeTeleportLoopToken = 0;
 let activeTeleport:
@@ -875,6 +885,19 @@ let midiControllerHandle: MidiControllerHandle = {
   requestEnable: async () => false,
   setControlVisible: () => undefined,
 };
+let gamepadDirections: Record<string, boolean> = {};
+const gamepadController = setupGamepadInputHandlers({
+  getRunning: () => state.running,
+  getMode: () => state.mode,
+  setDirection: (code, pressed) => {
+    if (pressed && remoteControlsAreFocused()) {
+      handleModeInput({ code, key: code, ctrlKey: false, shiftKey: false, source: 'gamepad' });
+      return;
+    }
+    gamepadDirections[code] = pressed;
+  },
+  handleModeInput,
+});
 
 const itemBehaviorRegistry = new ItemBehaviorRegistry({
   state,
@@ -1429,11 +1452,12 @@ async function loadChangelog(): Promise<void> {
   }
 }
 
-function setStatusText(message: string, announceViaLiveRegion: boolean): void {
+function setStatusText(message: string, announceViaLiveRegion: boolean, spokenMessage = message): void {
   if (statusTimeout !== null) {
     window.clearTimeout(statusTimeout);
   }
   dom.status.setAttribute('aria-live', announceViaLiveRegion ? 'polite' : 'off');
+  dom.status.setAttribute('aria-label', spokenMessage);
   dom.status.textContent = '';
   requestAnimationFrame(() => {
     dom.status.textContent = message;
@@ -1452,7 +1476,7 @@ function updateStatus(message: string): void {
     .replace(/\s{2,}/g, ' ')
     .trim();
   const now = performance.now();
-  if (normalized && normalized === lastAnnouncementText && now - lastAnnouncementAt < 300) {
+  if (normalized && normalized === lastAnnouncementText && now - lastAnnouncementAt < ANNOUNCEMENT_DEDUPE_WINDOW_MS) {
     return;
   }
   lastAnnouncementText = normalized;
@@ -1466,12 +1490,13 @@ function updateStatus(message: string): void {
     }
   ).chatGridNativeSpeak;
   if (normalized && typeof nativeSpeak === 'function') {
-    nativeSpeak(normalized, { interrupt: true });
-    setStatusText(normalized, false);
+    const spoken = spokenAnnouncementText(normalized);
+    nativeSpeak(spoken, { interrupt: true });
+    setStatusText(normalized, false, spoken);
     return;
   }
 
-  setStatusText(normalized, true);
+  setStatusText(normalized, true, spokenAnnouncementText(normalized));
 }
 
 /** Updates persistent connection/update status shown under the page heading. */
@@ -2444,7 +2469,11 @@ function openHelpViewer(lines: string[], returnMode: GameMode = 'normal'): void 
 /** Returns non-carried items occupying a given grid position. */
 function getItemsAtPosition(x: number, y: number, includeQuiet = false): WorldItem[] {
   return Array.from(state.items.values()).filter(
-    (item) => !item.carrierId && item.x === x && item.y === y && (includeQuiet || !isItemQuiet(item)),
+    (item) => item.locationId === currentLocationId
+      && !item.carrierId
+      && item.x === x
+      && item.y === y
+      && (includeQuiet || !isItemQuiet(item)),
   );
 }
 
@@ -2496,7 +2525,7 @@ function getNearestSeatableItem(): WorldItem | null {
   let nearest: WorldItem | null = null;
   let nearestDistance = Infinity;
   for (const item of state.items.values()) {
-    if (item.carrierId || isItemQuiet(item) || !isSeatableItem(item)) continue;
+    if (item.locationId !== currentLocationId || item.carrierId || isItemQuiet(item) || !isSeatableItem(item)) continue;
     const distance = Math.hypot(item.x - state.player.x, item.y - state.player.y);
     if (distance <= SEAT_INTERACTION_RADIUS && distance < nearestDistance) {
       nearest = item;
@@ -2569,6 +2598,12 @@ function getCarriedMediaRemote(): { item: WorldItem; kind: 'radio' | 'tv' } | nu
 
 /** Returns true while the held remote's controls, rather than movement, own the arrows. */
 function remoteControlsAreFocused(): boolean {
+  if (state.remoteControlsFocused && state.focusedItemId) {
+    const focused = getCarriedItems().find((item) => item.id === state.focusedItemId) ?? null;
+    if (focused && !isTvRemoteItem(focused) && !isRadioRemoteItem(focused)) {
+      state.remoteControlsFocused = false;
+    }
+  }
   return state.remoteControlsFocused && Boolean(getCarriedMediaRemote());
 }
 
@@ -3029,7 +3064,12 @@ function openItemPropertyOptionSelect(item: WorldItem, key: string): void {
 function textInputMaxLengthForMode(mode: typeof state.mode): number | null {
   if (mode === 'nickname') return NICKNAME_MAX_LENGTH;
   if (mode === 'chat') return 500;
-  if (mode === 'itemPropertyEdit') return 500;
+  if (mode === 'itemPropertyEdit') {
+    const item = state.selectedItemId ? state.items.get(state.selectedItemId) : undefined;
+    return item && state.editingPropertyKey
+      ? getItemPropertyMetadata(item.type, state.editingPropertyKey)?.maxLength ?? 500
+      : 500;
+  }
   if (mode === 'micGainEdit') return 8;
   if (mode === 'adminRoleNameEdit') return 32;
   return null;
@@ -3188,7 +3228,10 @@ function describeTileArrival(x: number, y: number, dx = 0, dy = 0): string {
 function narrateLocalMovement(x: number, y: number, dx: number, dy: number, force = false): void {
   const now = performance.now();
   const direction = movementDirectionPhrase(dx, dy);
-  const hasTileContext = getPeerNamesAtPosition(x, y).length > 0 || getItemsAtPosition(x, y).length > 0;
+  const peerNames = getPeerNamesAtPosition(x, y);
+  const items = getItemsAtPosition(x, y);
+  const context = `${peerNames.join(',')}|${items.map((item) => item.id).join(',')}`;
+  const hasTileContext = peerNames.length > 0 || items.length > 0;
   if (!audioAnnouncementSettings.movementDirections) {
     if (hasTileContext) {
       const context = describeTileArrival(x, y).split('. ').slice(1).join('. ').trim();
@@ -3199,8 +3242,12 @@ function narrateLocalMovement(x: number, y: number, dx: number, dy: number, forc
   if (!force && !hasTileContext && direction === lastMovementNarrationDirection && now - lastMovementNarrationAt < MOVEMENT_NARRATION_INTERVAL_MS) {
     return;
   }
+  if (!force && hasTileContext && context === lastMovementNarrationContext && now - lastMovementNarrationAt < MOVEMENT_NARRATION_INTERVAL_MS) {
+    return;
+  }
   lastMovementNarrationAt = now;
   lastMovementNarrationDirection = direction;
+  lastMovementNarrationContext = context;
   updateStatus(describeTileArrival(x, y, dx, dy));
 }
 
@@ -3389,6 +3436,7 @@ function effectiveMovementTickMs(): number {
 function gameLoop(): void {
   if (!state.running) return;
   try {
+    gamepadController.update();
     updateTeleport();
     handleMovement();
   } catch (error) {
@@ -3435,7 +3483,8 @@ function handleMovement(): void {
   if (activeTeleport) return;
   if (
     remoteControlsAreFocused() &&
-    (state.keysPressed.ArrowUp || state.keysPressed.ArrowDown || state.keysPressed.ArrowLeft || state.keysPressed.ArrowRight)
+    (state.keysPressed.ArrowUp || state.keysPressed.ArrowDown || state.keysPressed.ArrowLeft || state.keysPressed.ArrowRight
+      || gamepadDirections.ArrowUp || gamepadDirections.ArrowDown || gamepadDirections.ArrowLeft || gamepadDirections.ArrowRight)
   ) {
     return;
   }
@@ -3444,10 +3493,10 @@ function handleMovement(): void {
 
   let dx = 0;
   let dy = 0;
-  if (state.keysPressed.ArrowUp) dy = 1;
-  if (state.keysPressed.ArrowDown) dy = -1;
-  if (state.keysPressed.ArrowLeft) dx = -1;
-  if (state.keysPressed.ArrowRight) dx = 1;
+  if (state.keysPressed.ArrowUp || gamepadDirections.ArrowUp) dy = 1;
+  if (state.keysPressed.ArrowDown || gamepadDirections.ArrowDown) dy = -1;
+  if (state.keysPressed.ArrowLeft || gamepadDirections.ArrowLeft) dx = -1;
+  if (state.keysPressed.ArrowRight || gamepadDirections.ArrowRight) dx = 1;
 
   if (dx === 0 && dy === 0) {
     lastWallCollisionDirection = null;
@@ -3632,7 +3681,11 @@ async function reconnectWithRetry(reason: 'heartbeat' | 'socketClose'): Promise<
   disconnect(false);
   for (let attempt = 1; attempt <= RECONNECT_MAX_ATTEMPTS; attempt += 1) {
     await new Promise((resolve) => window.setTimeout(resolve, RECONNECT_DELAY_MS));
-    await connect();
+    try {
+      await connect();
+    } catch (error) {
+      console.warn(`Reconnect attempt ${attempt} failed before transport recovery completed.`, error);
+    }
     const waitStartedAt = Date.now();
     while (!state.running && Date.now() - waitStartedAt < 4_000) {
       await new Promise((resolve) => window.setTimeout(resolve, 100));
@@ -3646,6 +3699,7 @@ async function reconnectWithRetry(reason: 'heartbeat' | 'socketClose'): Promise<
     }
   }
   if (refreshClientForConnectionRecovery()) {
+    reconnectInFlight = false;
     pushChatMessage('Connection recovery is refreshing the client and restoring your saved session...');
     return;
   }
@@ -3722,7 +3776,73 @@ function handleAdminNotificationsList(message: Extract<IncomingMessage, { type: 
 }
 
 function handleAdminAmbienceCatalog(message: Extract<IncomingMessage, { type: 'admin_ambience_catalog' }>): void {
+  if (pendingItemSoundSelection) {
+    const pending = pendingItemSoundSelection;
+    const item = state.items.get(pending.itemId);
+    if (item) {
+      const sounds = [...message.sounds].sort((a, b) => `${a.category}/${a.label}`.localeCompare(`${b.category}/${b.label}`));
+      state.mode = 'itemPropertyOptionSelect';
+      state.selectedItemId = pending.itemId;
+      state.editingPropertyKey = pending.key;
+      state.itemPropertyOptionValues = ['', SOUND_PICKER_URL, SOUND_PICKER_UPLOAD, ...sounds.map((sound) => sound.url)];
+      state.itemPropertyOptionLabels = ['None', 'Enter an external URL', 'Upload a custom sound', ...sounds.map((sound) => `${sound.category}: ${sound.label}`)];
+      const current = String(item.params[pending.key] ?? '').split('||').filter(Boolean);
+      const currentIndex = current.length > 0
+        ? Math.max(3, state.itemPropertyOptionValues.indexOf(current[0]))
+        : 0;
+      state.itemPropertyOptionIndex = currentIndex >= 0 ? currentIndex : 0;
+      updateStatus(`Choose ${itemPropertyLabel(pending.key)}. Select a sound to add it; upload or enter a URL for another source. Up to six sounds.`);
+      audio.sfxUiBlip();
+    }
+    return;
+  }
   adminController.handleAdminAmbienceCatalog(message);
+}
+
+/** Opens the authenticated shared sound library for a widget sound property. */
+function openItemSoundSelect(item: WorldItem, key: string): void {
+  pendingItemSoundSelection = { itemId: item.id, key };
+  updateStatus('Loading the complete sound library...');
+  signaling.send({ type: 'admin_ambience_catalog' });
+}
+
+/** Handles the non-file entries in the widget sound picker. */
+function handleItemSoundSelection(item: WorldItem, key: string, value: string): boolean {
+  if (value === SOUND_PICKER_URL) {
+    pendingItemSoundSelection = null;
+    state.mode = 'itemPropertyEdit';
+    state.editingPropertyKey = key;
+    state.nicknameInput = String(item.params[key] ?? '');
+    state.cursorPos = state.nicknameInput.length;
+    replaceTextOnNextType = true;
+    updateStatus(`Enter ${itemPropertyLabel(key)} URL or up to six references separated by ||`);
+    return true;
+  }
+  if (value === SOUND_PICKER_UPLOAD) {
+    updateStatus('Choose an audio file to upload. It will return to the sound library when complete.');
+    uploadAdminAmbienceSound('loop');
+    return true;
+  }
+  if (!pendingItemSoundSelection) return false;
+  const existing = String(item.params[key] ?? '').split('||').map((part) => part.trim()).filter(Boolean);
+  if (key === 'emitSound' && value && !existing.includes(value) && existing.length >= 6) {
+    updateStatus('Six loop sounds are already selected. Remove one before adding another.');
+    audio.sfxUiCancel();
+    return true;
+  }
+  const next = key === 'emitSound'
+    ? (value ? [...existing.filter((part) => part !== value), value] : [])
+    : (value ? [value] : []);
+  signaling.send({ type: 'item_update', itemId: item.id, params: { [key]: next.join('||') } });
+  itemBehaviorRegistry.onPropertyPreviewChange(item, key, next.join('||'));
+  updateStatus(next.length > 0 ? `${next.length} sound${next.length === 1 ? '' : 's'} selected.` : 'Sound cleared.');
+  pendingItemSoundSelection = null;
+  state.mode = 'itemProperties';
+  state.editingPropertyKey = null;
+  state.itemPropertyOptionValues = [];
+  state.itemPropertyOptionLabels = [];
+  state.itemPropertyOptionIndex = 0;
+  return true;
 }
 
 /** Handles server transfer-target list response for item-management transfer flow. */
@@ -3733,6 +3853,9 @@ function handleItemTransferTargets(message: Extract<IncomingMessage, { type: 'it
 /** Handles structured admin action result packets. */
 function handleAdminActionResult(message: Extract<IncomingMessage, { type: 'admin_action_result' }>): void {
   adminController.handleAdminActionResult(message);
+  if (message.ok && message.action === 'ambience_sound_upload' && pendingItemSoundSelection) {
+    signaling.send({ type: 'admin_ambience_catalog' });
+  }
   audio.sfxUiConfirm();
 }
 
@@ -4404,6 +4527,14 @@ function radioRemoteButtonCommand(
   audio.sfxDeviceKeypad();
 }
 
+/** Announce the held remote's actual target state when focus begins. */
+function announceFocusedRemoteState(): void {
+  const remote = getCarriedMediaRemote();
+  if (!remote) return;
+  updateStatus(`Focused ${itemLabel(remote.item)} controls. Reading current ${remote.kind === 'tv' ? 'TV' : 'radio'} state.`);
+  radioRemoteButtonCommand('info');
+}
+
 let activeCastStream: MediaStream | null = null;
 const activeCastTargetByCaster = new Map<string, { itemId: string; mediaKind: 'audio' | 'video' }>();
 const remoteCastMedia = new Map<string, HTMLMediaElement>();
@@ -4478,7 +4609,10 @@ function setLocalCastPlayback(stream: MediaStream | null): void {
   const element = document.createElement(hasVideo ? 'video' : 'audio');
   element.autoplay = true;
   element.controls = true;
-  element.muted = false;
+  // Local cast playback is deliberately silent. Casts are video-only and
+  // must never create a second local path that can feed world audio back into
+  // a microphone or screen-share loop.
+  element.muted = true;
   element.srcObject = stream;
   const surface = createCastMediaSurface(element, 'Local cast playback', 'local', () => {
     stopLocalCast();
@@ -4526,16 +4660,22 @@ async function castToNearestDevice(): Promise<void> {
   }
   activeCastStream?.getTracks().forEach((track) => track.stop());
   try {
-    activeCastStream = await navigator.mediaDevices.getDisplayMedia({
+    const capturedStream = await navigator.mediaDevices.getDisplayMedia({
+      // Video-only is intentional. Do not request system audio: the selected
+      // screen/window may contain Indiginous world audio, and sending that
+      // audio back into the room would create a feedback loop.
       video: true,
-      audio: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-      } as MediaTrackConstraints,
-      systemAudio: 'include',
+      audio: false,
       preferCurrentTab: false,
-    } as DisplayMediaStreamOptions & { systemAudio?: 'include'; preferCurrentTab?: boolean });
+    } as DisplayMediaStreamOptions & { preferCurrentTab?: boolean });
+    // Defense in depth for browsers/shells that return an audio track despite
+    // the explicit audio:false request. Stop and discard it before the stream
+    // can reach local playback, WebRTC, or the world media state.
+    capturedStream.getAudioTracks().forEach((track) => track.stop());
+    activeCastStream = new MediaStream(capturedStream.getVideoTracks());
+    capturedStream.getVideoTracks().forEach((track) => track.addEventListener('ended', () => {
+      if (activeCastStream?.getVideoTracks().includes(track)) stopLocalCast();
+    }, { once: true }));
     setLocalCastPlayback(activeCastStream);
     await peerManager.replaceCastStream(activeCastStream);
   } catch {
@@ -4667,7 +4807,7 @@ function updateItemBeacon(): void {
   const tileKey = `${Math.round(state.player.x)},${Math.round(state.player.y)}`;
   let nearest: { item: WorldItem; distance: number } | null = null;
   for (const item of state.items.values()) {
-    if (!shouldBeaconItem(item)) continue;
+    if (item.locationId !== currentLocationId || !shouldBeaconItem(item)) continue;
     const distance = Math.hypot(item.x - state.player.x, item.y - state.player.y);
     if (distance > ITEM_BEACON_RADIUS) continue;
     if (!nearest || distance < nearest.distance) {
@@ -4905,6 +5045,30 @@ function openDirectMessageCommand(): void {
   audio.sfxUiBlip();
 }
 
+/** Sends an eCrypto action from the command palette without exposing slash syntax to the user. */
+function sendEcryptoMenuCommand(command: string): void {
+  sendOrQueueChatMessage(`/ecrypto ${command}`);
+  updateStatus(`Requested eCrypto ${command.split(' ')[0]}.`);
+}
+
+function ecryptoConnectCommand(): void {
+  const mode = (window.prompt('eCrypto wallet mode: test or real', 'test') || '').trim().toLowerCase();
+  if (mode !== 'test' && mode !== 'real') return;
+  const chain = (window.prompt('Chain name, for example ecrypto-test or bitcoin', mode === 'test' ? 'ecrypto-test' : '') || '').trim();
+  const address = (window.prompt('Wallet address') || '').trim();
+  if (!chain || !address) return;
+  const label = (window.prompt('Wallet label (optional)', '') || '').trim();
+  sendEcryptoMenuCommand(`connect ${mode} ${chain} ${address}${label ? ` ${label}` : ''}`);
+}
+
+function ecryptoTransferCommand(): void {
+  const username = (window.prompt('Recipient username') || '').trim();
+  const amount = (window.prompt('Whole-number TEST-ECR amount') || '').trim();
+  if (!username || !amount) return;
+  const memo = (window.prompt('Memo (optional)', '') || '').trim();
+  sendEcryptoMenuCommand(`transfer ${username} ${amount}${memo ? ` ${memo}` : ''}`);
+}
+
 function formatUserActionOption(option: UserActionOption, target: PeerState): string {
   return `${option.label} ${target.nickname}, ${peerLocationPhrase(target)}`;
 }
@@ -5063,6 +5227,12 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   openHelp: openHelpCommand,
   openChat: openChatCommand,
   openDirectMessage: openDirectMessageCommand,
+  ecryptoBalance: () => sendEcryptoMenuCommand('balance'),
+  ecryptoWallets: () => sendEcryptoMenuCommand('wallets'),
+  ecryptoHelp: () => sendEcryptoMenuCommand('help'),
+  ecryptoFaucet: () => sendEcryptoMenuCommand('faucet'),
+  ecryptoConnect: ecryptoConnectCommand,
+  ecryptoTransfer: ecryptoTransferCommand,
   openAdminMenu: openAdminMenuCommand,
   chatPrev: () => navigateChatBuffer('prev'),
   chatNext: () => navigateChatBuffer('next'),
@@ -5168,7 +5338,7 @@ function handleNormalModeInput(input: ModeInput): void {
         if (remote) {
           state.focusedItemId = remote.id;
           state.remoteControlsFocused = true;
-          updateStatus(`Focused ${itemLabel(remote)} controls.`);
+          announceFocusedRemoteState();
           audio.sfxUiBlip();
         }
       }
@@ -5187,7 +5357,7 @@ function handleNormalModeInput(input: ModeInput): void {
         radioRemoteButtonCommand('station_last');
         return;
       }
-      if (code === 'KeyO') {
+      if (code === 'KeyP') {
         radioRemoteButtonCommand('power_toggle');
         return;
       }
@@ -5195,16 +5365,8 @@ function handleNormalModeInput(input: ModeInput): void {
         radioRemoteButtonCommand('info');
         return;
       }
-      if (code === 'KeyG') {
+      if (shiftKey && code === 'KeyM') {
         radioRemoteButtonCommand('guide');
-        return;
-      }
-      if (code === 'KeyC' || (shiftKey && code === 'KeyK')) {
-        void castToNearestDevice();
-        return;
-      }
-      if (code === 'Space') {
-        radioRemoteControlCommand(shiftKey ? 'station_previous' : 'station_next');
         return;
       }
       if (code === 'ArrowRight') {
@@ -5223,14 +5385,6 @@ function handleNormalModeInput(input: ModeInput): void {
         radioRemoteControlCommand('volume_down');
         return;
       }
-      if (code === 'Period') {
-        radioRemoteControlCommand('station_next');
-        return;
-      }
-      if (code === 'Comma') {
-        radioRemoteControlCommand('station_previous');
-        return;
-      }
     }
   }
   if (code === 'Tab') {
@@ -5243,7 +5397,7 @@ function handleNormalModeInput(input: ModeInput): void {
     if (remote) {
       state.focusedItemId = remote.id;
       state.remoteControlsFocused = true;
-      updateStatus(`Focused ${itemLabel(remote)} controls.`);
+      announceFocusedRemoteState();
       audio.sfxUiBlip();
       return;
     }
@@ -5757,6 +5911,8 @@ const itemPropertyEditor = createItemPropertyEditor({
   isItemPropertyEditable,
   getItemPropertyOptionValues: getItemPropertyOptionsForItem,
   openItemPropertyOptionSelect,
+  openItemSoundSelect,
+  handleItemSoundSelection,
   describeItemPropertyHelp,
   getItemPropertyMetadata,
   validateNumericItemPropertyInput,

@@ -16,9 +16,11 @@
 
 ## Remote Speaker handoff
 
-The prepared Remote Speaker application was not present in the server-mounted
-OpenCloud tree during this pass, and its Mac-side file route required an
-additional operator scope. No unverified asset was copied or published.
+The prepared RemoteSpeaker application is now separated from VoiceLink. Its
+working copy is `/home/tappedin/work/remotespeaker`, and its full legacy backup
+is `/mnt/backup/remotespeaker/legacy-electron-2026-04-23`. The OpenCloud testing
+drop remains the separate artifact/asset handoff location. No unverified build
+was copied or published.
 
 The intended export shape is a same-origin audio file referenced by
 `roomImpulseUrl`, plus a stable `speakerProfile` name. This keeps the world
@@ -34,6 +36,5 @@ prepared files are reachable.
 - `npm run build`: passed; Vite emitted only the existing chunk-size warning.
 - `python3 -m compileall -q server/app`: passed.
 
-This change is catalog/runtime groundwork. It does not claim that the
-Mac-side Remote Speaker assets have been imported or that a new release has
-been published.
+This change is catalog/runtime groundwork. It does not claim that a native
+RemoteSpeaker plugin or desktop release has been built or published.

@@ -13,3 +13,9 @@ def test_browser_callback_always_continues_to_connect() -> None:
 
 def test_callback_completion_does_not_depend_on_browser_query_visibility() -> None:
     assert "new URL(window.location.href).searchParams.has('external_auth')" not in SOURCE
+
+
+def test_browser_callback_listener_starts_before_browser_opens() -> None:
+    start = SOURCE.index("flow.start(self._finish_browser_auth, self._browser_auth_failed)")
+    browser_open = SOURCE.index("webbrowser.open(flow.authorization_url, new=2)")
+    assert start < browser_open

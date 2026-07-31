@@ -12,6 +12,7 @@ const DEFAULT_ROTATION_SECONDS = 60;
 const APPROACH_COOLDOWN_MS = 4500;
 const MIN_SPEECH_GAP_MS = 900;
 const MIN_RECORDED_ANNOUNCEMENT_GAP_MS = 15_000;
+const ITEM_ANNOUNCEMENT_DEDUPE_WINDOW_MS = 5_000;
 
 type BillboardState = {
   lastText: string;
@@ -27,6 +28,7 @@ export class BillboardRuntime {
   private layerEnabled = true;
   private lastSpeechStartedAtMs = 0;
   private lastRecordedAnnouncementStartedAtMs = 0;
+  private readonly recentlyAnnounced = new Map<string, number>();
 
   constructor(
     private readonly audio: AudioEngine,
@@ -40,11 +42,15 @@ export class BillboardRuntime {
     this.layerEnabled = enabled;
     if (!enabled) {
       this.stateByItemId.clear();
+      this.recentlyAnnounced.clear();
     }
   }
 
   cleanup(itemId: string): void {
     this.stateByItemId.delete(itemId);
+    for (const key of this.recentlyAnnounced.keys()) {
+      if (key.startsWith(`${itemId}:`)) this.recentlyAnnounced.delete(key);
+    }
   }
 
   update(items: Map<string, WorldItem>, listenerPosition: { x: number; y: number }): void {
@@ -97,6 +103,14 @@ export class BillboardRuntime {
         continue;
       }
       const spoken = `${item.title}: ${next.text}`;
+      const announcementKey = `${item.id}:${spoken.trim().toLocaleLowerCase()}`;
+      const lastAnnouncedAt = this.recentlyAnnounced.get(announcementKey) ?? 0;
+      if (nowMs - lastAnnouncedAt < ITEM_ANNOUNCEMENT_DEDUPE_WINDOW_MS) {
+        state.wasInRange = true;
+        this.stateByItemId.set(item.id, state);
+        continue;
+      }
+      this.recentlyAnnounced.set(announcementKey, nowMs);
       const voiceAssetUrl = resolveVoiceAssetUrl(item);
       if (voiceAssetUrl) {
         if (nowMs - this.lastRecordedAnnouncementStartedAtMs < MIN_RECORDED_ANNOUNCEMENT_GAP_MS) {
@@ -132,6 +146,11 @@ export class BillboardRuntime {
     for (const itemId of Array.from(this.stateByItemId.keys())) {
       if (!seenIds.has(itemId)) {
         this.stateByItemId.delete(itemId);
+      }
+    }
+    for (const [key, announcedAt] of this.recentlyAnnounced) {
+      if (nowMs - announcedAt >= ITEM_ANNOUNCEMENT_DEDUPE_WINDOW_MS) {
+        this.recentlyAnnounced.delete(key);
       }
     }
   }

@@ -277,6 +277,8 @@ class MainFrame(wx.Frame):
         self.auto_browser_auth_call: wx.CallLater | None = None
         self.pending_external_auth = False
         self.is_signed_in = False
+        self.native_menu_open = False
+        self.suppress_auto_browser_auth = False
         self.settings_dialog: SettingsDialog | None = None
         self.audio_devices: dict[str, list[tuple[str, str]]] = {"inputs": [], "outputs": []}
         self.world_focus_restore: wx.CallLater | None = None
@@ -345,11 +347,12 @@ class MainFrame(wx.Frame):
         self.SetMenuBar(menu_bar)
         self.SetName("Indiginous main window")
         self.Bind(wx.EVT_MENU_OPEN, self._on_menu_open)
+        self.Bind(wx.EVT_MENU_CLOSE, self._on_menu_close)
         self.Bind(wx.EVT_MENU_HIGHLIGHT, self._on_menu_highlight)
         self.Bind(wx.EVT_MENU, lambda _event: self._reload(), id=reconnect_id)
         self.Bind(wx.EVT_MENU, lambda _event: self._restart_webview(), id=restart_world_id)
         self.Bind(wx.EVT_MENU, lambda _event: self._focus_world(), id=focus_world_id)
-        self.Bind(wx.EVT_MENU, lambda _event: self._login_default(), id=signin_id)
+        self.Bind(wx.EVT_MENU, lambda _event: self._login_or_logout(), id=signin_id)
         self.Bind(wx.EVT_MENU, self._show_settings, id=wx.ID_PREFERENCES)
         self.Bind(wx.EVT_MENU, lambda _event: self.web.RunScript("window.dispatchEvent(new Event('chatgrid-cast-to-device'));"), id=cast_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.Hide(), id=tray_id)
@@ -366,6 +369,7 @@ class MainFrame(wx.Frame):
 
     def _on_menu_open(self, event: wx.MenuEvent) -> None:
         """Keep native menu opening visible to keyboard and screen-reader users."""
+        self.native_menu_open = True
         menu = event.GetMenu()
         if menu is not None and self.GetMenuBar() is not None:
             index = next(
@@ -377,9 +381,19 @@ class MainFrame(wx.Frame):
                 self._announce("File menu opened. Use the arrow keys to choose an action.")
         event.Skip()
 
+    def _on_menu_close(self, event: wx.MenuEvent) -> None:
+        self.native_menu_open = False
+        event.Skip()
+
     def _on_menu_highlight(self, event: wx.MenuEvent) -> None:
         """Speak the highlighted native action so NVDA can follow the menu."""
-        item = event.GetMenuItem()
+        item = None
+        menu = event.GetMenu()
+        try:
+            if menu is not None:
+                item = menu.FindItem(event.GetMenuId())
+        except (AttributeError, TypeError, ValueError):
+            item = event.GetMenuItem()
         if item is not None:
             label = item.GetItemLabelText().replace('&', '').strip()
             if label:
@@ -401,6 +415,25 @@ class MainFrame(wx.Frame):
         """Open the approved BlindSoftware browser sign-in flow."""
         self._start_browser_auth(interactive=True)
 
+    def _login_or_logout(self) -> None:
+        """Use one stable File-menu action for both signed-in states."""
+        if self.is_signed_in:
+            self.suppress_auto_browser_auth = True
+            self._run_script("document.getElementById('logoutButton')?.click();", "native-logout")
+            return
+        self._login_default()
+
+    def _set_signed_in(self, signed_in: bool) -> None:
+        """Keep the File-menu action label synchronized with the web session."""
+        self.is_signed_in = signed_in
+        label = "Sign &out\tCtrl+Shift+S" if signed_in else "Sign in to &Indiginous\tCtrl+Shift+S"
+        self.signin_menu_item.SetItemLabel(label)
+        self.signin_menu_item.SetHelp(label.replace("\t", " "))
+        if not signed_in and not self.suppress_auto_browser_auth:
+            self._schedule_automatic_browser_auth()
+        if signed_in:
+            self.suppress_auto_browser_auth = False
+
     def _start_browser_auth(self, *, interactive: bool = False) -> None:
         if self.browser_auth_flow is not None:
             if interactive:
@@ -409,10 +442,14 @@ class MainFrame(wx.Frame):
         try:
             flow = BrowserAuthFlow("https://blind.software", self.settings.grid_url)
             self.browser_auth_flow = flow
+            # Start listening before opening the browser.  Fast browsers can
+            # complete the sign-in redirect immediately; opening first leaves
+            # a race where the loopback callback arrives before HTTPServer is
+            # serving and the user is left signed out.
+            flow.start(self._finish_browser_auth, self._browser_auth_failed)
             if not webbrowser.open(flow.authorization_url, new=2):
                 raise RuntimeError("The system browser could not be opened.")
             self._announce("Finish signing in in your browser. Indiginous will return here automatically.")
-            flow.start(self._finish_browser_auth, self._browser_auth_failed)
         except Exception as error:
             LOGGER.warning("Could not start browser sign-in: %s", error)
             self.browser_auth_flow = None
@@ -451,13 +488,9 @@ class MainFrame(wx.Frame):
         except (TypeError, ValueError):
             return
         if message.get("type") == "authState":
-            self.is_signed_in = bool(message.get("signedIn"))
-            if hasattr(self, "signin_menu_item"):
-                self.signin_menu_item.Show(not self.is_signed_in)
+            self._set_signed_in(bool(message.get("signedIn")))
             if self.GetMenuBar() is not None:
                 self.GetMenuBar().Refresh()
-            if not self.is_signed_in:
-                self._schedule_automatic_browser_auth()
         elif message.get("type") == "audioDevices":
             self.audio_devices = {
                 "inputs": [(str(item.get("id", "")), str(item.get("label", ""))) for item in message.get("inputs", []) if item.get("id") is not None],
@@ -736,6 +769,9 @@ class MainFrame(wx.Frame):
         )
 
     def _on_char_hook(self, event: wx.KeyEvent) -> None:
+        if self.native_menu_open:
+            event.Skip()
+            return
         key = event.GetKeyCode()
         unicode_key = event.GetUnicodeKey()
         if ((event.ControlDown() and event.AltDown()) or (event.MetaDown() and event.AltDown())) and (

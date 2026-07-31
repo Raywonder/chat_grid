@@ -1,5 +1,5 @@
 #define MyAppName "Indiginous"
-#define MyAppVersion "0.4.16"
+#define MyAppVersion "0.4.17"
 #define MyAppPublisher "Raywonder / TappedIn"
 #define MyAppExeName "Indiginous.exe"
 

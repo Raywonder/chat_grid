@@ -51,6 +51,8 @@ DEFAULT_STATE_FILE = Path("runtime/companion.state.json")
 PUBLIC_VOICE_DIR = Path("/home/blindsoft/public_html/indiginous/voice")
 AUTO_SIT_IDLE_SECONDS = 10.0
 AUTO_SIT_RETRY_SECONDS = 60.0
+COMMAND_POLL_SECONDS = 0.10
+STATE_HEARTBEAT_SECONDS = 10.0
 AUTO_REACTION_COOLDOWN_SECONDS = 7.0
 AUTO_POSTURE_REACTION_COOLDOWN_SECONDS = 12.0
 BED_MOODS = {"cozy", "dreamy", "playful", "resting", "sleepy", "tired"}
@@ -763,8 +765,8 @@ class CompanionClient:
 
     async def _poll_commands(self, ws: Any) -> None:
         while True:
-            await asyncio.sleep(0.25)
-            if self.connected and time.monotonic() - self._last_state_write >= 30:
+            await asyncio.sleep(COMMAND_POLL_SECONDS)
+            if self.connected and time.monotonic() - self._last_state_write >= STATE_HEARTBEAT_SECONDS:
                 self._write_state(connected=True, detail="heartbeat")
             await self._maybe_auto_sit(ws)
             with self.command_file.open("r", encoding="utf-8") as handle:
@@ -781,15 +783,15 @@ class CompanionClient:
                     continue
                 await self._apply_command(ws, command)
 
-    async def _maybe_auto_sit(self, ws: Any) -> None:
+    async def _maybe_auto_sit(self, ws: Any, *, force: bool = False) -> None:
         """Settle into a nearby available seat after a short quiet interval."""
 
         now = time.monotonic()
         if (
             not self.connected
             or self.posture != "standing"
-            or now - self._last_world_activity < AUTO_SIT_IDLE_SECONDS
-            or now - self._last_auto_sit_attempt < AUTO_SIT_RETRY_SECONDS
+            or (not force and now - self._last_world_activity < AUTO_SIT_IDLE_SECONDS)
+            or (not force and now - self._last_auto_sit_attempt < AUTO_SIT_RETRY_SECONDS)
         ):
             return
         seat = _choose_auto_seat(
@@ -1028,6 +1030,27 @@ class CompanionClient:
             )
             self._last_world_activity = time.monotonic()
             await ws.send(_json_packet("update_position", x=self.x, y=self.y))
+            return
+        if action in {"stand", "sit", "posture"}:
+            requested = str(command.get("posture") or action).strip().lower()
+            if requested in {"stand", "standing"}:
+                if self.seated_item_id:
+                    self._last_world_activity = time.monotonic()
+                    await ws.send(_json_packet("item_use", itemId=self.seated_item_id))
+                return
+            if requested in {"sit", "sitting", "lie", "lying"}:
+                self._last_world_activity = time.monotonic()
+                await self._maybe_auto_sit(ws, force=True)
+                if requested in {"lie", "lying"}:
+                    self.mood = "resting"
+                return
+            return
+        if action in {"user_action", "social_action", "react"}:
+            action_id = str(command.get("actionId") or command.get("action") or "").strip().lower()
+            target_id = str(command.get("targetId") or command.get("targetUserId") or "").strip()
+            if action_id and target_id:
+                self._last_world_activity = time.monotonic()
+                await ws.send(_json_packet("user_action", actionId=action_id, targetId=target_id))
             return
         if action == "teleport":
             self.x = _clamp_position(command.get("x"), self.x, self.grid_size)

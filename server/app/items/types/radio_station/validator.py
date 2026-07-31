@@ -257,6 +257,11 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
                 switch_sound, field_name="stationSwitchSound"
             )
     next_params["stationSwitchSound"] = switch_sound
+    for sound_key in ("mediaPowerSound", "mediaVolumeSound", "mediaGuideSound", "mediaInfoSound"):
+        sound = normalize_sound_reference(param_value(sound_key, ""))
+        next_params[sound_key] = enforce_max_length(
+            sound, max_length=2048, field_name=sound_key
+        )
 
     try:
         effect_value = float(param_value("mediaEffectValue", 50))

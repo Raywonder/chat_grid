@@ -94,8 +94,15 @@ def test_activation_rearms_world_focus_after_restore_and_alt_tab():
 
 
 def test_signed_in_users_do_not_get_a_sign_in_menu_action():
-    assert 'self.signin_menu_item.Show(not self.is_signed_in)' in SOURCE
-    assert 'if not self.frame.is_signed_in:' in SOURCE
+    assert 'label = "Sign &out\\tCtrl+Shift+S" if signed_in' in SOURCE
+    assert 'def _login_or_logout(self)' in SOURCE
+    assert 'self._set_signed_in(bool(message.get("signedIn")))' in SOURCE
+
+
+def test_native_world_arrows_do_not_steal_open_menu_navigation():
+    assert "EVT_MENU_CLOSE" in SOURCE
+    assert "menu.FindItem(event.GetMenuId())" in SOURCE
+    assert "if self.native_menu_open:" in SOURCE
 
 
 def test_native_settings_includes_real_input_and_output_device_choices():

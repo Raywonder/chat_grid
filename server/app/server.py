@@ -3941,20 +3941,17 @@ class SignalingServer:
                 and item.locationId == "raywonder_house_relaxation_room"
             ):
                 continue
-            # Raywonder house radios intentionally share one linked set across
-            # rooms. Outside the house, a remote only controls the compatible
-            # radio/speaker set in the current location.
-            if not self._is_raywonder_house_location(target.locationId) and (
-                item.locationId != target.locationId
-            ):
+            # A linked media group is room-scoped by default. This keeps a
+            # living-room TV from unexpectedly taking over the kitchen or
+            # bedroom speakers; administrators can still leave devices
+            # separate by using different groups or disabling sync.
+            if item.locationId != target.locationId:
                 continue
             if require_presets and not self._radio_presets(item):
                 continue
             if linked_group:
                 if str(item.params.get("linkedMediaGroup") or "").strip() != linked_group:
                     continue
-            elif item.locationId != target.locationId:
-                continue
             targets.append(item)
         targets.sort(key=lambda item: (item.locationId, item.title.lower(), item.id))
         return targets
@@ -3973,11 +3970,11 @@ class SignalingServer:
                 continue
             if require_presets and not self._radio_presets(item):
                 continue
+            if item.locationId != target.locationId:
+                continue
             if linked_group:
                 if str(item.params.get("linkedMediaGroup") or "").strip() != linked_group:
                     continue
-            elif item.locationId != target.locationId:
-                continue
             targets.append(item)
         targets.sort(key=lambda item: (item.locationId, item.title.lower(), item.id))
         return targets
@@ -4023,11 +4020,11 @@ class SignalingServer:
         for item in self.items.values():
             if item.type != "radio_station" or item.carrierId is not None:
                 continue
+            if item.locationId != tv.locationId:
+                continue
             if linked_group:
                 if str(item.params.get("linkedMediaGroup") or "").strip() != linked_group:
                     continue
-            elif item.locationId != tv.locationId:
-                continue
             targets.append(item)
         targets.sort(key=lambda item: (item.locationId, item.title.lower(), item.id))
         return targets
@@ -4052,11 +4049,12 @@ class SignalingServer:
     ) -> int:
         """Switch competing radios off or sync speaker components to an active TV."""
 
-        if not self._is_tv_media_item(tv) or tv.params.get("enabled") is False:
+        if not self._is_tv_media_item(tv):
             return 0
+        tv_is_active = tv.params.get("enabled") is not False
         stream_url = str(tv.params.get("streamUrl") or "").strip()
         playback_url = str(tv.params.get("playbackUrl") or "").strip()
-        if not (stream_url or playback_url):
+        if tv_is_active and not (stream_url or playback_url):
             return 0
         try:
             station_index = int(tv.params.get("stationIndex", 0) or 0)
@@ -4073,7 +4071,11 @@ class SignalingServer:
         changed = 0
         for radio in self._radio_targets_for_active_tv(tv):
             previous_params = dict(radio.params)
-            if self._radio_should_sync_to_active_tv(radio):
+            if tv_is_active and (stream_url or playback_url):
+                should_sync = self._radio_should_sync_to_active_tv(radio)
+            else:
+                should_sync = False
+            if should_sync:
                 next_params = {
                     **radio.params,
                     "enabled": True,
@@ -4099,7 +4101,7 @@ class SignalingServer:
                 )
             except ValueError:
                 continue
-            if self._radio_should_sync_to_active_tv(radio):
+            if should_sync:
                 radio.params["playbackUrl"] = playback_url
                 radio.params["stationName"] = station_name[:160]
                 radio.params["nowPlaying"] = now_playing[:200]
@@ -4389,11 +4391,13 @@ class SignalingServer:
             remote, target, require_presets=False
         )
         if action == "guide":
+            await self._broadcast_media_control_sound(target, action)
             await self._send_item_result(
                 client, True, "guide", self._media_guide_message(target, tv=False), remote.id
             )
             return True
         if action == "info":
+            await self._broadcast_media_control_sound(target, action)
             station_name = str(target.params.get("stationName") or target.title).strip()
             now_playing = str(target.params.get("nowPlaying") or "").strip()
             enabled = target.params.get("enabled") is not False
@@ -4413,19 +4417,30 @@ class SignalingServer:
             changed = 0
             for item in targets:
                 presets = self._radio_presets(item)
-                if not presets:
-                    continue
+                source_presets = self._radio_presets(target)
+                station_index = self._radio_station_index(
+                    item, len(source_presets)
+                ) if source_presets else 0
+                station = (
+                    source_presets[station_index % len(source_presets)]
+                    if source_presets
+                    else {
+                        "title": str(item.params.get("stationName") or item.title),
+                        "streamUrl": str(item.params.get("streamUrl") or ""),
+                    }
+                )
                 try:
                     await self._apply_radio_station_state(
                         item,
-                        self._radio_station_index(item, len(presets)),
-                        presets[self._radio_station_index(item, len(presets))],
+                        station_index,
+                        station,
                         client,
                         enabled=next_enabled,
                     )
                 except ValueError:
                     continue
                 changed += 1
+            await self._broadcast_media_control_sound(target, action)
             await self._send_item_result(
                 client,
                 changed > 0,
@@ -4525,6 +4540,7 @@ class SignalingServer:
             volume_text = f"to volume {changed_volumes[0]}"
         else:
             volume_text = f"by {step:+d}, range {min(changed_volumes)} to {max(changed_volumes)}"
+        await self._broadcast_media_control_sound(target, action)
         await self._send_item_result(
             client,
             True,
@@ -4544,6 +4560,54 @@ class SignalingServer:
             or ""
         ).strip()
         return explicit or "sounds/device-buttons/tv_channel_switch.mp3"
+
+    @staticmethod
+    def _media_control_sound(item: WorldItem, action: str) -> str:
+        """Return the distinct cue assigned to one media device action."""
+
+        key_by_action = {
+            "power_toggle": "mediaPowerSound",
+            "volume_up": "mediaVolumeSound",
+            "volume_down": "mediaVolumeSound",
+            "guide": "mediaGuideSound",
+            "info": "mediaInfoSound",
+        }
+        key = key_by_action.get(action, "")
+        explicit = str(item.params.get(key) or "").strip() if key else ""
+        if explicit:
+            return explicit
+        if item.type == "radio_station":
+            return {
+                "mediaPowerSound": "sounds/device-buttons/radio_power.mp3",
+                "mediaVolumeSound": "sounds/device-buttons/radio_tuner_step.mp3",
+                "mediaGuideSound": "sounds/device-buttons/preset_button.mp3",
+                "mediaInfoSound": "sounds/device-buttons/preset_button.mp3",
+            }.get(key, "")
+        if SignalingServer._is_tv_media_item(item):
+            return {
+                "mediaPowerSound": "sounds/device-buttons/hardware_toggle.mp3",
+                "mediaVolumeSound": "sounds/device-buttons/soft_plastic_press.mp3",
+                "mediaGuideSound": "sounds/device-buttons/preset_button.mp3",
+                "mediaInfoSound": "sounds/device-buttons/preset_button.mp3",
+            }.get(key, "")
+        return ""
+
+    async def _broadcast_media_control_sound(self, item: WorldItem, action: str) -> None:
+        sound = self._media_control_sound(item, action)
+        if not sound:
+            return
+        sound_x, sound_y = self._get_item_sound_source_position(item)
+        await self._broadcast_location(
+            item.locationId,
+            ItemUseSoundPacket(
+                type="item_use_sound",
+                itemId=item.id,
+                sound=sound,
+                x=sound_x,
+                y=sound_y,
+                range=self._get_item_emit_range(item),
+            ),
+        )
 
     async def _broadcast_tv_channel_switch_sound(self, item: WorldItem, sound: str) -> None:
         """Play a TV channel-change cue from the TV tile for nearby listeners."""
@@ -4614,11 +4678,13 @@ class SignalingServer:
 
         targets = self._tv_targets_for_remote(remote, target, require_presets=False)
         if action == "guide":
+            await self._broadcast_media_control_sound(target, action)
             await self._send_item_result(
                 client, True, "guide", self._media_guide_message(target, tv=True), remote.id
             )
             return True
         if action == "info":
+            await self._broadcast_media_control_sound(target, action)
             channel_name = str(target.params.get("stationName") or target.title).strip()
             now_playing = str(target.params.get("nowPlaying") or "").strip()
             enabled = target.params.get("enabled") is not False
@@ -4637,26 +4703,36 @@ class SignalingServer:
             next_enabled = target.params.get("enabled") is False
             changed = 0
             play_started_at = self.item_service.now_ms()
+            source_presets = self._radio_presets(target)
             for item in targets:
-                presets = self._radio_presets(item)
-                if not presets:
-                    continue
+                station_index = self._radio_station_index(
+                    item, len(source_presets)
+                ) if source_presets else 0
+                station = (
+                    source_presets[station_index % len(source_presets)]
+                    if source_presets
+                    else {
+                        "title": str(item.params.get("stationName") or item.title),
+                        "streamUrl": str(item.params.get("streamUrl") or ""),
+                    }
+                )
                 try:
                     await self._apply_radio_station_state(
                         item,
-                        self._radio_station_index(item, len(presets)),
-                        presets[self._radio_station_index(item, len(presets))],
+                        station_index,
+                        station,
                         client,
                         enabled=next_enabled,
                         play_started_at=play_started_at if next_enabled else None,
                     )
                 except ValueError:
                     continue
-                if next_enabled:
-                    await self._reconcile_radios_for_active_tv(
-                        item, client, play_started_at=play_started_at
-                    )
                 changed += 1
+            for item in targets:
+                await self._reconcile_radios_for_active_tv(
+                    item, client, play_started_at=play_started_at
+                )
+            await self._broadcast_media_control_sound(target, action)
             await self._send_item_result(
                 client,
                 changed > 0,
@@ -4760,6 +4836,7 @@ class SignalingServer:
             volume_text = f"to volume {changed_volumes[0]}"
         else:
             volume_text = f"by {step:+d}, range {min(changed_volumes)} to {max(changed_volumes)}"
+        await self._broadcast_media_control_sound(target, action)
         await self._send_item_result(
             client,
             True,
@@ -8106,7 +8183,7 @@ class SignalingServer:
                 client, str(SOCIAL_ACTION_ALIASES[command]), remainder.strip()
             )
             return True
-        if command in {"ecrypto", "crypto", "wallet"}:
+        if command in {"ecrypto", "ecripto", "ecr", "ecr*", "crypto", "wallet"}:
             await self._send_ecrypto_command_result(client, remainder.strip())
             return True
         if command in {"clothes", "wear", "remove", "undress"}:
@@ -8434,12 +8511,15 @@ class SignalingServer:
         """Return concise command help for eCrypto bank use."""
 
         return (
-            "eCrypto commands: /ecrypto balance, /ecrypto wallets, "
-            "/ecrypto connect <test|real> <chain> <address> [label], "
-            "/ecrypto connect-source <test|real> <chain> <address> <source> [label], "
-            "/ecrypto faucet [amount] for test-chain funds, and "
-            "/ecrypto transfer <username> <amount> [memo] for test-chain transfers. "
-            "Admins and approved agents can use /ecrypto inventory for safe per-user account counts. "
+            "eCrypto (pronounced ee crypto) commands: /ecrypto, /ecr, or /ecripto balance; "
+            "you can also use the eCrypto menu in the Commands menu. "
+            "Available commands are balance, wallets, "
+            "connect <test|real> <chain> <address> [label], "
+            "connect-source <test|real> <chain> <address> <source> [label], "
+            "faucet [amount] for test-chain funds, and "
+            "transfer <username> <amount> [memo] for test-chain transfers. "
+            "The /ecr* spelling is accepted as a compatibility alias. "
+            "Admins and approved agents can use inventory for safe per-user account counts. "
             "Real-chain wallets are connection records only until an approved chain provider is wired."
         )
 
@@ -8455,7 +8535,7 @@ class SignalingServer:
             return f"{bank_name}. Log in to check and use your eCrypto account."
         target_location = str(item.params.get("targetLocation") or "").strip()
         enter_note = " Secondary use enters the bank lobby." if target_location else ""
-        return f"{bank_name}. {self._ecrypto_account_status(client)} Use /ecrypto help for wallet and test-chain actions.{enter_note}"
+        return f"{bank_name}. {self._ecrypto_account_status(client)} Use the eCrypto menu or /ecrypto help for wallet and test-chain actions.{enter_note}"
 
     def _ecrypto_bank_help_text(
         self, client: ClientConnection, item: WorldItem
@@ -8499,7 +8579,7 @@ class SignalingServer:
             return "Log in to use eCrypto bank features."
         wallets = self.auth_service.list_ecrypto_wallets(client.user_id)
         if not wallets:
-            return "No wallets connected. Use /ecrypto connect <test|real> <chain> <address> [label]."
+            return "No wallets connected. Use the eCrypto menu or /ecrypto connect <test|real> <chain> <address> [label]."
         parts = []
         for wallet in wallets[:10]:
             label = f" {wallet.label}" if wallet.label else ""
@@ -9519,7 +9599,31 @@ class SignalingServer:
             catalog_path = Path(__file__).resolve().parents[1] / "config" / "ambience_catalog.json"
             try:
                 catalog_data = json.loads(catalog_path.read_text(encoding="utf-8"))
-                catalog_sounds = [AdminAmbienceSoundSummary.model_validate(entry) for entry in catalog_data["sounds"]]
+                catalog_entries = list(catalog_data["sounds"])
+                # Keep the picker useful for widgets as well as location ambience:
+                # expose every packaged audio file under the public sound tree.
+                sounds_root = Path(__file__).resolve().parents[2] / "client" / "public" / "sounds"
+                known_urls = {str(entry.get("url", "")) for entry in catalog_entries}
+                audio_suffixes = {".ogg", ".mp3", ".wav", ".m4a", ".flac", ".aac", ".opus"}
+                for sound_path in sorted(sounds_root.rglob("*")):
+                    if not sound_path.is_file() or sound_path.suffix.lower() not in audio_suffixes:
+                        continue
+                    relative_url = sound_path.relative_to(sounds_root.parent).as_posix()
+                    if relative_url in known_urls:
+                        continue
+                    relative_sound_path = sound_path.relative_to(sounds_root).as_posix()
+                    label = sound_path.stem.replace("_", " ").replace("-", " ").strip().title()
+                    category = sound_path.parent.relative_to(sounds_root).as_posix() or "Sound library"
+                    inferred_kind = "loop" if any(token in sound_path.stem.lower() for token in ("loop", "ambience", "ambient", "room", "hum")) else "one_shot"
+                    digest = hashlib.sha1(relative_url.encode("utf-8")).hexdigest()[:16]
+                    catalog_entries.append({
+                        "id": f"packaged-{digest}", "label": label, "category": category,
+                        "url": relative_url, "sourceFilename": relative_sound_path,
+                        "durationSeconds": 0.0, "loopStartSeconds": 0.0, "loopEndSeconds": 0.0,
+                        "seamCrossfadeSeconds": 0.0, "kind": inferred_kind,
+                    })
+                    known_urls.add(relative_url)
+                catalog_sounds = [AdminAmbienceSoundSummary.model_validate(entry) for entry in catalog_entries]
             except (OSError, KeyError, TypeError, ValueError) as exc:
                 LOGGER.error("Unable to load ambience catalog: %s", exc)
                 await deny("location_ambience_set", "The ambience catalog could not be loaded.")
@@ -11238,11 +11342,6 @@ class SignalingServer:
             return
 
         if isinstance(packet, ItemUsePacket):
-            if not self._client_has_permission(client, "item.use"):
-                await self._send_item_result(
-                    client, False, "use", "Not authorized to use items."
-                )
-                return
             use_item = self.items.get(packet.itemId)
             if not use_item:
                 await self._send_item_result(client, False, "use", "Item not found.")
@@ -11250,6 +11349,15 @@ class SignalingServer:
             if use_item.carrierId not in (None, client.id):
                 await self._send_item_result(
                     client, False, "use", "Item is not available.", use_item.id
+                )
+                return
+            guarded_door = (
+                use_item.type == "service_link"
+                and self._linked_house_alarm(use_item) is not None
+            )
+            if not self._client_has_permission(client, "item.use") and not guarded_door:
+                await self._send_item_result(
+                    client, False, "use", "Not authorized to use items."
                 )
                 return
             seatable_use = use_item.carrierId is None and self._is_seatable_item(use_item)

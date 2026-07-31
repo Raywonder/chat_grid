@@ -89,6 +89,23 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
         raise ValueError("emitLoopDelay must be between 0 and 300.")
     next_params["emitLoopDelay"] = round(emit_loop_delay, 1)
 
+    emit_loop_mode = str(
+        next_params.get("emitLoopMode", item.params.get("emitLoopMode", "repeat"))
+    ).strip().lower()
+    if emit_loop_mode not in {"repeat", "shuffle"}:
+        raise ValueError("emitLoopMode must be repeat or shuffle.")
+    next_params["emitLoopMode"] = emit_loop_mode
+
+    try:
+        emit_crossfade = float(
+            next_params.get("emitCrossfade", item.params.get("emitCrossfade", 0))
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("emitCrossfade must be a number between 0 and 10.") from exc
+    if not (0 <= emit_crossfade <= 10):
+        raise ValueError("emitCrossfade must be between 0 and 10.")
+    next_params["emitCrossfade"] = round(emit_crossfade, 1)
+
     emit_effect = (
         str(next_params.get("emitEffect", item.params.get("emitEffect", "off")))
         .strip()
@@ -136,17 +153,21 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
         raise ValueError("ambiencePriority must be between 0 and 100.")
     next_params["ambiencePriority"] = ambience_priority
 
+    def normalize_sound_list(raw: object) -> str:
+        refs = [part.strip() for part in str(raw or "").split("||") if part.strip()]
+        if len(refs) > 6:
+            raise ValueError("A widget can use at most six loop sounds.")
+        if any(part.lower().startswith(("data:", "blob:")) for part in refs):
+            raise ValueError("Widget sounds must use an approved sounds path or an http/https URL.")
+        return "||".join(normalize_sound_reference(part) for part in refs)
+
     next_params["useSound"] = enforce_max_length(
-        normalize_sound_reference(
-            next_params.get("useSound", item.params.get("useSound", ""))
-        ),
+        normalize_sound_list(next_params.get("useSound", item.params.get("useSound", ""))),
         max_length=2048,
         field_name="useSound",
     )
     next_params["emitSound"] = enforce_max_length(
-        normalize_sound_reference(
-            next_params.get("emitSound", item.params.get("emitSound", ""))
-        ),
+        normalize_sound_list(next_params.get("emitSound", item.params.get("emitSound", ""))),
         max_length=2048,
         field_name="emitSound",
     )
