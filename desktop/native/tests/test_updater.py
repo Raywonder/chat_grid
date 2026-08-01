@@ -15,6 +15,15 @@ def test_windows_handoff_forces_current_install_directory() -> None:
     assert "install-update.log" in source
 
 
+def test_macos_handoff_replaces_the_running_bundle_and_validates_gatekeeper() -> None:
+    source = inspect.getsource(updater_module.UpdateService.install_after_exit)
+    download_source = inspect.getsource(updater_module.UpdateService.download)
+    assert "running_bundle" in source
+    assert "running_bundle.parent" in source
+    assert "codesign" in download_source
+    assert "spctl" in download_source
+
+
 def test_tcast_nested_platform_manifest() -> None:
     checksum = hashlib.sha256(b"installer").hexdigest()
     platform = "macos" if sys.platform == "darwin" else "windows"

@@ -93,6 +93,7 @@ def check_source(args: argparse.Namespace) -> int:
     if client_revision != args.revision:
         mismatches.append(f"web client revision: expected {args.revision}, found {client_revision}")
 
+    windows_hashes: set[str] = set()
     for manifest_path in (
         repo / "desktop" / "wxpython" / "updates" / "latest-windows.json",
         repo / "desktop" / "native" / "updates" / "latest-windows.json",
@@ -101,6 +102,8 @@ def check_source(args: argparse.Namespace) -> int:
         platform = manifest.get("platforms", {}).get("windows", {})
         if not str(platform.get("sha256", "")).strip():
             mismatches.append(f"Windows update manifest has no SHA-256: {manifest_path}")
+        else:
+            windows_hashes.add(str(platform.get("sha256", "")).strip().lower())
         if str(manifest.get("version", "")).strip() != args.version:
             mismatches.append(f"Windows update manifest version mismatch: {manifest_path}")
         if str(manifest.get("revision", "")).strip() != args.revision:
@@ -108,8 +111,23 @@ def check_source(args: argparse.Namespace) -> int:
         update_url = str(platform.get("url", "")).strip()
         if "indiginous" in urlparse(update_url).path.lower():
             mismatches.append(f"Windows update URL must be app-name neutral: {manifest_path}")
-        if str(platform.get("fileName", "")).strip() != "Indiginous_Setup.exe":
-            mismatches.append(f"Windows update filename must be Indiginous_Setup.exe: {manifest_path}")
+        if str(platform.get("fileName", "")).strip() != "Indiginious_Setup.exe":
+            mismatches.append(f"Windows update filename must be Indiginious_Setup.exe: {manifest_path}")
+    if len(windows_hashes) != 1:
+        mismatches.append("Windows update manifests must contain the same artifact SHA-256")
+
+    mac_manifest_path = repo / "desktop" / "native" / "updates" / "latest-macos.json"
+    mac_manifest = _read_json(mac_manifest_path)
+    mac_platform = mac_manifest.get("platforms", {}).get("macos", {})
+    if str(mac_manifest.get("version", "")).strip() != args.version:
+        mismatches.append(f"macOS update manifest version mismatch: {mac_manifest_path}")
+    if str(mac_manifest.get("revision", "")).strip() != args.revision:
+        mismatches.append(f"macOS update manifest revision mismatch: {mac_manifest_path}")
+    if str(mac_platform.get("fileName", "")).strip() != "Indiginious-macOS.zip":
+        mismatches.append("macOS updater feed must use the stable Indiginious-macOS.zip package")
+    if not str(mac_platform.get("sha256", "")).strip():
+        mismatches.append(f"macOS update manifest has no SHA-256: {mac_manifest_path}")
+
     if mismatches:
         raise SystemExit("source preflight failed:\n- " + "\n- ".join(mismatches))
     print(f"source preflight ok: {args.framework} {args.version} {args.revision} at {repo}")

@@ -123,13 +123,24 @@ class UpdateService:
         if digest.hexdigest().lower() != manifest.sha256:
             temporary.unlink(missing_ok=True)
             raise ValueError("Downloaded installer did not match the published SHA-256 checksum.")
+        if sys.platform == "darwin":
+            with tempfile.TemporaryDirectory(prefix="indiginious-update-verify-") as directory:
+                extracted = Path(directory)
+                subprocess.run(["/usr/bin/ditto", "-x", "-k", str(temporary), str(extracted)], check=True)
+                app = extracted / "Indiginious.app"
+                if not app.is_dir():
+                    raise ValueError("Downloaded update does not contain Indiginious.app.")
+                subprocess.run(["/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app)], check=True)
+                subprocess.run(["/usr/sbin/spctl", "--assess", "--type", "execute", "--verbose=2", str(app)], check=True)
         temporary.replace(target)
         return target
 
     def install_after_exit(self, installer: Path, manifest: UpdateManifest) -> None:
         """Launch a hidden tCast-style helper that waits, installs, and relaunches."""
         if sys.platform == "darwin":
-            destination = Path.home() / "Applications"
+            executable = Path(sys.executable).resolve()
+            running_bundle = next((path for path in executable.parents if path.suffix == ".app"), None)
+            destination = running_bundle.parent if running_bundle else Path.home() / "Applications"
             destination.mkdir(parents=True, exist_ok=True)
             subprocess.Popen(
                 [

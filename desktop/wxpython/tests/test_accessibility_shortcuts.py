@@ -17,6 +17,8 @@ def test_update_install_has_visible_countdown_and_cancel_path():
     assert "self.remaining -= 1" in SOURCE
     assert '"Cancel update"' in SOURCE
     assert "service.install_after_exit(installer, manifest)" in SOURCE
+    assert "seconds: int = 30" in SOURCE
+    assert '"Install now"' in SOURCE
     assert "Update cancelled. Indiginous will keep running." in SOURCE
     assert "def _quit_without_update" in SOURCE
     assert "No verified update available during quit" in SOURCE

@@ -88,6 +88,9 @@ class SettingsDialog(wx.Dialog):
         self.connect = wx.CheckBox(panel, label="Connect automatically after sign-in")
         self.connect.SetValue(settings.auto_connect)
         layout.Add(self.connect, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+        self.updates = wx.CheckBox(panel, label="Check for and install verified Indiginious updates automatically")
+        self.updates.SetValue(settings.auto_update)
+        layout.Add(self.updates, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.tray = wx.CheckBox(panel, label="Keep me signed in and running in the background when I close the window")
         self.tray.SetValue(settings.keep_in_tray)
         layout.Add(self.tray, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
@@ -175,6 +178,7 @@ class SettingsDialog(wx.Dialog):
         self.settings.start_with_windows = self.startup.GetValue()
         self.settings.start_minimized = self.minimized.GetValue()
         self.settings.auto_connect = self.connect.GetValue()
+        self.settings.auto_update = self.updates.GetValue()
         self.settings.keep_in_tray = self.tray.GetValue()
         self.settings.spatial_audio = self.spatial_audio.GetValue()
         self.settings.audio_output_mode = "mono" if self.output_mode.GetSelection() == 1 else "stereo"
@@ -189,7 +193,7 @@ class SettingsDialog(wx.Dialog):
 class UpdateInstallCountdown(wx.Dialog):
     """Give the user a visible, cancellable pause before update installation."""
 
-    def __init__(self, parent: wx.Window, version: str, seconds: int = 5) -> None:
+    def __init__(self, parent: wx.Window, version: str, seconds: int = 30) -> None:
         super().__init__(parent, title="Indiginous update ready")
         self.remaining = max(1, seconds)
         panel = wx.Panel(self)
@@ -197,8 +201,12 @@ class UpdateInstallCountdown(wx.Dialog):
         self.message = wx.StaticText(panel, label="")
         self.message.SetName("Update installation countdown")
         layout.Add(self.message, 0, wx.ALL, 12)
+        buttons = wx.BoxSizer(wx.HORIZONTAL)
+        install = wx.Button(panel, wx.ID_OK, "Install now")
         cancel = wx.Button(panel, wx.ID_CANCEL, "Cancel update")
-        layout.Add(cancel, 0, wx.ALIGN_RIGHT | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+        buttons.Add(install, 0, wx.RIGHT, 8)
+        buttons.Add(cancel, 0)
+        layout.Add(buttons, 0, wx.ALIGN_RIGHT | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
         panel.SetSizer(layout)
         outer = wx.BoxSizer(wx.VERTICAL)
         outer.Add(panel, 1, wx.EXPAND)
@@ -208,6 +216,7 @@ class UpdateInstallCountdown(wx.Dialog):
         self.Bind(wx.EVT_TIMER, self._tick, self.timer)
         self.Bind(wx.EVT_CHAR_HOOK, self._on_key)
         cancel.SetFocus()
+        install.SetDefault()
         self.timer.Start(1000)
 
     def _tick(self, _event: wx.TimerEvent) -> None:
@@ -306,7 +315,8 @@ class MainFrame(wx.Frame):
             self.Show()
         if sys.platform == "win32":
             wx.CallAfter(self._set_world_hotkeys_active, True)
-        wx.CallLater(5000, self._check_updates_background)
+        if self.settings.auto_update:
+            wx.CallLater(5000, self._check_updates_background)
 
     def _build_menu(self) -> None:
         menu_bar = wx.MenuBar()
@@ -332,8 +342,11 @@ class MainFrame(wx.Frame):
         file_menu.Append(wx.ID_EXIT, "E&xit\tAlt+F4")
         menu_bar.Append(file_menu, "&File")
         help_menu = wx.Menu()
+        updates_id = wx.NewIdRef()
         website_id = wx.NewIdRef()
         blindsoftware_id = wx.NewIdRef()
+        help_menu.Append(updates_id, "Check for &updates")
+        help_menu.AppendSeparator()
         help_menu.Append(website_id, "Open Indiginous &website")
         help_menu.Append(blindsoftware_id, "Open &blind.software")
         menu_bar.Append(help_menu, "&Help")
@@ -351,6 +364,7 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, lambda _event: self.web.RunScript("window.dispatchEvent(new Event('chatgrid-cast-to-device'));"), id=self.cast_device_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.exit_application(), id=wx.ID_EXIT)
         self.Bind(wx.EVT_MENU, self._show_about, id=wx.ID_ABOUT)
+        self.Bind(wx.EVT_MENU, lambda _event: self._check_updates_background(interactive=True), id=updates_id)
         self.Bind(wx.EVT_MENU, lambda _event: webbrowser.open("https://blind.software/indiginous/", new=2), id=website_id)
         self.Bind(wx.EVT_MENU, lambda _event: webbrowser.open("https://blind.software/", new=2), id=blindsoftware_id)
 
@@ -389,7 +403,16 @@ class MainFrame(wx.Frame):
 
     def _announce(self, text: str, *, speak: bool = False) -> None:
         self.SetStatusText(text)
-        if speak:
+        try:
+            status = self.GetStatusBar()
+            if status is not None:
+                status.SetName(text)
+                wx.Accessible.NotifyEvent(
+                    wx.ACC_EVENT_OBJECT_NAMECHANGE, status, wx.OBJID_CLIENT, wx.CHILDID_SELF
+                )
+        except (AttributeError, RuntimeError, TypeError):
+            LOGGER.debug("Native accessibility announcement was unavailable", exc_info=True)
+        if speak or text.startswith(("Indiginious is up to date", "Update check failed")):
             self.screen_reader.speak(text, interrupt=True)
 
     def _announce_menu(self, text: str) -> None:
@@ -769,6 +792,9 @@ class MainFrame(wx.Frame):
                         wx.CallAfter(self._announce, "Indiginous is up to date.")
                     return
                 if not interactive and service.is_dismissed(manifest):
+                    return
+                if not self.settings.auto_update and not interactive:
+                    wx.CallAfter(self._announce, f"Indiginious {manifest.version} is available.", speak=True)
                     return
                 installer = service.download(manifest)
                 wx.CallAfter(self._prepare_update_install, service, installer, manifest)

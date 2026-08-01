@@ -3,7 +3,7 @@ set -eu
 cd "$(dirname "$0")/../.."
 PYTHON_BIN=${PYTHON_BIN:-python3}
 APP_NAME=${APP_NAME:-Indiginous}
-VERSION=${VERSION:-0.4.10}
+VERSION=${VERSION:-0.4.18}
 # Use the verified certificate fingerprints because this login keychain has
 # duplicate display names. These are public certificate identifiers, never
 # private Apple credentials or keychain secrets.

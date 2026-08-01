@@ -1,11 +1,11 @@
 {
-  "version": "0.4.17",
+  "version": "0.4.18",
   "revision": "R540",
-  "releaseNotes": "Indiginous Windows 0.4.17 consolidates the accessible controls, room-scoped media remotes, gamepad support, and duplicate-announcement repair in the current R540 web runtime.",
+  "releaseNotes": "Indiginious Windows 0.4.18 includes the complete R540 client, reliable accessible update announcements, and a longer cancellable verified-update prompt.",
   "platforms": {
     "windows": {
       "url": "https://blind.software/downloads/public/7Kp3mN8vQ2xL5rT9cW6yH1/windows",
-      "fileName": "Indiginous_Setup.exe",
+      "fileName": "Indiginious_Setup.exe",
       "sha256": "4b59ba02e429cdadcb77295c030fc56ff96a4abc4117352ff46b824f2de348dc",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }

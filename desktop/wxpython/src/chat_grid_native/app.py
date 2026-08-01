@@ -224,7 +224,7 @@ class SettingsDialog(wx.Dialog):
 class UpdateInstallCountdown(wx.Dialog):
     """Give the user a visible, cancellable pause before update installation."""
 
-    def __init__(self, parent: wx.Window, version: str, seconds: int = 5) -> None:
+    def __init__(self, parent: wx.Window, version: str, seconds: int = 30) -> None:
         super().__init__(parent, title="Indiginous update ready")
         self.remaining = max(1, seconds)
         panel = wx.Panel(self)
@@ -232,8 +232,12 @@ class UpdateInstallCountdown(wx.Dialog):
         self.message = wx.StaticText(panel, label="")
         self.message.SetName("Update installation countdown")
         layout.Add(self.message, 0, wx.ALL, 12)
+        buttons = wx.BoxSizer(wx.HORIZONTAL)
+        install = wx.Button(panel, wx.ID_OK, "Install now")
         cancel = wx.Button(panel, wx.ID_CANCEL, "Cancel update")
-        layout.Add(cancel, 0, wx.ALIGN_RIGHT | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
+        buttons.Add(install, 0, wx.RIGHT, 8)
+        buttons.Add(cancel, 0)
+        layout.Add(buttons, 0, wx.ALIGN_RIGHT | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
         panel.SetSizer(layout)
         outer = wx.BoxSizer(wx.VERTICAL)
         outer.Add(panel, 1, wx.EXPAND)
@@ -243,6 +247,7 @@ class UpdateInstallCountdown(wx.Dialog):
         self.Bind(wx.EVT_TIMER, self._tick, self.timer)
         self.Bind(wx.EVT_CHAR_HOOK, self._on_key)
         cancel.SetFocus()
+        install.SetDefault()
         self.timer.Start(1000)
 
     def _tick(self, _event: wx.TimerEvent) -> None:
@@ -542,6 +547,13 @@ class MainFrame(wx.Frame):
     def _announce(self, text: str) -> None:
         self.status.SetLabel(text)
         self.SetStatusText(text)
+        try:
+            self.status.SetName(text)
+            wx.Accessible.NotifyEvent(
+                wx.ACC_EVENT_OBJECT_NAMECHANGE, self.status, wx.OBJID_CLIENT, wx.CHILDID_SELF
+            )
+        except (AttributeError, RuntimeError, TypeError):
+            LOGGER.debug("Native accessibility announcement was unavailable", exc_info=True)
 
     def _run_script(self, script: str, label: str) -> tuple[bool, str] | None:
         """Run renderer JavaScript without surfacing an opaque native error dialog."""
