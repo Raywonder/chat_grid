@@ -7,7 +7,8 @@ SOURCE = (Path(__file__).parents[1] / "src" / "chat_grid_native" / "app.py").rea
 def test_browser_callback_always_continues_to_connect() -> None:
     assert "self.pending_external_auth = False" in SOURCE
     assert "self.pending_external_auth = True" in SOURCE
-    assert "if self.pending_external_auth or self.settings.auto_connect:" in SOURCE
+    assert "if self.pending_external_auth:" in SOURCE
+    assert "self.settings.auto_connect" not in SOURCE[SOURCE.index("def _on_loaded"):SOURCE.index("def _focus_world")]
     assert "const button = document.getElementById('connectButton'); if (button) button.click();" in SOURCE
 
 

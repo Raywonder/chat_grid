@@ -1,7 +1,7 @@
 {
   "version": "0.4.18",
-  "revision": "R540",
-  "releaseNotes": "Indiginious macOS 0.4.18 includes the complete R540 client and a signed, Gatekeeper-validated updater that replaces the running app bundle.",
+  "revision": "R541",
+  "releaseNotes": "Indiginious macOS 0.4.18 includes automatic saved-session sign-in, deterministic in-app sign-in announcements, and a signed, Gatekeeper-validated updater that replaces the running app bundle.",
   "platforms": {
     "macos": {
       "url": "https://blind.software/downloads/public/4Lm9sR2vX7qT5nK8dP1hG6/macos-zip",

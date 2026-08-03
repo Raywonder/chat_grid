@@ -664,7 +664,10 @@ class MainFrame(wx.Frame):
         except (TypeError, ValueError):
             return
         if message.get("type") == "authState":
-            self._set_signed_in(bool(message.get("signedIn")))
+            signed_in = bool(message.get("signedIn"))
+            self._set_signed_in(signed_in)
+            if isinstance(message.get("message"), str) and message["message"].strip():
+                self._announce(message["message"].strip(), speak=True)
             return
         if message.get("type") != "speak" or not isinstance(message.get("text"), str):
             return

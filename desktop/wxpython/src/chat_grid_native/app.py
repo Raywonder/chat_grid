@@ -493,7 +493,10 @@ class MainFrame(wx.Frame):
         except (TypeError, ValueError):
             return
         if message.get("type") == "authState":
-            self._set_signed_in(bool(message.get("signedIn")))
+            signed_in = bool(message.get("signedIn"))
+            self._set_signed_in(signed_in)
+            if isinstance(message.get("message"), str) and message["message"].strip():
+                self._announce(message["message"].strip())
             if self.GetMenuBar() is not None:
                 self.GetMenuBar().Refresh()
         elif message.get("type") == "audioDevices":
@@ -589,7 +592,11 @@ class MainFrame(wx.Frame):
             "return 'ok';"
             "})()"
             "", "on-loaded-shell")
-        if self.pending_external_auth or self.settings.auto_connect:
+        # The shared client owns saved-cookie auto-resume. Native should only
+        # submit the one-use browser assertion; a second Connect click races
+        # cookie restoration and can leave the renderer displaying signed-in
+        # without completing world admission.
+        if self.pending_external_auth:
             self.pending_external_auth = False
             self._run_script("setTimeout(() => { const button = document.getElementById('connectButton'); if (button) button.click(); }, 500);", "on-loaded-connect")
         # Native WebView focus alone does not activate the web world's

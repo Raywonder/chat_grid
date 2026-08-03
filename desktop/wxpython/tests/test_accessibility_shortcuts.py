@@ -98,7 +98,8 @@ def test_activation_rearms_world_focus_after_restore_and_alt_tab():
 def test_signed_in_users_do_not_get_a_sign_in_menu_action():
     assert 'label = "Sign &out\\tCtrl+Shift+S" if signed_in' in SOURCE
     assert 'def _login_or_logout(self)' in SOURCE
-    assert 'self._set_signed_in(bool(message.get("signedIn")))' in SOURCE
+    assert 'signed_in = bool(message.get("signedIn"))' in SOURCE
+    assert 'self._announce(message["message"].strip())' in SOURCE
 
 
 def test_native_world_arrows_do_not_steal_open_menu_navigation():

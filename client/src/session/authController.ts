@@ -36,6 +36,7 @@ type AuthControllerDeps = {
   setConnectionStatus: (message: string) => void;
   updateStatus: (message: string) => void;
   pushChatMessage: (message: string) => void;
+  notifyNativeAuthState?: (signedIn: boolean, message: string) => void;
   onServerAdminMenuActions: (actions: Array<{ id: string; label: string; tooltip?: string }> | null | undefined) => void;
 };
 
@@ -286,6 +287,7 @@ export function createAuthController(deps: AuthControllerDeps): {
       applyAuthPermissions('user', []);
       deps.onServerAdminMenuActions([]);
       deps.setConnectionStatus(message.message);
+      deps.notifyNativeAuthState?.(false, message.message);
       deps.setConnecting(false);
       updateConnectAvailability();
       deps.disconnect();
@@ -308,7 +310,9 @@ export function createAuthController(deps: AuthControllerDeps): {
     deps.onServerAdminMenuActions(message.adminMenuActions);
     // Keep native File-menu authentication state aligned with successful auth.
     updateConnectAvailability();
-    deps.setConnectionStatus('Authenticated. Joining world...');
+    const authStatus = 'Signed in. Joining the Indiginous world...';
+    deps.setConnectionStatus(authStatus);
+    deps.notifyNativeAuthState?.(true, authStatus);
   }
 
   function handleAuthPermissions(message: Extract<IncomingMessage, { type: 'auth_permissions' }>): void {
@@ -344,6 +348,7 @@ export function createAuthController(deps: AuthControllerDeps): {
       deps.signalingSend({ type: 'auth_logout' });
       deps.disconnect();
     }
+    deps.notifyNativeAuthState?.(false, 'Signed out of Indiginous.');
     deps.updateStatus('Logged out.');
     updateConnectAvailability();
   }

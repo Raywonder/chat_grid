@@ -1239,6 +1239,14 @@ const authController = createAuthController({
   setConnectionStatus,
   updateStatus,
   pushChatMessage,
+  notifyNativeAuthState: (signedIn, message) => {
+    const nativeWindow = window as Window & {
+      chrome?: { webview?: { postMessage?: (value: string) => void } };
+    };
+    nativeWindow.chrome?.webview?.postMessage?.(
+      JSON.stringify({ type: 'authState', signedIn, message }),
+    );
+  },
   shouldAnnounceRadioAction: () => shouldAnnounceRadioStatus(),
   onServerAdminMenuActions: (actions) => {
     adminController.setServerAdminMenuActions(actions);
@@ -4239,6 +4247,12 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
     if (connectedAnnouncement) {
       setConnectionStatus(connectedAnnouncement);
       pushChatMessage(connectedAnnouncement);
+      const nativeWindow = window as Window & {
+        chrome?: { webview?: { postMessage?: (value: string) => void } };
+      };
+      nativeWindow.chrome?.webview?.postMessage?.(
+        JSON.stringify({ type: 'authState', signedIn: true, message: connectedAnnouncement }),
+      );
       connectedAnnouncement = null;
     }
     await setupMediaAfterAuth();
@@ -6237,15 +6251,13 @@ setConnectionStatus(
 if (STARTED_FROM_VERSION_RELOAD) {
   clearVersionReloadMarker();
 }
-if (
-  STARTED_FROM_VERSION_RELOAD
-  || isConnectionRecoveryReload()
-  || initialExternalAuthAssertion
-  || initialAuthUsername.trim().length > 0
-) {
+if (STARTED_FROM_VERSION_RELOAD || isConnectionRecoveryReload() || initialExternalAuthAssertion) {
   window.setTimeout(() => {
     void connect();
   }, 0);
 } else {
+  // Always validate the HttpOnly session cookie before connecting. A saved
+  // username is only a display hint; treating it as an auth-ready signal can
+  // start a connection that says "signed in" but has no usable auth packet.
   void autoConnectFromSavedSessionCookie();
 }
