@@ -45,7 +45,6 @@ class IndiginousTrayIcon(wx.adv.TaskBarIcon):
         """Build the tray menu each time Windows requests it."""
         menu = wx.Menu()
         open_id = wx.NewIdRef()
-        reconnect_id = wx.NewIdRef()
         settings_id = wx.NewIdRef()
         signin_id = wx.NewIdRef()
         updates_id = wx.NewIdRef()
@@ -53,8 +52,6 @@ class IndiginousTrayIcon(wx.adv.TaskBarIcon):
         about_id = wx.NewIdRef()
         quit_id = wx.NewIdRef()
         menu.Append(open_id, "&Open Indiginous")
-        menu.Append(reconnect_id, "&Reconnect Indiginous")
-        menu.AppendSeparator()
         menu.Append(settings_id, "&Settings...")
         if not self.frame.is_signed_in:
             signin_id = wx.NewIdRef()
@@ -69,7 +66,6 @@ class IndiginousTrayIcon(wx.adv.TaskBarIcon):
         # asks for a fresh popup menu each time; binding on the tray would
         # accumulate handlers and repeat actions after several openings.
         menu.Bind(wx.EVT_MENU, lambda _event: self.frame.show_from_tray(), id=open_id)
-        menu.Bind(wx.EVT_MENU, lambda _event: self.frame.reload_from_tray(), id=reconnect_id)
         menu.Bind(wx.EVT_MENU, lambda _event: self.frame._show_settings(_event), id=settings_id)
         if not self.frame.is_signed_in:
             menu.Bind(wx.EVT_MENU, lambda _event: self.frame._login_default(), id=signin_id)
@@ -321,12 +317,10 @@ class MainFrame(wx.Frame):
         """Create a conventional, fully keyboard-accessible native menu bar."""
         menu_bar = wx.MenuBar()
         file_menu = wx.Menu()
-        reconnect_id = wx.NewIdRef()
         restart_world_id = wx.NewIdRef()
         focus_world_id = wx.NewIdRef()
         signin_id = wx.NewIdRef()
         tray_id = wx.NewIdRef()
-        file_menu.Append(reconnect_id, "&Reconnect to world", "Reconnect without opening another client")
         file_menu.Append(restart_world_id, "&Restart frozen world view\tCtrl+Shift+R", "Replace only the embedded world view")
         file_menu.Append(focus_world_id, "&Focus world\tCtrl+L", "Move keyboard focus into the world")
         file_menu.AppendSeparator()
@@ -354,7 +348,6 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_MENU_OPEN, self._on_menu_open)
         self.Bind(wx.EVT_MENU_CLOSE, self._on_menu_close)
         self.Bind(wx.EVT_MENU_HIGHLIGHT, self._on_menu_highlight)
-        self.Bind(wx.EVT_MENU, lambda _event: self._reload(), id=reconnect_id)
         self.Bind(wx.EVT_MENU, lambda _event: self._restart_webview(), id=restart_world_id)
         self.Bind(wx.EVT_MENU, lambda _event: self._focus_world(), id=focus_world_id)
         self.Bind(wx.EVT_MENU, lambda _event: self._login_or_logout(), id=signin_id)
