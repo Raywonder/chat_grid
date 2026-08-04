@@ -4530,7 +4530,25 @@ function radioRemoteControlCommand(action: 'station_next' | 'station_previous' |
   signaling.send({ type: 'item_remote_control', itemId: remote.item.id, action });
 }
 
-type MediaGuideEntry = { title: string; category: string; index: number; selectable: boolean; note?: string };
+type MediaGuideAction =
+  | 'station_first'
+  | 'station_last'
+  | 'station_next'
+  | 'station_previous'
+  | 'volume_up'
+  | 'volume_down'
+  | 'power_toggle'
+  | 'info'
+  | 'cast';
+type MediaGuideEntry = {
+  title: string;
+  category: string;
+  index?: number;
+  channelNumber?: number;
+  selectable: boolean;
+  note?: string;
+  action?: MediaGuideAction;
+};
 let activeMediaGuideButtons: HTMLButtonElement[] = [];
 
 function closeMediaGuide(message = 'Guide closed.'): void {
@@ -4561,13 +4579,27 @@ function openMediaGuide(): void {
     Math.hypot(a.x - state.player.x, a.y - state.player.y) - Math.hypot(b.x - state.player.x, b.y - state.player.y),
   )[0];
   const presets = Array.isArray(target?.params.stationPresets) ? target.params.stationPresets : [];
-  const entries: MediaGuideEntry[] = presets.flatMap((raw, index) => {
+  const remoteLabel = isTv ? 'TV' : 'radio';
+  const entries: MediaGuideEntry[] = [
+    { title: `Power: turn ${remoteLabel} on or off`, category: 'Remote actions', selectable: true, action: 'power_toggle' },
+    { title: 'Previous channel', category: 'Remote actions', selectable: true, action: 'station_previous' },
+    { title: 'Next channel', category: 'Remote actions', selectable: true, action: 'station_next' },
+    { title: 'Volume down', category: 'Remote actions', selectable: true, action: 'volume_down' },
+    { title: 'Volume up', category: 'Remote actions', selectable: true, action: 'volume_up' },
+    { title: 'First channel', category: 'Remote actions', selectable: true, action: 'station_first' },
+    { title: 'Last channel', category: 'Remote actions', selectable: true, action: 'station_last' },
+    { title: 'Read current channel, power, volume, and program', category: 'Remote actions', selectable: true, action: 'info' },
+    { title: 'Cast a local screen or media source', category: 'Remote actions', selectable: true, action: 'cast' },
+  ];
+  let channelNumber = 0;
+  entries.push(...presets.flatMap((raw, index) => {
     if (!raw || typeof raw !== 'object') return [];
     const preset = raw as Record<string, unknown>;
     const title = String(preset.title ?? preset.name ?? '').trim();
     if (!title || !String(preset.streamUrl ?? preset.url ?? '').trim()) return [];
-    return [{ title, category: String(preset.category ?? (isTv ? 'General' : 'Stations')), index, selectable: true }];
-  });
+    channelNumber += 1;
+    return [{ title, category: String(preset.category ?? (isTv ? 'Channels' : 'Stations')), index, channelNumber, selectable: true }];
+  }));
   if (isTv && target) {
     const sources = Array.isArray(target.params.tvProviderSources) ? target.params.tvProviderSources : [];
     for (const raw of sources) {
@@ -4576,7 +4608,7 @@ function openMediaGuide(): void {
       const channels = Array.isArray(source.plutoChannels) ? source.plutoChannels : [];
       for (const channel of channels) {
         const title = String(channel).trim();
-        if (title) entries.push({ title, category: 'Pluto TV catalogue', index: -1, selectable: false, note: 'Choose this channel in Pluto TV; no official playable feed is configured here.' });
+        if (title) entries.push({ title, category: 'Pluto TV catalogue', selectable: false, note: 'Choose this channel in Pluto TV; no official playable feed is configured here.' });
       }
     }
   }
@@ -4602,14 +4634,25 @@ function openMediaGuide(): void {
     }
     const button = document.createElement('button');
     button.type = 'button';
-    button.textContent = `${position + 1}. ${entry.title}${entry.index === currentIndex ? ' (current)' : ''}`;
+    const prefix = entry.action ? '' : `${entry.channelNumber ?? position + 1}. `;
+    button.textContent = `${prefix}${entry.title}${entry.index === currentIndex ? ' (current)' : ''}`;
     button.setAttribute('aria-label', `${entry.title}, ${entry.category}${entry.index === currentIndex ? ', current channel' : ''}${entry.note ? `. ${entry.note}` : ''}`);
-    if (entry.index < 0) {
+    if (!entry.selectable) {
       button.disabled = true;
       button.title = entry.note ?? '';
     } else {
       button.addEventListener('click', () => {
-        signaling.send({ type: 'item_remote_control', itemId: remote.item.id, action: 'channel_select', channelIndex: entry.index });
+        if (entry.action) {
+          if (entry.action === 'cast') {
+            window.dispatchEvent(new Event('chatgrid-cast-to-device'));
+          } else if (entry.action === 'station_next' || entry.action === 'station_previous' || entry.action === 'volume_up' || entry.action === 'volume_down') {
+            radioRemoteControlCommand(entry.action);
+          } else {
+            radioRemoteButtonCommand(entry.action);
+          }
+        } else if (entry.index !== undefined) {
+          signaling.send({ type: 'item_remote_control', itemId: remote.item.id, action: 'channel_select', channelIndex: entry.index });
+        }
         closeMediaGuide(`Selecting ${entry.title}.`);
         audio.sfxDevicePresetButton();
       });
