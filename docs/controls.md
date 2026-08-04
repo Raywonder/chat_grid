@@ -7,7 +7,7 @@ This document is the authoritative keymap for the client.
 When you join the grid, the page also shows a compact dashboard with your current coordinates, connected user count, item count, and anything sharing your current square.
 
 ### Movement
-- `Arrow Keys`: Move. The status reader narrates movement in an interactive-fiction style, such as the direction walked, current room/location, coordinates, surface, nearby people, and items on the square.
+- `Arrow Keys`: Move. Walking stays silent unless you reach a speakable useful item; explicit `C` still announces coordinates when requested.
 - `Movement controls`: The Indiginous page also provides North, South, East, and West buttons for keyboard or screen-reader environments that reserve arrow keys for browser navigation.
 - `G`, `Ctrl+G`, or `Shift+G`: Open the location list; use arrows or first letters, then `Enter` to travel
 - `Shift+K`, `Applications`, or `Shift+F10`: Open the command palette in supported modes

@@ -544,7 +544,6 @@ let lastAnnouncementAt = 0;
 const ANNOUNCEMENT_DEDUPE_WINDOW_MS = 1_500;
 let lastRuntimeRecoveryStatusAt = 0;
 let lastMovementNarrationAt = 0;
-let lastMovementNarrationDirection = '';
 let lastMovementNarrationContext = '';
 let outputMode = settings.loadOutputMode();
 let activeGridName = DEFAULT_GRID_NAME;
@@ -3165,12 +3164,6 @@ function squareWord(distance: number): string {
   return distance === 1 ? 'square' : 'squares';
 }
 
-/** Builds a concise room-style coordinate phrase for the current grid location. */
-function roomCoordinatePhrase(x: number, y: number): string {
-  const location = currentLocationName || currentLocationOption()?.name || 'the grid';
-  return `${location}, ${formatCoordinate(x)}, ${formatCoordinate(y)}`;
-}
-
 /** Returns a short surface phrase for IF-style movement narration. */
 function currentSurfacePhrase(): string {
   const surface = profileForLocationFootsteps(currentLocationOption()).label.trim();
@@ -3216,10 +3209,10 @@ function movementDirectionPhrase(dx: number, dy: number): string {
 }
 
 /** Builds the IF-style narration for a tile after movement or teleport. */
-function describeTileArrival(x: number, y: number, dx = 0, dy = 0): string {
+function describeTileArrival(dx = 0, dy = 0): string {
   const parts: string[] = [];
   const direction = dx || dy ? movementDirectionPhrase(dx, dy) : '';
-  parts.push(direction ? `You walked ${direction} ${currentSurfacePhrase()} to ${roomCoordinatePhrase(x, y)}.` : `You are at ${roomCoordinatePhrase(x, y)}.`);
+  parts.push(direction ? `You walked ${direction} ${currentSurfacePhrase()}.` : 'You are here.');
 
   const namesOnTile = getPeerNamesAtPosition(x, y);
   if (namesOnTile.length > 0) {
@@ -3234,39 +3227,24 @@ function describeTileArrival(x: number, y: number, dx = 0, dy = 0): string {
   return parts.join(' ');
 }
 
-/** Announces local movement with throttling unless the tile has something meaningful. */
-function narrateLocalMovement(x: number, y: number, dx: number, dy: number, force = false): void {
+/** Announces only useful item discoveries; routine walking stays silent. */
+function narrateLocalMovement(x: number, y: number): void {
   const now = performance.now();
-  const direction = movementDirectionPhrase(dx, dy);
-  const peerNames = getPeerNamesAtPosition(x, y);
-  const items = getItemsAtPosition(x, y);
-  const context = `${peerNames.join(',')}|${items.map((item) => item.id).join(',')}`;
-  const hasTileContext = peerNames.length > 0 || items.length > 0;
-  if (!audioAnnouncementSettings.movementDirections) {
-    if (hasTileContext) {
-      const context = describeTileArrival(x, y).split('. ').slice(1).join('. ').trim();
-      if (context) updateStatus(context);
-    }
-    return;
-  }
-  if (!force && !hasTileContext && direction === lastMovementNarrationDirection && now - lastMovementNarrationAt < MOVEMENT_NARRATION_INTERVAL_MS) {
-    return;
-  }
-  if (!force && hasTileContext && context === lastMovementNarrationContext && now - lastMovementNarrationAt < MOVEMENT_NARRATION_INTERVAL_MS) {
-    return;
-  }
+  const items = getItemsAtPosition(x, y).filter((item) => !item.carrierId && !isItemQuiet(item) && shouldSpeakItemAnnouncement(item));
+  if (items.length === 0) return;
+  const context = items.map((item) => item.id).join(',');
+  if (context === lastMovementNarrationContext && now - lastMovementNarrationAt < MOVEMENT_NARRATION_INTERVAL_MS) return;
   lastMovementNarrationAt = now;
-  lastMovementNarrationDirection = direction;
   lastMovementNarrationContext = context;
-  updateStatus(describeTileArrival(x, y, dx, dy));
+  updateStatus(`You notice ${formatItemNarrationSummary(items)}.`);
 }
 
 /** Announces a user-facing arrival after a location change. */
-function narrateLocationArrival(locationName: string, x: number, y: number): void {
+function narrateLocationArrival(locationName: string, _x: number, _y: number): void {
   const location = locationName.trim() || currentLocationName || 'the new location';
   const ambience = currentLocationOption()?.ambienceName?.trim();
   const ambiencePhrase = ambience ? ` ${ambience} ambience is playing.` : '';
-  updateStatus(`You entered ${location} at ${formatCoordinate(x)}, ${formatCoordinate(y)}.${ambiencePhrase}`);
+  updateStatus(`You entered ${location}.${ambiencePhrase}`);
 }
 
 /** Narrates another user's nearby movement in room-style language. */
@@ -3414,7 +3392,7 @@ function updateTeleport(): void {
   stopTeleportLoopAudio();
   void refreshAudioSubscriptions(true);
   void audio.playSample(TELEPORT_SOUND_URL, FOOTSTEP_GAIN);
-  updateStatus(`${completionStatus} ${describeTileArrival(state.player.x, state.player.y)}`);
+  updateStatus(`${completionStatus} ${describeTileArrival()}`);
 }
 
 function isNearCarefulNavigationZone(x: number, y: number): boolean {
@@ -3571,7 +3549,7 @@ function handleMovement(): void {
   if (itemsOnTile.length > 0) {
     audio.sfxTileItemPing();
   }
-  narrateLocalMovement(nextX, nextY, dx, dy);
+  narrateLocalMovement(nextX, nextY);
   if (isDrivingVehicle(drivingVehicle)) {
     updateStatus(`Driving ${drivingVehicle.title}. ${movementDirectionPhrase(dx, dy)}.`);
   }
