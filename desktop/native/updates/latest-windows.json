@@ -5,8 +5,8 @@
   "platforms": {
     "windows": {
       "url": "https://blind.software/downloads/public/7Kp3mN8vQ2xL5rT9cW6yH1/windows",
-      "fileName": "Indiginious_Setup.exe",
-      "sha256": "4b59ba02e429cdadcb77295c030fc56ff96a4abc4117352ff46b824f2de348dc",
+      "fileName": "Indiginous_Setup.exe",
+      "sha256": "3c27b2080b76caceddb9d10392a40d2735e356cc90a693e12ed20af2b487057c",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }
   }

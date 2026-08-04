@@ -111,8 +111,8 @@ def check_source(args: argparse.Namespace) -> int:
         update_url = str(platform.get("url", "")).strip()
         if "indiginous" in urlparse(update_url).path.lower():
             mismatches.append(f"Windows update URL must be app-name neutral: {manifest_path}")
-        if str(platform.get("fileName", "")).strip() != "Indiginious_Setup.exe":
-            mismatches.append(f"Windows update filename must be Indiginious_Setup.exe: {manifest_path}")
+        if str(platform.get("fileName", "")).strip() != "Indiginous_Setup.exe":
+            mismatches.append(f"Windows update filename must be Indiginous_Setup.exe: {manifest_path}")
     if len(windows_hashes) != 1:
         mismatches.append("Windows update manifests must contain the same artifact SHA-256")
 
