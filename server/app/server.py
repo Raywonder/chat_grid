@@ -3669,13 +3669,10 @@ class SignalingServer:
             return 0
         return station_index % preset_count
 
-    @staticmethod
-    def _media_guide_message(item: WorldItem, *, tv: bool) -> str:
+    def _media_guide_message(self, item: WorldItem, *, tv: bool) -> str:
         """Build a compact, screen-reader-friendly guide for a media remote."""
 
         presets = SignalingServer._radio_presets(item)
-        if not presets:
-            return f"{item.title} has no guide entries."
         groups: dict[str, list[str]] = {}
         for number, preset in enumerate(presets, start=1):
             category = str(preset.get("category") or ("General" if tv else "Stations")).strip()
@@ -3693,6 +3690,20 @@ class SignalingServer:
                 ]
                 if source_titles:
                     parts.append("Guide sources: " + ", ".join(source_titles))
+        active_casts = [
+            cast
+            for cast in self._active_media_casts.get(item.locationId, {}).values()
+            if cast.active and cast.targetItemId == item.id
+        ]
+        if active_casts:
+            shared_entries = [
+                f"Shared screen from {cast.casterNickname}"
+                + (f" ({cast.deviceName})" if cast.deviceName else "")
+                for cast in active_casts
+            ]
+            parts.append("Shared content: " + "; ".join(shared_entries))
+        if not presets and not active_casts:
+            return f"{item.title} has no guide entries."
         return " ".join(parts)
 
     @staticmethod

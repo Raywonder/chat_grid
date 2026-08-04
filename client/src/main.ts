@@ -4560,37 +4560,22 @@ let localCastMetadata: {
   stationCode: string;
 } | null = null;
 
-function createCastMediaSurface(
-  element: HTMLMediaElement,
-  label: string,
-  position: 'local' | 'remote',
-  onStop: () => void,
-): HTMLDivElement {
-  const surface = document.createElement('div');
-  surface.dataset.castSurface = 'true';
-  surface.setAttribute('role', 'region');
-  surface.setAttribute('aria-label', `${label} controls`);
-  Object.assign(surface.style, position === 'local'
-    ? {
-        position: 'fixed', left: '1rem', bottom: '1rem', width: 'min(24rem, calc(100vw - 2rem))',
-        zIndex: '18', background: 'var(--panel, #181818)', padding: '0.5rem',
-      }
-    : {
-        position: 'fixed', right: '1rem', bottom: '1rem', width: 'min(32rem, calc(100vw - 2rem))',
-        zIndex: '19', background: 'var(--panel, #181818)', padding: '0.5rem',
-      });
-  const heading = document.createElement('p');
-  heading.textContent = label;
-  heading.style.margin = '0 0 0.35rem';
-  const stop = document.createElement('button');
-  stop.type = 'button';
-  stop.textContent = 'Stop cast';
-  stop.setAttribute('aria-label', `Stop ${label}`);
-  stop.addEventListener('click', onStop);
-  element.controls = true;
+function prepareHiddenCastMedia(element: HTMLMediaElement, label: string): void {
+  // The in-world TV/radio remote is the only playback control. Keep the
+  // capture/receiver element alive for WebRTC, but never put a second media
+  // window over the accessible world UI.
+  element.controls = false;
   element.setAttribute('aria-label', label);
-  surface.append(heading, element, stop);
-  return surface;
+  element.setAttribute('aria-hidden', 'true');
+  Object.assign(element.style, {
+    position: 'fixed',
+    width: '1px',
+    height: '1px',
+    opacity: '0',
+    pointerEvents: 'none',
+    left: '-10000px',
+    top: '-10000px',
+  });
 }
 
 function handleRemoteCastStream(casterId: string, stream: MediaStream): void {
@@ -4603,14 +4588,7 @@ function handleRemoteCastStream(casterId: string, stream: MediaStream): void {
   element.muted = false;
   element.srcObject = stream;
   const label = `Cast from ${casterId}`;
-  const surface = createCastMediaSurface(element, label, 'remote', () => {
-    element.pause();
-    stream.getTracks().forEach((track) => track.stop());
-    surface.remove();
-    remoteCastMedia.delete(casterId);
-    updateStatus(`${label} stopped.`);
-  });
-  document.body.append(surface);
+  prepareHiddenCastMedia(element, label);
   remoteCastMedia.set(casterId, element);
   void element.play().catch(() => updateStatus(`Cast received. Press the cast media control to start playback if ${IS_NATIVE_CLIENT ? 'the desktop client' : 'the browser'} blocked autoplay.`));
 }
@@ -4628,12 +4606,9 @@ function setLocalCastPlayback(stream: MediaStream | null): void {
   // a microphone or screen-share loop.
   element.muted = true;
   element.srcObject = stream;
-  const surface = createCastMediaSurface(element, 'Local cast playback', 'local', () => {
-    stopLocalCast();
-  });
-  document.body.append(surface);
+  prepareHiddenCastMedia(element, 'Local shared-screen capture');
   localCastMedia = element;
-  void element.play().catch(() => updateStatus('Local cast is ready. Press the local cast playback control to start it.'));
+  void element.play().catch(() => updateStatus('Local cast is ready; use the TV or radio remote in the world to control playback.'));
 }
 
 function stopLocalCast(): void {
