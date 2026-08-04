@@ -180,7 +180,7 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     // their controls through the checks above and below.
     if (code.startsWith('Arrow')) {
       const target = event.target instanceof HTMLElement ? event.target : null;
-      if (target?.closest('select, textarea, input, [contenteditable="true"], iframe')) return false;
+      if (target?.closest('select, textarea, input, button, a, dialog, [role="button"], [role="option"], [contenteditable="true"], iframe')) return false;
       return true;
     }
     if (isEditableElement(event.target)) return false;
