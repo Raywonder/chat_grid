@@ -3690,6 +3690,15 @@ class SignalingServer:
                 ]
                 if source_titles:
                     parts.append("Guide sources: " + ", ".join(source_titles))
+                pluto_channels = [
+                    str(channel).strip()
+                    for source in sources
+                    if isinstance(source, dict) and str(source.get("key") or "").strip().casefold() == "pluto-tv"
+                    for channel in (source.get("plutoChannels") if isinstance(source.get("plutoChannels"), list) else [])
+                    if str(channel).strip()
+                ]
+                if pluto_channels:
+                    parts.append("Pluto TV catalogue: " + "; ".join(pluto_channels))
         active_casts = [
             cast
             for cast in self._active_media_casts.get(item.locationId, {}).values()
@@ -4367,12 +4376,14 @@ class SignalingServer:
             "station_previous",
             "station_first",
             "station_last",
+            "channel_select",
             "guide",
             "volume_up",
             "volume_down",
             "power_toggle",
             "info",
         ],
+        channel_index: int | None = None,
     ) -> bool:
         """Handle explicit keyboard remote-control actions for a carried radio remote."""
 
@@ -4401,6 +4412,23 @@ class SignalingServer:
         targets = self._radio_targets_for_remote(
             remote, target, require_presets=False
         )
+        if action == "channel_select":
+            source = self._radio_station_source_for_target(target) if self._remote_controls_linked_radios(remote) else target
+            presets = self._radio_presets(source) if source is not None else []
+            if channel_index is None or channel_index >= len(presets):
+                await self._send_item_result(client, False, "use", f"That channel is not available on {target.title}.", remote.id)
+                return True
+            station_state = presets[channel_index]
+            changed = 0
+            started = self.item_service.now_ms()
+            for item in targets:
+                try:
+                    await self._apply_radio_station_state(item, channel_index, station_state, client, play_started_at=started)
+                except ValueError:
+                    continue
+                changed += 1
+            await self._send_item_result(client, changed > 0, "use", f"Remote selected {station_state['title']}.", remote.id)
+            return True
         if action == "guide":
             await self._broadcast_media_control_sound(target, action)
             await self._send_item_result(
@@ -4647,12 +4675,14 @@ class SignalingServer:
             "station_previous",
             "station_first",
             "station_last",
+            "channel_select",
             "guide",
             "volume_up",
             "volume_down",
             "power_toggle",
             "info",
         ],
+        channel_index: int | None = None,
     ) -> bool:
         """Handle explicit keyboard remote-control actions for a carried TV remote."""
 
@@ -4688,6 +4718,25 @@ class SignalingServer:
             return True
 
         targets = self._tv_targets_for_remote(remote, target, require_presets=False)
+        if action == "channel_select":
+            source = self._tv_station_source_for_target(target) if self._remote_controls_linked_tvs(remote) else target
+            presets = self._radio_presets(source) if source is not None else []
+            if channel_index is None or channel_index >= len(presets):
+                await self._send_item_result(client, False, "use", f"That channel is not available on {target.title}.", remote.id)
+                return True
+            channel_state = presets[channel_index]
+            changed = 0
+            started = self.item_service.now_ms()
+            for item in targets:
+                try:
+                    await self._apply_radio_station_state(item, channel_index, channel_state, client, enabled=True, play_started_at=started)
+                except ValueError:
+                    continue
+                await self._reconcile_radios_for_active_tv(item, client, play_started_at=started)
+                await self._broadcast_tv_channel_switch_sound(item, self._tv_switch_sound(item, channel_state))
+                changed += 1
+            await self._send_item_result(client, changed > 0, "use", f"Remote selected {channel_state['title']}.", remote.id)
+            return True
         if action == "guide":
             await self._broadcast_media_control_sound(target, action)
             await self._send_item_result(
@@ -11822,11 +11871,11 @@ class SignalingServer:
                 await self._send_item_result(client, False, "use", "Item not found.")
                 return
             if await self._handle_tv_remote_control(
-                client, remote_item, packet.action
+                client, remote_item, packet.action, packet.channelIndex
             ):
                 return
             if await self._handle_radio_remote_control(
-                client, remote_item, packet.action
+                client, remote_item, packet.action, packet.channelIndex
             ):
                 return
             await self._send_item_result(

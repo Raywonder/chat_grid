@@ -885,10 +885,12 @@ let midiControllerHandle: MidiControllerHandle = {
   requestEnable: async () => false,
   setControlVisible: () => undefined,
 };
+let activeMediaGuide: HTMLDialogElement | null = null;
 let gamepadDirections: Record<string, boolean> = {};
 const gamepadController = setupGamepadInputHandlers({
   getRunning: () => state.running,
   getMode: () => state.mode,
+  isMediaGuideOpen: () => Boolean(activeMediaGuide),
   setDirection: (code, pressed) => {
     if (pressed && remoteControlsAreFocused()) {
       handleModeInput({ code, key: code, ctrlKey: false, shiftKey: false, source: 'gamepad' });
@@ -4528,6 +4530,152 @@ function radioRemoteControlCommand(action: 'station_next' | 'station_previous' |
   signaling.send({ type: 'item_remote_control', itemId: remote.item.id, action });
 }
 
+type MediaGuideEntry = { title: string; category: string; index: number; selectable: boolean; note?: string };
+let activeMediaGuideButtons: HTMLButtonElement[] = [];
+
+function closeMediaGuide(message = 'Guide closed.'): void {
+  if (activeMediaGuide) {
+    activeMediaGuide.close();
+    activeMediaGuide.remove();
+  }
+  activeMediaGuide = null;
+  activeMediaGuideButtons = [];
+  updateStatus(message);
+}
+
+function openMediaGuide(): void {
+  const remote = getCarriedMediaRemote();
+  if (!remote || !state.remoteControlsFocused) {
+    updateStatus('Press Tab to focus the held remote controls first.');
+    audio.sfxUiCancel();
+    return;
+  }
+  closeMediaGuide('');
+  const isTv = remote.kind === 'tv';
+  const targetCandidates = Array.from(state.items.values()).filter((item) => {
+    if (item.carrierId || item.locationId !== currentLocationId) return false;
+    if (isTv) return item.type === 'house_object' && String(item.params.objectKind ?? '').toLowerCase() === 'tv';
+    return item.type === 'radio_station' || String(item.params.objectKind ?? '').toLowerCase() === 'speaker';
+  });
+  const target = targetCandidates.sort((a, b) =>
+    Math.hypot(a.x - state.player.x, a.y - state.player.y) - Math.hypot(b.x - state.player.x, b.y - state.player.y),
+  )[0];
+  const presets = Array.isArray(target?.params.stationPresets) ? target.params.stationPresets : [];
+  const entries: MediaGuideEntry[] = presets.flatMap((raw, index) => {
+    if (!raw || typeof raw !== 'object') return [];
+    const preset = raw as Record<string, unknown>;
+    const title = String(preset.title ?? preset.name ?? '').trim();
+    if (!title || !String(preset.streamUrl ?? preset.url ?? '').trim()) return [];
+    return [{ title, category: String(preset.category ?? (isTv ? 'General' : 'Stations')), index, selectable: true }];
+  });
+  if (isTv && target) {
+    const sources = Array.isArray(target.params.tvProviderSources) ? target.params.tvProviderSources : [];
+    for (const raw of sources) {
+      if (!raw || typeof raw !== 'object') continue;
+      const source = raw as Record<string, unknown>;
+      const channels = Array.isArray(source.plutoChannels) ? source.plutoChannels : [];
+      for (const channel of channels) {
+        const title = String(channel).trim();
+        if (title) entries.push({ title, category: 'Pluto TV catalogue', index: -1, selectable: false, note: 'Choose this channel in Pluto TV; no official playable feed is configured here.' });
+      }
+    }
+  }
+  const dialog = document.createElement('dialog');
+  dialog.className = 'media-guide-dialog';
+  dialog.setAttribute('aria-labelledby', 'media-guide-title');
+  const heading = document.createElement('h2');
+  heading.id = 'media-guide-title';
+  heading.textContent = `${isTv ? 'TV' : 'Radio'} Guide${target ? ` — ${target.title}` : ''}`;
+  const help = document.createElement('p');
+  help.textContent = 'Use Up and Down to browse, Home and End to jump, Enter to select, and Escape to close.';
+  dialog.append(heading, help);
+  const list = document.createElement('div');
+  list.setAttribute('aria-label', `${isTv ? 'TV' : 'radio'} channels`);
+  const currentIndex = Number(target?.params.stationIndex ?? -1);
+  let lastCategory = '';
+  entries.forEach((entry, position) => {
+    if (entry.category !== lastCategory) {
+      const group = document.createElement('h3');
+      group.textContent = entry.category;
+      list.append(group);
+      lastCategory = entry.category;
+    }
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = `${position + 1}. ${entry.title}${entry.index === currentIndex ? ' (current)' : ''}`;
+    button.setAttribute('aria-label', `${entry.title}, ${entry.category}${entry.index === currentIndex ? ', current channel' : ''}${entry.note ? `. ${entry.note}` : ''}`);
+    if (entry.index < 0) {
+      button.disabled = true;
+      button.title = entry.note ?? '';
+    } else {
+      button.addEventListener('click', () => {
+        signaling.send({ type: 'item_remote_control', itemId: remote.item.id, action: 'channel_select', channelIndex: entry.index });
+        closeMediaGuide(`Selecting ${entry.title}.`);
+        audio.sfxDevicePresetButton();
+      });
+      activeMediaGuideButtons.push(button);
+    }
+    list.append(button);
+  });
+  if (entries.length === 0) {
+    const empty = document.createElement('p');
+    empty.textContent = 'No channels are available for this device.';
+    list.append(empty);
+  }
+  dialog.append(list);
+  dialog.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeMediaGuide();
+      return;
+    }
+    if (activeMediaGuideButtons.length === 0) return;
+    const current = activeMediaGuideButtons.indexOf(document.activeElement as HTMLButtonElement);
+    let next = current < 0 ? 0 : current;
+    if (event.key === 'ArrowDown') next = (next + 1) % activeMediaGuideButtons.length;
+    else if (event.key === 'ArrowUp') next = (next - 1 + activeMediaGuideButtons.length) % activeMediaGuideButtons.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = activeMediaGuideButtons.length - 1;
+    else return;
+    event.preventDefault();
+    activeMediaGuideButtons[next].focus();
+  });
+  document.body.append(dialog);
+  activeMediaGuide = dialog;
+  dialog.addEventListener('close', () => {
+    if (activeMediaGuide === dialog) {
+      activeMediaGuide = null;
+      activeMediaGuideButtons = [];
+    }
+  }, { once: true });
+  dialog.showModal();
+  (activeMediaGuideButtons[0] ?? dialog.querySelector('button'))?.focus();
+  updateStatus(`${isTv ? 'TV' : 'Radio'} guide opened. ${entries.length} entries.`);
+  audio.sfxDevicePresetButton();
+}
+
+function handleMediaGuideInput(code: string): boolean {
+  if (!activeMediaGuide) return false;
+  if (code === 'Escape') {
+    closeMediaGuide();
+    return true;
+  }
+  if (code === 'Enter' || code === 'Space') {
+    (document.activeElement as HTMLButtonElement | null)?.click();
+    return true;
+  }
+  if (activeMediaGuideButtons.length === 0) return true;
+  const current = activeMediaGuideButtons.indexOf(document.activeElement as HTMLButtonElement);
+  let next = current < 0 ? 0 : current;
+  if (code === 'ArrowDown' || code === 'ArrowRight') next = (next + 1) % activeMediaGuideButtons.length;
+  else if (code === 'ArrowUp' || code === 'ArrowLeft') next = (next - 1 + activeMediaGuideButtons.length) % activeMediaGuideButtons.length;
+  else if (code === 'Home') next = 0;
+  else if (code === 'End') next = activeMediaGuideButtons.length - 1;
+  else return true;
+  activeMediaGuideButtons[next].focus();
+  return true;
+}
+
 function radioRemoteButtonCommand(
   action: 'station_first' | 'station_last' | 'guide' | 'power_toggle' | 'info',
 ): void {
@@ -4535,6 +4683,10 @@ function radioRemoteButtonCommand(
   if (!remote || !state.remoteControlsFocused) {
     updateStatus('Press Tab to focus the held remote controls first.');
     audio.sfxUiCancel();
+    return;
+  }
+  if (action === 'guide') {
+    openMediaGuide();
     return;
   }
   signaling.send({ type: 'item_remote_control', itemId: remote.item.id, action });
@@ -5301,6 +5453,7 @@ function executeCommandPaletteSelection(): void {
 /** Handles command-mode keybindings while in main gameplay mode. */
 function handleNormalModeInput(input: ModeInput): void {
   const { code, shiftKey, ctrlKey } = input;
+  if (handleMediaGuideInput(code)) return;
   if (code !== 'Escape' && pendingEscapeDisconnect) {
     pendingEscapeDisconnect = false;
   }
@@ -5334,6 +5487,10 @@ function handleNormalModeInput(input: ModeInput): void {
       return;
     }
     if (code === 'Escape') {
+      if (activeMediaGuide) {
+        closeMediaGuide();
+        return;
+      }
       escapeCommand();
       return;
     }

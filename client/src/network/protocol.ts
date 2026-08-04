@@ -775,7 +775,8 @@ export type OutgoingMessage =
   | {
       type: 'item_remote_control';
       itemId: string;
-      action: 'station_next' | 'station_previous' | 'station_first' | 'station_last' | 'guide' | 'volume_up' | 'volume_down' | 'power_toggle' | 'info';
+      action: 'station_next' | 'station_previous' | 'station_first' | 'station_last' | 'channel_select' | 'guide' | 'volume_up' | 'volume_down' | 'power_toggle' | 'info';
+      channelIndex?: number;
     }
   | {
       type: 'item_interact';

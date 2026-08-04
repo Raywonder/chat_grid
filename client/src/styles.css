@@ -476,3 +476,47 @@ canvas {
     min-height: 520px;
   }
 }
+#media-guide-title {
+  margin-top: 0;
+}
+
+.media-guide-dialog {
+  width: min(42rem, calc(100vw - 2rem));
+  max-height: min(80vh, 48rem);
+  overflow: auto;
+  color: var(--text-color, #fff);
+  background: var(--panel-background, #171717);
+  border: 2px solid currentColor;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.media-guide-dialog::backdrop {
+  background: rgb(0 0 0 / 75%);
+}
+
+.media-guide-dialog [role="listbox"] {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.media-guide-dialog button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.65rem;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 0.25rem;
+}
+
+.media-guide-dialog button:focus-visible {
+  outline: 3px solid #ffcf33;
+  outline-offset: 2px;
+}
+
+.media-guide-dialog button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}

@@ -136,6 +136,20 @@ RADIO_STATION_PRESETS: tuple[dict[str, str], ...] = (
 # normal station presets so the existing universal TV remote can tune them,
 # and so every TV receives the same server-managed channel set.
 TV_GUIDE_URL = "https://2.onj.me/guide.html"
+PLUTO_TV_CHANNELS: tuple[str, ...] = (
+    "Pluto TV Movies",
+    "Pluto TV Drama",
+    "Pluto TV Comedy",
+    "Pluto TV Crime",
+    "Pluto TV Sci-Fi",
+    "Pluto TV News",
+    "Pluto TV Reality",
+    "Pluto TV Classic TV",
+    "Pluto TV Sports",
+    "Pluto TV Kids",
+    "Pluto TV Game Shows",
+    "Pluto TV Nature",
+)
 TV_CHANNEL_PRESETS: tuple[dict[str, str], ...] = (
     {"title": "BBC ONE Lon", "streamUrl": "https://2.onj.me/bbc1", "sourceType": "tv", "provider": "2.onj.me", "category": "General"},
     {"title": "BBC TWO", "streamUrl": "https://2.onj.me/bbc2", "sourceType": "tv", "provider": "2.onj.me", "category": "General"},
@@ -211,6 +225,18 @@ def ensure_tv_channel_defaults(item: WorldItem) -> bool:
         provider_sources.append(deepcopy(entry))
         provider_keys.add(key)
         changed = True
+    for source in provider_sources:
+        if not isinstance(source, dict) or str(source.get("key") or "").strip().casefold() != "pluto-tv":
+            continue
+        existing_channels = source.get("plutoChannels")
+        if not isinstance(existing_channels, list):
+            source["plutoChannels"] = list(PLUTO_TV_CHANNELS)
+            changed = True
+        else:
+            for channel in PLUTO_TV_CHANNELS:
+                if channel not in existing_channels:
+                    existing_channels.append(channel)
+                    changed = True
     return changed
 
 RAYWONDER_STUDIO_MUSIC_PRESETS: tuple[dict[str, str], ...] = (
@@ -1786,6 +1812,7 @@ BUILTIN_WORLD_ITEMS: tuple[SeedItem, ...] = (
                     "url": "https://pluto.tv/",
                     "provider": "pluto",
                     "mode": "live_and_on_demand",
+                    "plutoChannels": list(PLUTO_TV_CHANNELS),
                 },
             ],
             mediaVolume=42,

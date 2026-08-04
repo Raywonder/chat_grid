@@ -353,12 +353,14 @@ class ItemRemoteControlPacket(BasePacket):
         "station_previous",
         "station_first",
         "station_last",
+        "channel_select",
         "guide",
         "volume_up",
         "volume_down",
         "power_toggle",
         "info",
     ]
+    channelIndex: int | None = Field(default=None, ge=0, le=999)
 
 
 class MediaCastPacket(BasePacket):

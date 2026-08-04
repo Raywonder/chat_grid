@@ -84,8 +84,9 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `Ctrl+ArrowLeft` / `Ctrl+ArrowRight` with a carried media remote: Tune connected radios/speakers or TVs in the current location/group, or only the current device when linked control is off
 - `Ctrl+Shift+Up` / `Ctrl+Shift+Down` or `Ctrl+Shift+U` / `Ctrl+Shift+D` with a carried media remote: Raise/lower connected radio/speaker or TV volume, or only the current device volume when linked control is off
 - `Home` / `End` with a carried media remote: Tune the first/last station or channel preset
-- `O` with a carried media remote: Toggle connected radios or TVs on or off
+- `P` with a carried media remote: Toggle connected radios or TVs on or off
 - `I` with a carried media remote: Read station/channel, power, volume, and now-playing information
+- `Shift+M` with a focused carried media remote: Open the navigable TV/radio guide. Use Up/Down, Home/End, Enter, and Escape.
 - `C` with focused carried media remote, or `Shift+K`: Cast an available local screen, window, tab, or media app source to a nearby TV or radio
 - New radios added from the item menu start with the Town Square station presets, including Tony Gebhard Radio
 - `5` or `Shift+5`: Cycle TTS announcements between full, alert sounds only, and required only
