@@ -79,6 +79,7 @@ import { MediaSession } from './session/mediaSession';
 import { type AnnouncementMode, type AudioAnnouncementSettings, type AudioLayerState, type RadioAnnouncementMode } from './types/audio';
 import { setupUiHandlers as setupDomUiHandlers } from './ui/domBindings';
 import { PeerManager } from './webrtc/peerManager';
+import { VoiceInput } from './session/voiceInput';
 
 const NICKNAME_MAX_LENGTH = 32;
 const MIC_CALIBRATION_DURATION_MS = 5000;
@@ -862,6 +863,20 @@ const peerManager = new PeerManager(
   () => activeCastStream,
   handleRemoteCastStream,
 );
+const voiceInput = new VoiceInput({
+  onTranscript: (text) => {
+    if (!state.running || !signaling.isOpen()) return;
+    const companion = Array.from(state.peers.values()).find((peer) =>
+      /^(clawdia|claudia|missi)$/i.test(peer.nickname.trim()),
+    );
+    if (companion) {
+      signaling.send({ type: 'direct_message', targetId: companion.id, message: text });
+      return;
+    }
+    signaling.send({ type: 'chat_message', message: text });
+  },
+  onStatus: (message) => updateStatus(message),
+});
 const mediaSession = new MediaSession({
   state,
   audio,
@@ -3591,6 +3606,7 @@ async function checkMicPermission(): Promise<boolean> {
 async function setupLocalMedia(audioDeviceId = ''): Promise<void> {
   await mediaSession.setupLocalMedia(audioDeviceId);
   authController.reapplyVoiceSendPermission();
+  voiceInput.start();
 }
 
 /** Runs a short RMS sample to estimate and apply a usable microphone input gain. */
@@ -3600,6 +3616,7 @@ async function calibrateMicInputGain(): Promise<void> {
 
 /** Stops local capture tracks and clears outbound stream references. */
 function stopLocalMedia(): void {
+  voiceInput.stop();
   mediaSession.stopLocalMedia();
 }
 
