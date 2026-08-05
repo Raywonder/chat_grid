@@ -556,7 +556,7 @@ class MainFrame(wx.Frame):
         opened = False
         if sys.platform == "darwin":
             try:
-                subprocess.Popen(["open", "-g", flow.authorization_url])
+                subprocess.Popen(["open", flow.authorization_url])
                 opened = True
             except OSError:
                 opened = False
@@ -607,8 +607,8 @@ class MainFrame(wx.Frame):
         self.browser_auth_flow = None
         self.default_login.Enable()
         self.domain_login.Enable()
-        self._announce(message)
-        self.default_login.SetFocus()
+        self._announce(f"{message} Use File, Sign in to server to try again.", speak=True)
+        self.SetFocus()
 
     def _on_loaded(self, _event: wx.html2.WebViewEvent) -> None:
         self.reconnect_timer.Stop()

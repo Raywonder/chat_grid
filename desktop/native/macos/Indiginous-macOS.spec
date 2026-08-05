@@ -1,4 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_all
@@ -28,7 +29,10 @@ exe = EXE(
     exclude_binaries=True,
     name="Indiginous",
     console=False,
-    target_arch="x86_64",
+    # Fail closed toward a modern package. An Intel-only release now triggers
+    # Apple's deprecation warning and must be requested explicitly for local
+    # compatibility testing; the public Mac build is universal2 by default.
+    target_arch=os.environ.get("INDIGINOUS_MAC_TARGET_ARCH", "universal2"),
 )
 coll = COLLECT(
     exe,
@@ -46,7 +50,7 @@ app = BUNDLE(
     info_plist={
         "CFBundleDisplayName": "Indiginous",
         "CFBundleShortVersionString": "0.4.18",
-        "CFBundleVersion": "0.4.9",
+        "CFBundleVersion": "0.4.18",
         "LSMinimumSystemVersion": "14.0",
         "NSHighResolutionCapable": True,
         "CFBundleURLTypes": [{

@@ -37,7 +37,10 @@ def test_native_file_menu_does_not_use_single_item_submenus():
     assert "self.login_panel.Hide()" in source
     assert "_schedule_automatic_browser_auth" in source
     assert "Secure browser sign-in will start in 5 seconds." in source
-    assert 'subprocess.Popen(["open", "-g", flow.authorization_url])' in source
+    assert 'subprocess.Popen(["open", flow.authorization_url])' in source
+    assert 'subprocess.Popen(["open", "-g", flow.authorization_url])' not in source
+    assert 'Use File, Sign in to server to try again.' in source
+    assert 'self._announce(f"{message} Use File, Sign in to server to try again.", speak=True)' in source
     assert 'label = "Sign &out\\tCtrl+Shift+S" if signed_in' in source
 
 
