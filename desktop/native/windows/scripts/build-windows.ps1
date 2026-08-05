@@ -4,7 +4,9 @@ $PlatformRoot = Split-Path -Parent $ScriptRoot
 $Root = Split-Path -Parent $PlatformRoot
 Push-Location $Root
 try {
-$Venv = Join-Path $Root ".venv"
+$BuildCacheRoot = if ($env:INDIGINOUS_BUILD_CACHE) { $env:INDIGINOUS_BUILD_CACHE } else { "C:\BuildCache\IndiginousNative" }
+New-Item -ItemType Directory -Force -Path $BuildCacheRoot | Out-Null
+$Venv = Join-Path $BuildCacheRoot "venv"
 $Python = Join-Path $Venv "Scripts\python.exe"
 if (-not (Test-Path $Python)) {
     $Candidates = @("3.13", "3.12", "3.11")
