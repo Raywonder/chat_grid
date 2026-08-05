@@ -1,6 +1,6 @@
 #include "transport/protocol_client.h"
 
-namespace chatgrid::transport {
+namespace indiginous::transport {
 
 ProtocolClient::ProtocolClient(QObject* parent) : QObject(parent) {}
 
@@ -54,4 +54,4 @@ void ProtocolClient::setState(ConnectionState state) {
     emit stateChanged(state_);
 }
 
-}  // namespace chatgrid::transport
+}  // namespace indiginous::transport

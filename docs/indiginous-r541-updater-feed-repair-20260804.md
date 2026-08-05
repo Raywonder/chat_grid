@@ -4,7 +4,7 @@ Date: 2026-08-04
 
 ## Problem
 
-The Windows update manifests named the stable installer `Indiginious_Setup.exe`
+The Windows update manifests named the stable installer `Indiginous_Setup.exe`
 with an extra `i`. The updater correctly accepts only the canonical
 `Indiginous_Setup.exe`, so an installed client could detect the feed but reject
 the published update before downloading it.

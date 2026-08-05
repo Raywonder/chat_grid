@@ -3,7 +3,7 @@
 #include <QObject>
 #include <QString>
 
-namespace chatgrid::transport {
+namespace indiginous::transport {
 
 enum class ConnectionState {
     Disconnected,
@@ -46,7 +46,7 @@ public slots:
     void markWelcomeReady();
 
 signals:
-    void stateChanged(chatgrid::transport::ConnectionState state);
+    void stateChanged(indiginous::transport::ConnectionState state);
     void statusMessage(const QString& message);
 
 private:
@@ -56,4 +56,4 @@ private:
     QString endpoint_;
 };
 
-}  // namespace chatgrid::transport
+}  // namespace indiginous::transport

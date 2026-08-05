@@ -20,7 +20,7 @@ test('window reveal refocuses the world after restore/show', () => {
 test('native shell uses the shared settings bridge and native client marker', () => {
   assert.match(source, /native_client=electron/);
   assert.match(source, /url\.searchParams\.set\('native_client', 'electron'\)/);
-  assert.match(source, /window\.chatGridNativeOpenSettings\?\.\(\)/);
+  assert.match(source, /window\.indiginousNativeOpenSettings\?\.\(\)/);
   assert.doesNotMatch(source, /settingsButton.*click/);
 });
 

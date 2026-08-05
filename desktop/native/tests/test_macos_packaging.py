@@ -14,6 +14,6 @@ def test_macos_package_signs_app_and_pkg_with_apple_identities() -> None:
 
 
 def test_macos_spec_packages_complete_sound_tree() -> None:
-    spec = (ROOT / "macos" / "ChatGrid-macOS.spec").read_text(encoding="utf-8")
+    spec = (ROOT / "macos" / "Indiginous-macOS.spec").read_text(encoding="utf-8")
     assert 'client" / "public" / "sounds"' in spec
     assert 'datas.append((str(sound_root), "sounds"))' in spec

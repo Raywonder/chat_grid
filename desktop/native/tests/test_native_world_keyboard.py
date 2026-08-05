@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 
-APP_SOURCE = Path(__file__).parents[1] / "src" / "chat_grid_native" / "app.py"
-HOOK_SOURCE = Path(__file__).parents[1] / "src" / "chat_grid_native" / "windows_keyboard.py"
+APP_SOURCE = Path(__file__).parents[1] / "src" / "indiginous_native" / "app.py"
+HOOK_SOURCE = Path(__file__).parents[1] / "src" / "indiginous_native" / "windows_keyboard.py"
 
 
 def test_native_world_exposes_application_role_and_bridges_arrows() -> None:
@@ -15,7 +15,7 @@ def test_native_world_exposes_application_role_and_bridges_arrows() -> None:
     assert "wx.WXK_RIGHT" in source
     assert "wx.WXK_UP" in source
     assert "wx.WXK_DOWN" in source
-    assert "window.chatGridNativeKey" in source
+    assert "window.indiginousNativeKey" in source
     assert "self.web.Bind(wx.EVT_KEY_DOWN, self._on_world_key_down)" in source
     assert "Catch arrows at the WebView boundary" in source
     assert "runImmediateMovement" in (Path(__file__).parents[3] / "client/src/input/keyboardController.ts").read_text(encoding="utf-8")
@@ -32,7 +32,7 @@ def test_windows_world_movement_never_falls_back_to_global_hooks() -> None:
     assert "RegisterHotKey" not in source
     assert "WindowsWorldKeyHook" not in source
     assert "WH_KEYBOARD_LL" not in source
-    assert "window.chatGridNativeKey" in source
+    assert "window.indiginousNativeKey" in source
 
 
 def test_legacy_windows_hook_module_is_fail_closed() -> None:

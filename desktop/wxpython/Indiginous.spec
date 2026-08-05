@@ -1,6 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_all
 
+repo_root = Path(SPECPATH).resolve().parents[1]
+source_root = repo_root / "desktop" / "wxpython" / "src"
 datas = []
 binaries = [('C:\\WINDOWS\\System32\\msvcp140.dll', '.')]
 hiddenimports = ['wx.html2']
@@ -9,8 +13,8 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
-    ['W:\\Repos\\ChatGrid\\desktop\\wxpython\\src\\chat_grid_native\\__main__.py'],
-    pathex=['W:\\Repos\\ChatGrid\\desktop\\wxpython\\src'],
+    [str(source_root / 'indiginous_native' / '__main__.py')],
+    pathex=[str(source_root)],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,

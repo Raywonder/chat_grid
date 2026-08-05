@@ -34,7 +34,7 @@ export class TvScreenRuntime {
   private activeUrl = '';
 
   constructor() {
-    this.region.id = 'chatgrid-tv-screen';
+    this.region.id = 'indiginous-tv-screen';
     this.region.setAttribute('aria-label', 'Indiginous television');
     this.region.hidden = true;
     Object.assign(this.region.style, {
@@ -45,7 +45,7 @@ export class TvScreenRuntime {
     });
     this.heading.textContent = 'Television';
     this.heading.style.margin = '0 0 .25rem';
-    this.nowPlaying.id = 'chatgrid-tv-now-playing';
+    this.nowPlaying.id = 'indiginous-tv-now-playing';
     this.nowPlaying.style.margin = '0 0 .5rem';
     this.video.controls = true;
     this.video.playsInline = true;

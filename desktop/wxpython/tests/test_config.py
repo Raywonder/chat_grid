@@ -1,11 +1,11 @@
 from pathlib import Path
 
-from chat_grid_native.config import Settings, SettingsStore
-import chat_grid_native.migration as migration
+from indiginous_native.config import Settings, SettingsStore
+import indiginous_native.migration as migration
 
 
 def test_installer_policy_file_uses_blindsoftware_vendor_root() -> None:
-    installer = Path(__file__).parents[1] / "installer" / "ChatGrid.iss"
+    installer = Path(__file__).parents[1] / "installer" / "Indiginous.iss"
     source = installer.read_text(encoding="utf-8")
     assert "DefaultDirName={autopf}\\BlindSoftware\\{#MyAppName}" in source
 

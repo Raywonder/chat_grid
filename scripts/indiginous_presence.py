@@ -7,7 +7,7 @@ import runpy
 from pathlib import Path
 
 
-LEGACY_SCRIPT = Path(__file__).with_name("chatgrid_presence.py")
+LEGACY_SCRIPT = Path(__file__).with_name("indiginous_presence_impl.py")
 
 
 if __name__ == "__main__":

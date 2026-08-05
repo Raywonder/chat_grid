@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-SOURCE = (Path(__file__).parents[1] / "src" / "chat_grid_native" / "app.py").read_text(encoding="utf-8")
+SOURCE = (Path(__file__).parents[1] / "src" / "indiginous_native" / "app.py").read_text(encoding="utf-8")
 
 
 def test_browser_callback_always_continues_to_connect() -> None:

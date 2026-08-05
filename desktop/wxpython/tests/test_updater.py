@@ -3,8 +3,8 @@ import inspect
 
 import pytest
 
-from chat_grid_native.updater import UpdateManifest, UpdateService
-import chat_grid_native.updater as updater_module
+from indiginous_native.updater import UpdateManifest, UpdateService
+import indiginous_native.updater as updater_module
 
 
 def test_windows_handoff_forces_current_install_directory() -> None:

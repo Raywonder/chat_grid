@@ -88,7 +88,7 @@ class SettingsDialog(wx.Dialog):
         self.connect = wx.CheckBox(panel, label="Connect automatically after sign-in")
         self.connect.SetValue(settings.auto_connect)
         layout.Add(self.connect, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
-        self.updates = wx.CheckBox(panel, label="Check for and install verified Indiginious updates automatically")
+        self.updates = wx.CheckBox(panel, label="Check for and install verified Indiginous updates automatically")
         self.updates.SetValue(settings.auto_update)
         layout.Add(self.updates, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
         self.tray = wx.CheckBox(panel, label="Keep me signed in and running in the background when I close the window")
@@ -361,7 +361,7 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, lambda _event: self._focus_world(), id=self.focus_world_id)
         self.Bind(wx.EVT_MENU, self._show_app_settings, id=self.app_settings_id)
         self.Bind(wx.EVT_MENU, self._show_settings, id=wx.ID_PREFERENCES)
-        self.Bind(wx.EVT_MENU, lambda _event: self.web.RunScript("window.dispatchEvent(new Event('chatgrid-cast-to-device'));"), id=self.cast_device_id)
+        self.Bind(wx.EVT_MENU, lambda _event: self.web.RunScript("window.dispatchEvent(new Event('indiginous-cast-to-device'));"), id=self.cast_device_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.exit_application(), id=wx.ID_EXIT)
         self.Bind(wx.EVT_MENU, self._show_about, id=wx.ID_ABOUT)
         self.Bind(wx.EVT_MENU, lambda _event: self._check_updates_background(interactive=True), id=updates_id)
@@ -412,7 +412,7 @@ class MainFrame(wx.Frame):
                 )
         except (AttributeError, RuntimeError, TypeError):
             LOGGER.debug("Native accessibility announcement was unavailable", exc_info=True)
-        if speak or text.startswith(("Indiginious is up to date", "Update check failed")):
+        if speak or text.startswith(("Indiginous is up to date", "Update check failed")):
             self.screen_reader.speak(text, interrupt=True)
 
     def _announce_menu(self, text: str) -> None:
@@ -627,11 +627,11 @@ class MainFrame(wx.Frame):
         # second Connect click races its cookie/auth startup and can create a
         # storm of short-lived websocket sessions.
         self.web.RunScript(
-            "window.chatGridNativeSpeak=(text,options={})=>"
+            "window.indiginousNativeSpeak=(text,options={})=>"
             "window.chrome?.webview?.postMessage(JSON.stringify({type:'speak',text:String(text),interrupt:!!options.interrupt}));"
         )
         self.web.RunScript(
-            "(()=>{document.documentElement.classList.add('chatgrid-native');"
+            "(()=>{document.documentElement.classList.add('indiginous-native');"
             "let style=document.getElementById('chatgridNativeChrome');"
             "if(!style){style=document.createElement('style');style.id='chatgridNativeChrome';"
             "style.textContent='#gridTitle,#connectionStatus,#loginView,#authSessionView,#button-container,"
@@ -730,7 +730,7 @@ class MainFrame(wx.Frame):
             "itemBeacons": self.settings.item_beacons,
             "movementDirections": self.settings.movement_directions,
         })
-        self.web.RunScript(f"window.chatGridNativeApplyAudioSettings?.({payload});")
+        self.web.RunScript(f"window.indiginousNativeApplyAudioSettings?.({payload});")
 
     def _show_app_settings(self, _event: wx.CommandEvent) -> None:
         """Open the shared accessible app settings dialog from File."""
@@ -738,7 +738,7 @@ class MainFrame(wx.Frame):
             self._announce("Sign in to an Indiginous server before opening settings.")
             self.default_login.SetFocus()
             return
-        self.web.RunScript("window.chatGridNativeOpenSettings?.();")
+        self.web.RunScript("window.indiginousNativeOpenSettings?.();")
         wx.CallLater(100, self.web.SetFocus)
 
     def _focus_world(self) -> None:
@@ -767,7 +767,7 @@ class MainFrame(wx.Frame):
         key, code = mapped
         LOGGER.info("Forwarding native world key %s", code)
         try:
-            success, result = self.web.RunScript(f"window.chatGridNativeKey?.({json.dumps(code)});")
+            success, result = self.web.RunScript(f"window.indiginousNativeKey?.({json.dumps(code)});")
             LOGGER.info("Native world key result success=%s result=%s", success, result)
         except Exception:
             LOGGER.exception("Indiginous world key dispatch failed; closing safely")
@@ -779,7 +779,7 @@ class MainFrame(wx.Frame):
         if not self.web.IsShown():
             return
         options = json.dumps({"ctrlKey": ctrl, "shiftKey": shift})
-        success, result = self.web.RunScript(f"window.chatGridNativeKey?.({json.dumps(code)}, {options});")
+        success, result = self.web.RunScript(f"window.indiginousNativeKey?.({json.dumps(code)}, {options});")
         LOGGER.info("Native world shortcut %s result success=%s result=%s", code, success, result)
 
     def _check_updates_background(self, interactive: bool = False) -> None:
@@ -797,7 +797,7 @@ class MainFrame(wx.Frame):
                 if not interactive and service.is_dismissed(manifest):
                     return
                 if not self.settings.auto_update and not interactive:
-                    wx.CallAfter(self._announce, f"Indiginious {manifest.version} is available.", speak=True)
+                    wx.CallAfter(self._announce, f"Indiginous {manifest.version} is available.", speak=True)
                     return
                 installer = service.download(manifest)
                 wx.CallAfter(self._prepare_update_install, service, installer, manifest)

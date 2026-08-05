@@ -1,10 +1,10 @@
-# Indiginious client reconnect and release verification
+# Indiginous client reconnect and release verification
 
 Date: 2026-07-28
 
 ## Result
 
-The owner Windows laptop is running Indiginious 0.4.16. Its installed Windows
+The owner Windows laptop is running Indiginous 0.4.16. Its installed Windows
 installer is the same artifact already published in the site downloads area:
 
 - Version/revision: 0.4.16 / R539

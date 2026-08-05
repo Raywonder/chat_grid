@@ -1,4 +1,4 @@
-from chat_grid_native.deeplink import resolve_launch_url
+from indiginous_native.deeplink import resolve_launch_url
 
 
 def test_allows_indiginous_https_handoff():

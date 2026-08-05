@@ -124,12 +124,12 @@ class UpdateService:
             temporary.unlink(missing_ok=True)
             raise ValueError("Downloaded installer did not match the published SHA-256 checksum.")
         if sys.platform == "darwin":
-            with tempfile.TemporaryDirectory(prefix="indiginious-update-verify-") as directory:
+            with tempfile.TemporaryDirectory(prefix="indiginous-update-verify-") as directory:
                 extracted = Path(directory)
                 subprocess.run(["/usr/bin/ditto", "-x", "-k", str(temporary), str(extracted)], check=True)
-                app = extracted / "Indiginious.app"
+                app = extracted / "Indiginous.app"
                 if not app.is_dir():
-                    raise ValueError("Downloaded update does not contain Indiginious.app.")
+                    raise ValueError("Downloaded update does not contain Indiginous.app.")
                 subprocess.run(["/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app)], check=True)
                 subprocess.run(["/usr/sbin/spctl", "--assess", "--type", "execute", "--verbose=2", str(app)], check=True)
         temporary.replace(target)

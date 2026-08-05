@@ -16,7 +16,7 @@ python -m pip install --upgrade pip
 python -m pip install -e '.[build,test]'
 python -m pytest
 rm -rf build dist
-python -m PyInstaller --noconfirm --clean macos/ChatGrid-macOS.spec
+python -m PyInstaller --noconfirm --clean macos/Indiginous-macOS.spec
 mkdir -p macos/release
 rm -f macos/release/Indiginous-macOS.zip macos/release/Indiginous.dmg macos/release/Indiginous.pkg
 

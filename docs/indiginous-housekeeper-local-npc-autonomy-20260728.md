@@ -1,4 +1,4 @@
-# Indiginious housekeeper local-NPC autonomy
+# Indiginous housekeeper local-NPC autonomy
 
 Implemented a server-authoritative autonomy layer for `house_keeper` items.
 

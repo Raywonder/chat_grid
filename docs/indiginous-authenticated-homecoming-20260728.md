@@ -1,4 +1,4 @@
-# Indiginious authenticated homecoming
+# Indiginous authenticated homecoming
 
 Date: 2026-07-28
 
@@ -31,7 +31,7 @@ movement.
   (test client lacks `item.use`).
 - Live `chat-grid.service` restarted successfully and is active, MainPID
   `3226340`.
-- Public Indiginious web entry remains HTTP 200 and reports release `0.4.13`
+- Public Indiginous web entry remains HTTP 200 and reports release `0.4.13`
   / client revision `R536`.
 
 The web help/docs source now lists the homecoming commands. The client bundle

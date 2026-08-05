@@ -41,21 +41,21 @@ def check_source(args: argparse.Namespace) -> int:
         (repo / "desktop" / "native" / "pyproject.toml").read_text(encoding="utf-8"),
         "native package version",
     )
-    macos_spec = (repo / "desktop" / "native" / "macos" / "ChatGrid-macOS.spec").read_text(encoding="utf-8")
+    macos_spec = (repo / "desktop" / "native" / "macos" / "Indiginous-macOS.spec").read_text(encoding="utf-8")
     macos_bundle_version = _extract(r'version="([^"]+)"', macos_spec, "macOS bundle version")
     macos_short_version = _extract(r'"CFBundleShortVersionString": "([^"]+)"', macos_spec, "macOS short version")
     macos_display_name = _extract(r'"CFBundleDisplayName": "([^"]+)"', macos_spec, "macOS display name")
-    wx_installer = (repo / "desktop" / "wxpython" / "installer" / "ChatGrid.iss").read_text(encoding="utf-8")
+    wx_installer = (repo / "desktop" / "wxpython" / "installer" / "Indiginous.iss").read_text(encoding="utf-8")
     wx_installer_name = _extract(r'#define MyAppName "([^"]+)"', wx_installer, "Windows installer app name")
     wx_installer_version = _extract(r'#define MyAppVersion "([^"]+)"', wx_installer, "Windows installer version")
     wx_runtime_version = _extract(
         r'__version__ = "([^"]+)"',
-        (repo / "desktop" / "wxpython" / "src" / "chat_grid_native" / "__init__.py").read_text(encoding="utf-8"),
+        (repo / "desktop" / "wxpython" / "src" / "indiginous_native" / "__init__.py").read_text(encoding="utf-8"),
         "wxPython runtime version",
     )
     native_runtime_version = _extract(
         r'__version__ = "([^"]+)"',
-        (repo / "desktop" / "native" / "src" / "chat_grid_native" / "__init__.py").read_text(encoding="utf-8"),
+        (repo / "desktop" / "native" / "src" / "indiginous_native" / "__init__.py").read_text(encoding="utf-8"),
         "native runtime version",
     )
     client_revision = _extract(r'CHGRID_CLIENT_REVISION = "([^"]+)"', version_js, "client revision")
@@ -123,8 +123,8 @@ def check_source(args: argparse.Namespace) -> int:
         mismatches.append(f"macOS update manifest version mismatch: {mac_manifest_path}")
     if str(mac_manifest.get("revision", "")).strip() != args.revision:
         mismatches.append(f"macOS update manifest revision mismatch: {mac_manifest_path}")
-    if str(mac_platform.get("fileName", "")).strip() != "Indiginious-macOS.zip":
-        mismatches.append("macOS updater feed must use the stable Indiginious-macOS.zip package")
+    if str(mac_platform.get("fileName", "")).strip() != "Indiginous-macOS.zip":
+        mismatches.append("macOS updater feed must use the stable Indiginous-macOS.zip package")
     if not str(mac_platform.get("sha256", "")).strip():
         mismatches.append(f"macOS update manifest has no SHA-256: {mac_manifest_path}")
 

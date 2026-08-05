@@ -13,6 +13,9 @@ at <https://github.com/jage9/chat_grid>. Forks and modified builds must retain
 the MIT copyright and permission notice. The MIT License does not grant
 trademark rights or imply endorsement by Jage9.
 
+The maintained Indiginous source mirrors are <https://github.com/Raywonder/chat_grid>
+and <https://git.tappedin.fm/raywonder/endiginous>.
+
 ## Software dependencies
 
 The web, server, Electron, and native desktop clients use third-party

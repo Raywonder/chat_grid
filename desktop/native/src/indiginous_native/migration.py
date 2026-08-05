@@ -16,7 +16,7 @@ def migrate_legacy_state() -> dict[str, list[str]]:
     import os
     import shutil
 
-    names = ("Indiginous", "Endiginous", "Indigenous", "Chat Grid", "ChatGrid")
+    names = ("Indiginous", "Indiginious", "Endiginous", "Indigenous", "Chat Grid", "ChatGrid")
     home = Path.home()
     if sys.platform == "darwin":
         data_dirs = [home / "Library" / "Application Support" / name for name in names]

@@ -60,7 +60,7 @@ alone.
 
 ## Native-to-Web Audio Bridge
 
-- The embedded world exposes a versioned `chatGridDesktopAudio` JavaScript API.
+- The embedded world exposes a versioned `indiginousDesktopAudio` JavaScript API.
 - Native code requests device enumeration only after the user grants browser
   microphone permission.
 - The web runtime returns opaque device IDs and user-facing labels through the
@@ -149,7 +149,7 @@ layouts.
 
 ### Bridge contract
 
-- Expose a versioned `chatGridDesktopInput` API beside the audio bridge.
+- Expose a versioned `indiginousDesktopInput` API beside the audio bridge.
 - Send normalized event objects containing event type, physical code, logical
   key, modifiers, repeat state, timestamp, and text when applicable.
 - Do not send keystrokes to server logs, analytics, crash reports, or any page

@@ -1,4 +1,4 @@
-# Indiginious eCrypto menu and pronunciation update
+# Indiginous eCrypto menu and pronunciation update
 
 Date: 2026-07-28
 

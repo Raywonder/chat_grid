@@ -352,7 +352,7 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_MENU, lambda _event: self._focus_world(), id=focus_world_id)
         self.Bind(wx.EVT_MENU, lambda _event: self._login_or_logout(), id=signin_id)
         self.Bind(wx.EVT_MENU, self._show_settings, id=wx.ID_PREFERENCES)
-        self.Bind(wx.EVT_MENU, lambda _event: self.web.RunScript("window.dispatchEvent(new Event('chatgrid-cast-to-device'));"), id=cast_id)
+        self.Bind(wx.EVT_MENU, lambda _event: self.web.RunScript("window.dispatchEvent(new Event('indiginous-cast-to-device'));"), id=cast_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.Hide(), id=tray_id)
         self.Bind(wx.EVT_MENU, lambda _event: self.request_exit(), id=wx.ID_EXIT)
         self.Bind(wx.EVT_MENU, lambda _event: self._check_updates_background(interactive=True), id=update_id)
@@ -627,7 +627,7 @@ class MainFrame(wx.Frame):
     def _dispatch_world_shortcut(self, code: str, *, ctrl: bool = False, shift: bool = False) -> None:
         """Forward a native-only shortcut into the embedded world command profile."""
         options = json.dumps({"ctrlKey": ctrl, "shiftKey": shift})
-        self._run_script(f"if (window.chatGridNativeKey) window.chatGridNativeKey({json.dumps(code)}, {options});", "world-shortcut")
+        self._run_script(f"if (window.indiginousNativeKey) window.indiginousNativeKey({json.dumps(code)}, {options});", "world-shortcut")
 
     def _on_error(self, event: wx.html2.WebViewEvent) -> None:
         LOGGER.warning("WebView load error: %s", event.GetString())
@@ -716,7 +716,7 @@ class MainFrame(wx.Frame):
             self.store.save(self.settings)
             set_start_with_windows(self.settings.start_with_windows)
             self._run_script(
-                "window.chatGridNativeApplyAudioSettings?.(" + json.dumps({
+                "window.indiginousNativeApplyAudioSettings?.(" + json.dumps({
                     "outputMode": self.settings.audio_output_mode,
                     "masterVolume": self.settings.master_volume,
                     "microphoneGain": self.settings.microphone_gain,

@@ -1,7 +1,7 @@
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
-from chat_grid_native.browser_auth import BrowserAuthFlow
+from indiginous_native.browser_auth import BrowserAuthFlow
 
 
 def test_browser_auth_accepts_matching_loopback_callback() -> None:

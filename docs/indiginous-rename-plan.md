@@ -31,7 +31,7 @@ auth callbacks, update feeds, systemd units, and rollback checks together:
 - `chatgrid://` deep links.
 - `CHGRID_*` environment variables and web version constants.
 - `chat-grid.service` and `chat-grid-companion.service`.
-- `chat_grid_native` Python package paths.
+- Existing installed-client compatibility imports and bundle identifiers.
 - `chat-grid-focus`, `chat-grid-native-key`, and similar browser/native bridge
   event names.
 - Existing bundle identifiers, database filenames, backup names, logs, and old
@@ -41,10 +41,11 @@ auth callbacks, update feeds, systemd units, and rollback checks together:
 
 The remaining `chatgrid` identifiers are deliberately retained where removing
 them would strand an installed client or change a persistent contract: legacy
-deep links, old environment variables, Python import paths, service names,
-database/topic names, browser bridge events, bundle identifiers, and historical
-release artifacts. New installers register `indiginous://` and continue to
-accept `chatgrid://`.
+deep links, old environment variables, service names, database/topic names,
+bundle identifiers, compatibility wrappers, and historical release artifacts.
+Active desktop package paths, installer/spec filenames, and browser bridge
+events now use the Indiginous spelling. New installers register
+`indiginous://` and continue to accept `chatgrid://`.
 
 The old path should only be retired after the active Windows/macOS population
 has updated and a separate removal release verifies auth returns, update feeds,

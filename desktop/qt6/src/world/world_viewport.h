@@ -4,7 +4,7 @@
 #include <QString>
 #include <QWidget>
 
-namespace chatgrid::world {
+namespace indiginous::world {
 
 struct WorldSnapshot {
     int gridSize = 20;
@@ -36,4 +36,4 @@ private:
     bool hasSnapshot_ = false;
 };
 
-}  // namespace chatgrid::world
+}  // namespace indiginous::world

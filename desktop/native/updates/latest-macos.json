@@ -1,14 +1,14 @@
 {
   "version": "0.4.18",
   "revision": "R541",
-  "releaseNotes": "Indiginious macOS 0.4.18 includes automatic saved-session sign-in, deterministic in-app sign-in announcements, and a signed, Gatekeeper-validated updater that replaces the running app bundle.",
+  "releaseNotes": "Indiginous macOS 0.4.18 includes automatic saved-session sign-in, deterministic in-app sign-in announcements, and a signed, Gatekeeper-validated updater that replaces the running app bundle.",
   "platforms": {
     "macos": {
       "url": "https://blind.software/downloads/public/4Lm9sR2vX7qT5nK8dP1hG6/macos-zip",
-      "fileName": "Indiginious-macOS.zip",
+      "fileName": "Indiginous-macOS.zip",
       "sha256": "81a52a914fb9c4f2e2514a0bf50b8d10621dc12efcba0710fb9c13d2d9a44839",
       "zipUrl": "https://blind.software/downloads/public/4Lm9sR2vX7qT5nK8dP1hG6/macos-zip",
-      "zipFileName": "Indiginious-macOS.zip",
+      "zipFileName": "Indiginous-macOS.zip",
       "zipSha256": "81a52a914fb9c4f2e2514a0bf50b8d10621dc12efcba0710fb9c13d2d9a44839"
     }
   }

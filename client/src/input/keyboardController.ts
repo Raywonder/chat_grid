@@ -56,10 +56,12 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
   }
 
   const nativeWindow = window as Window & {
-    chatGridDesktop?: unknown;
+    indiginousDesktop?: unknown;
+    indiginousNativeKey?: (code: string, options?: { ctrlKey?: boolean; shiftKey?: boolean }) => boolean;
+    /** Legacy bridge for an older installed native shell. */
     chatGridNativeKey?: (code: string, options?: { ctrlKey?: boolean; shiftKey?: boolean }) => boolean;
   };
-  nativeWindow.chatGridNativeKey = (code: string, options = {}): boolean => {
+  const handleNativeKey = (code: string, options = {}): boolean => {
     if (!deps.state.running) {
       return false;
     }
@@ -95,6 +97,8 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     }
     return true;
   };
+  nativeWindow.indiginousNativeKey = handleNativeKey;
+  nativeWindow.chatGridNativeKey = handleNativeKey;
 
   function isTypingKey(code: string): boolean {
     return code.startsWith('Key') || code === 'Space';
@@ -197,7 +201,7 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
   }
 
   function isDesktopClient(): boolean {
-    return document.documentElement.classList.contains('chatgrid-native') || nativeWindow.chatGridDesktop != null;
+    return document.documentElement.classList.contains('indiginous-native') || nativeWindow.indiginousDesktop != null;
   }
 
   // Capture world keys before a stale sign-in/connect control or browser-level

@@ -31,7 +31,7 @@ def main() -> int:
             raise SystemExit(f"{relative} is missing: {', '.join(missing)}")
 
     cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
-    for needle in ("Qt6", "Widgets", "CHATGRID_QT6_BUILD_APP", "source_contract.py"):
+    for needle in ("Qt6", "Widgets", "INDIGINOUS_QT6_BUILD_APP", "source_contract.py"):
         if needle not in cmake:
             raise SystemExit(f"CMakeLists.txt is missing {needle}")
 

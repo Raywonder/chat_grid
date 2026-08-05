@@ -1,6 +1,6 @@
 import sys
 
-from chat_grid_native.screen_reader import MAX_SPEECH_LENGTH, ScreenReaderSpeech
+from indiginous_native.screen_reader import MAX_SPEECH_LENGTH, ScreenReaderSpeech
 
 
 def test_missing_screen_reader_is_safe(monkeypatch):
@@ -8,7 +8,7 @@ def test_missing_screen_reader_is_safe(monkeypatch):
     speech.library = None
     assert speech.available() is False
     if sys.platform == "darwin":
-        monkeypatch.setattr("chat_grid_native.screen_reader.subprocess.Popen", lambda *args, **kwargs: object())
+        monkeypatch.setattr("indiginous_native.screen_reader.subprocess.Popen", lambda *args, **kwargs: object())
         assert speech.speak("hello") is True
     else:
         assert speech.speak("hello") is False

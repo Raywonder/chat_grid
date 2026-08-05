@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-SOURCE = (Path(__file__).parents[1] / "src" / "chat_grid_native" / "app.py").read_text(encoding="utf-8")
+SOURCE = (Path(__file__).parents[1] / "src" / "indiginous_native" / "app.py").read_text(encoding="utf-8")
 
 
 def test_tray_menu_exposes_core_actions_and_is_keyboard_labelled():

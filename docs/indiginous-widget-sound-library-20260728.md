@@ -1,4 +1,4 @@
-# Indiginious widget sound library work
+# Indiginous widget sound library work
 
 ## Implemented locally
 

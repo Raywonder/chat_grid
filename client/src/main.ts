@@ -417,7 +417,7 @@ const APP_CLIENT_REVISION = String(window.CHGRID_CLIENT_REVISION ?? '').trim();
 const APP_DISPLAY_VERSION = [APP_RELEASE_VERSION, APP_CLIENT_REVISION].filter((value) => value.length > 0).join(' ').trim();
 const STARTED_FROM_VERSION_RELOAD = isVersionReloadedSession();
 const IS_NATIVE_CLIENT = new URLSearchParams(window.location.search).has('native_client');
-document.documentElement.classList.toggle('chatgrid-native', IS_NATIVE_CLIENT);
+document.documentElement.classList.toggle('indiginous-native', IS_NATIVE_CLIENT);
 dom.appVersion.textContent = APP_DISPLAY_VERSION
   ? `${IS_NATIVE_CLIENT ? 'Indiginous desktop client' : 'Indiginous web client'}. Version ${APP_DISPLAY_VERSION}`
   : `${IS_NATIVE_CLIENT ? 'Indiginous desktop client' : 'Indiginous web client'}. Version unknown`;
@@ -1510,9 +1510,12 @@ function updateStatus(message: string): void {
   // screen reader. The ARIA live region remains the browser fallback.
   const nativeSpeak = (
     window as Window & {
+      indiginousNativeSpeak?: (text: string, options?: { interrupt?: boolean }) => void;
       chatGridNativeSpeak?: (text: string, options?: { interrupt?: boolean }) => void;
     }
-  ).chatGridNativeSpeak;
+  ).indiginousNativeSpeak ?? (window as Window & {
+    chatGridNativeSpeak?: (text: string, options?: { interrupt?: boolean }) => void;
+  }).chatGridNativeSpeak;
   if (normalized && typeof nativeSpeak === 'function') {
     const spoken = spokenAnnouncementText(normalized);
     nativeSpeak(spoken, { interrupt: true });
@@ -4654,7 +4657,7 @@ function openMediaGuide(): void {
       button.addEventListener('click', () => {
         if (entry.action) {
           if (entry.action === 'cast') {
-            window.dispatchEvent(new Event('chatgrid-cast-to-device'));
+            window.dispatchEvent(new Event('indiginous-cast-to-device'));
           } else if (entry.action === 'station_next' || entry.action === 'station_previous' || entry.action === 'volume_up' || entry.action === 'volume_down') {
             radioRemoteControlCommand(entry.action);
           } else {
@@ -6248,11 +6251,11 @@ function openSettings(): void {
 // separate canvas button is intentionally omitted so device settings have one
 // clear home.
 if (IS_NATIVE_CLIENT) {
-  (window as Window & { chatGridNativeOpenSettings?: () => boolean }).chatGridNativeOpenSettings = () => {
+  const openNativeSettings = () => {
     openSettings();
     return true;
   };
-  (window as Window & { chatGridNativeApplyAudioSettings?: (value: unknown) => void }).chatGridNativeApplyAudioSettings = (value) => {
+  const applyNativeAudioSettings = (value: unknown) => {
     if (!value || typeof value !== 'object') return;
     const next = value as Partial<{
       outputMode: 'mono' | 'stereo'; masterVolume: number; microphoneGain: number;
@@ -6287,6 +6290,30 @@ if (IS_NATIVE_CLIENT) {
     if (typeof next.itemBeacons === 'boolean') setItemBeacons(next.itemBeacons);
     if (typeof next.movementDirections === 'boolean') setMovementDirections(next.movementDirections);
   };
+  (window as Window & {
+    indiginousNativeOpenSettings?: () => boolean;
+    chatGridNativeOpenSettings?: () => boolean;
+    indiginousNativeApplyAudioSettings?: (value: unknown) => void;
+    chatGridNativeApplyAudioSettings?: (value: unknown) => void;
+  }).indiginousNativeOpenSettings = openNativeSettings;
+  (window as Window & {
+    indiginousNativeOpenSettings?: () => boolean;
+    chatGridNativeOpenSettings?: () => boolean;
+    indiginousNativeApplyAudioSettings?: (value: unknown) => void;
+    chatGridNativeApplyAudioSettings?: (value: unknown) => void;
+  }).chatGridNativeOpenSettings = openNativeSettings;
+  (window as Window & {
+    indiginousNativeOpenSettings?: () => boolean;
+    chatGridNativeOpenSettings?: () => boolean;
+    indiginousNativeApplyAudioSettings?: (value: unknown) => void;
+    chatGridNativeApplyAudioSettings?: (value: unknown) => void;
+  }).indiginousNativeApplyAudioSettings = applyNativeAudioSettings;
+  (window as Window & {
+    indiginousNativeOpenSettings?: () => boolean;
+    chatGridNativeOpenSettings?: () => boolean;
+    indiginousNativeApplyAudioSettings?: (value: unknown) => void;
+    chatGridNativeApplyAudioSettings?: (value: unknown) => void;
+  }).chatGridNativeApplyAudioSettings = applyNativeAudioSettings;
 }
 
 dom.ntfyNotificationsToggle.addEventListener('change', () => {
@@ -6358,6 +6385,9 @@ dom.readGuideButton.addEventListener('click', () => {
   openJoinGuideReader();
 });
 
+window.addEventListener('indiginous-cast-to-device', () => {
+  void castToNearestDevice();
+});
 window.addEventListener('chatgrid-cast-to-device', () => {
   void castToNearestDevice();
 });

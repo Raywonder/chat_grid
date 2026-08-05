@@ -10,7 +10,7 @@ import sys
 
 from .config import app_data_dir
 
-LEGACY_APP_NAMES = ("Indiginous", "Endiginous", "Indigenous", "Chat Grid", "ChatGrid")
+LEGACY_APP_NAMES = ("Indiginous", "Indiginious", "Endiginous", "Indigenous", "Chat Grid", "ChatGrid")
 
 
 def _paths() -> tuple[list[Path], list[Path], list[Path]]:

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from chat_grid_native import single_instance
+from indiginous_native import single_instance
 
 
 class FakeKernel32:

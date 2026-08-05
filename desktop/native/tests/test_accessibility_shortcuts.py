@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-SOURCE = (Path(__file__).parents[1] / "src" / "chat_grid_native" / "app.py").read_text(encoding="utf-8")
+SOURCE = (Path(__file__).parents[1] / "src" / "indiginous_native" / "app.py").read_text(encoding="utf-8")
 
 
 def test_native_shortcuts_are_explicitly_handled():
@@ -37,12 +37,12 @@ def test_explicit_exit_does_not_present_an_update_dialog_and_forces_close():
 
 
 def test_update_controls_are_discoverable_and_respect_preferences():
-    assert "Check for and install verified Indiginious updates automatically" in SOURCE
+    assert "Check for and install verified Indiginous updates automatically" in SOURCE
     assert 'help_menu.Append(updates_id, "Check for &updates")' in SOURCE
     assert "if self.settings.auto_update:" in SOURCE
 
 
 def test_windows_installer_replaces_orphaned_files():
-    installer = Path(__file__).parents[1] / "windows" / "installer" / "ChatGrid.iss"
+    installer = Path(__file__).parents[1] / "windows" / "installer" / "Indiginous.iss"
     source = installer.read_text(encoding="utf-8")
     assert 'Type: filesandordirs; Name: "{app}\\*"' in source

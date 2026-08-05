@@ -3,7 +3,7 @@
 #include <QPainter>
 #include <QPaintEvent>
 
-namespace chatgrid::world {
+namespace indiginous::world {
 
 WorldViewport::WorldViewport(QWidget* parent) : QWidget(parent) {
     setFocusPolicy(Qt::StrongFocus);
@@ -66,4 +66,4 @@ void WorldViewport::paintEvent(QPaintEvent* event) {
                      snapshot_.locationName.isEmpty() ? QStringLiteral("World") : snapshot_.locationName);
 }
 
-}  // namespace chatgrid::world
+}  // namespace indiginous::world

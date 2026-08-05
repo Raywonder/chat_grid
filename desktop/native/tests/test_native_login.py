@@ -1,4 +1,4 @@
-from chat_grid_native.app import MainFrame
+from indiginous_native.app import MainFrame
 
 
 def test_server_url_accepts_domain_and_uses_indiginous_path():

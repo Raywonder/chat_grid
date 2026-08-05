@@ -1,4 +1,4 @@
-from chat_grid_native.reconnect import ReconnectBackoff
+from indiginous_native.reconnect import ReconnectBackoff
 
 
 def test_backoff_is_bounded_and_resettable() -> None:

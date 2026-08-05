@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-SOURCE = (Path(__file__).parents[1] / "src" / "chat_grid_native" / "app.py").read_text(encoding="utf-8")
+SOURCE = (Path(__file__).parents[1] / "src" / "indiginous_native" / "app.py").read_text(encoding="utf-8")
 
 
 def test_native_shortcuts_are_explicitly_handled():
@@ -34,14 +34,14 @@ def test_explicit_exit_does_not_present_an_update_dialog_and_forces_close():
 
 
 def test_windows_installer_replaces_orphaned_files():
-    installer = Path(__file__).parents[1] / "installer" / "ChatGrid.iss"
+    installer = Path(__file__).parents[1] / "installer" / "Indiginous.iss"
     source = installer.read_text(encoding="utf-8")
     assert 'Type: filesandordirs; Name: "{app}\\*"' in source
 
 
 def test_windows_installer_shows_application_license_not_source_only_license():
     project_root = Path(__file__).parents[3]
-    installer = Path(__file__).parents[1] / "installer" / "ChatGrid.iss"
+    installer = Path(__file__).parents[1] / "installer" / "Indiginous.iss"
     source = installer.read_text(encoding="utf-8")
     license_path = project_root / "INDIGINOUS_APPLICATION_LICENSE.txt"
     license_text = license_path.read_text(encoding="utf-8")

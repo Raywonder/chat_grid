@@ -5,7 +5,7 @@ Use this note before each Indiginous release candidate to catch runtime errors t
 Run:
 
 ```bash
-python3 scripts/chatgrid_log_audit.py
+python3 scripts/indiginous_log_audit.py
 ```
 
 The script reads the current nginx access/error logs for `blind.software` plus `server/runtime/server.log`, groups Indiginous failures by endpoint/status, and redacts high-value query strings such as media proxy stream URLs.
@@ -24,6 +24,6 @@ The script reads the current nginx access/error logs for `blind.software` plus `
 
 - Run focused server tests for the feature area, plus `server/tests/test_server_message_handling.py` when protocol behavior changes.
 - Run `npm run build` from `client/`.
-- Run `python3 scripts/chatgrid_log_audit.py` before and after deploy.
+- Run `python3 scripts/indiginous_log_audit.py` before and after deploy.
 - Verify public `/chatgrid/`, `/chatgrid/version.js`, current JS/CSS assets, `help.json`, `client_branding.json` when configured, and `media_proxy.php` with an authenticated browser session when radio/media behavior changed.
 - Treat new 500/502 responses, browser-origin 401s, missing current assets, and repeated app warnings as release blockers unless they are understood and documented.

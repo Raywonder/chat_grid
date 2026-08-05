@@ -5,6 +5,11 @@ Indiginous is one of those projects that started with a random idea, and then gr
 
 Indiginous is designed to be run on a secure server with users connecting via a web client. The client works best currently with Windows browsers, with minimal testing on mobile/Mac. Ideally, client apps would be better in the long-run, especially for mobile.
 
+Maintained source mirrors:
+
+- GitHub: <https://github.com/Raywonder/chat_grid>
+- TappedIn Gitea: <https://git.tappedin.fm/raywonder/endiginous>
+
 ## Local Run
 
 1) Start server

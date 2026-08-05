@@ -4,7 +4,7 @@ from setuptools import setup
 
 OPTIONS = {
     "argv_emulation": False,
-    "packages": ["chat_grid_native", "requests", "packaging", "certifi"],
+    "packages": ["indiginous_native", "requests", "packaging", "certifi"],
     "plist": {
         "CFBundleName": "Indiginous",
         "CFBundleDisplayName": "Indiginous",

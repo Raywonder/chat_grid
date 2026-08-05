@@ -1,4 +1,4 @@
-from chat_grid_native.spatial_audio import BRIDGE_VERSION, spatial_audio_script
+from indiginous_native.spatial_audio import BRIDGE_VERSION, spatial_audio_script
 
 
 def test_spatial_audio_bridge_is_versioned_and_uses_hrtf():

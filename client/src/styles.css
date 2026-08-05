@@ -15,13 +15,21 @@ body {
 /* Native shells expose sign-in and settings through their own accessible
    menus. Keep browser users' normal page intact while removing duplicate
    canvas chrome from the native accessibility tree. */
+html.indiginous-native #gridTitle,
 html.chatgrid-native #gridTitle,
+html.indiginous-native #connectionStatus,
 html.chatgrid-native #connectionStatus,
+html.indiginous-native #loginView,
 html.chatgrid-native #loginView,
+html.indiginous-native #authSessionView,
 html.chatgrid-native #authSessionView,
+html.indiginous-native #button-container,
 html.chatgrid-native #button-container,
+html.indiginous-native #deviceSummary,
 html.chatgrid-native #deviceSummary,
+html.indiginous-native #joinGuide,
 html.chatgrid-native #joinGuide,
+html.indiginous-native #appFooter,
 html.chatgrid-native #appFooter {
   display: none !important;
 }

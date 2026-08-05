@@ -16,7 +16,7 @@
 
 #include "world/world_viewport.h"
 
-namespace chatgrid::app {
+namespace indiginous::app {
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle(QStringLiteral("Indiginous — Native Qt 6 foundation"));
@@ -125,4 +125,4 @@ void MainWindow::showAbout() {
     dialog.exec();
 }
 
-}  // namespace chatgrid::app
+}  // namespace indiginous::app

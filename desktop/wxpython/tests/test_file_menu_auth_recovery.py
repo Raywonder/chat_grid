@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-SOURCE = (Path(__file__).parents[1] / "src" / "chat_grid_native" / "app.py").read_text(encoding="utf-8")
+SOURCE = (Path(__file__).parents[1] / "src" / "indiginous_native" / "app.py").read_text(encoding="utf-8")
 
 
 def test_file_menu_exposes_auth_without_manual_reconnect():

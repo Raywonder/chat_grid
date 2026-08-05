@@ -7,7 +7,7 @@ int main(int argc, char* argv[]) {
     application.setApplicationName(QStringLiteral("Indiginous Native Qt 6"));
     application.setOrganizationName(QStringLiteral("Divine Creations"));
 
-    chatgrid::app::MainWindow window;
+    indiginous::app::MainWindow window;
     window.show();
     return application.exec();
 }

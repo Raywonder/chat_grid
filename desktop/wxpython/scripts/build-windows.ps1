@@ -62,13 +62,13 @@ $Args += @("--add-binary", "$Msvcp;.")
 if (Test-Path $Assets) {
     $Args += @("--add-data", "$Assets;assets\web")
 }
-$Args += (Join-Path $Root "src\chat_grid_native\__main__.py")
+$Args += (Join-Path $Root "src\indiginous_native\__main__.py")
 & $Python @Args
 $DistRoot = Join-Path $Root "dist\Indiginous"
 Copy-Item (Join-Path $Root "..\..\LICENSE") (Join-Path $DistRoot "LICENSE.txt") -Force
 Copy-Item (Join-Path $Root "..\..\INDIGINOUS_APPLICATION_LICENSE.txt") (Join-Path $DistRoot "INDIGINOUS_APPLICATION_LICENSE.txt") -Force
 Copy-Item (Join-Path $Root "..\..\THIRD_PARTY_NOTICES.md") (Join-Path $DistRoot "THIRD_PARTY_NOTICES.md") -Force
-& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" (Join-Path $Root "installer\ChatGrid.iss")
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" (Join-Path $Root "installer\Indiginous.iss")
 }
 finally {
     Pop-Location
