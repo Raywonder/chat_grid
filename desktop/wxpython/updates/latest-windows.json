@@ -6,7 +6,7 @@
     "windows": {
       "url": "https://blind.software/downloads/public/7Kp3mN8vQ2xL5rT9cW6yH1/windows",
       "fileName": "Indiginous_Setup.exe",
-      "sha256": "3c27b2080b76caceddb9d10392a40d2735e356cc90a693e12ed20af2b487057c",
+      "sha256": "B19C21B32E42F66EA8A1B73DB89BD38148C95082063E1847FDFA877875D1B3E4",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }
   }
