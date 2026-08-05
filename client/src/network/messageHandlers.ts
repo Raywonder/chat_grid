@@ -135,6 +135,7 @@ type MessageHandlerDeps = {
   playLocateToneAt: (x: number, y: number) => void;
   resolveIncomingSoundUrl: (url: string) => string;
   playIncomingItemUseSound: (url: string, x: number, y: number, range?: number) => void;
+  playIncomingAgentVoice: (message: Extract<IncomingMessage, { type: 'agent_voice' }>) => Promise<void>;
   playClockAnnouncement: (sounds: string[], x: number, y: number, range?: number) => void;
   handleAuthRequired: (message: Extract<IncomingMessage, { type: 'auth_required' }>) => void;
   handleAuthResult: (message: Extract<IncomingMessage, { type: 'auth_result' }>) => Promise<void>;
@@ -617,7 +618,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         if (deps.getAudioLayers().voice || deps.getAudioLayers().item) {
           const audioUrl = deps.resolveIncomingSoundUrl(message.audioUrl);
           if (audioUrl) {
-            deps.playIncomingItemUseSound(audioUrl, message.x, message.y, message.range);
+            await deps.playIncomingAgentVoice({ ...message, audioUrl });
           }
         }
         break;

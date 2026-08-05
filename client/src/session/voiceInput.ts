@@ -33,6 +33,8 @@ export class VoiceInput {
   private recognition: SpeechRecognitionLike | null = null;
   private active = false;
   private restartTimer: number | null = null;
+  private playbackSuppressionDepth = 0;
+  private ignoreResultsUntilMs = 0;
 
   constructor(private readonly options: VoiceInputOptions) {}
 
@@ -54,6 +56,7 @@ export class VoiceInput {
     this.recognition.interimResults = false;
     this.recognition.lang = document.documentElement.lang || 'en-US';
     this.recognition.onresult = (event) => {
+      if (this.playbackSuppressionDepth > 0 || Date.now() < this.ignoreResultsUntilMs) return;
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const result = event.results[index];
         if (!result.isFinal) continue;
@@ -69,7 +72,7 @@ export class VoiceInput {
       }
     };
     this.recognition.onend = () => {
-      if (!this.active || this.restartTimer !== null) return;
+      if (!this.active || this.playbackSuppressionDepth > 0 || this.restartTimer !== null) return;
       this.restartTimer = window.setTimeout(() => {
         this.restartTimer = null;
         try {
@@ -93,6 +96,29 @@ export class VoiceInput {
 
   stop(): void {
     this.active = false;
+    this.playbackSuppressionDepth = 0;
+    this.stopRecognitionInstance();
+  }
+
+  /** Temporarily pauses recognition while agent speech is audible. */
+  suspendForPlayback(): void {
+    if (!this.active) return;
+    this.playbackSuppressionDepth += 1;
+    this.ignoreResultsUntilMs = Date.now() + 500;
+    if (this.playbackSuppressionDepth === 1) this.stopRecognitionInstance();
+  }
+
+  /** Resumes recognition after all overlapping agent speech has finished. */
+  resumeAfterPlayback(): void {
+    if (this.playbackSuppressionDepth === 0) return;
+    this.playbackSuppressionDepth -= 1;
+    if (this.playbackSuppressionDepth === 0 && this.active && this.recognition === null) {
+      this.ignoreResultsUntilMs = Date.now() + 500;
+      this.start();
+    }
+  }
+
+  private stopRecognitionInstance(): void {
     if (this.restartTimer !== null) {
       window.clearTimeout(this.restartTimer);
       this.restartTimer = null;
@@ -112,7 +138,7 @@ export class VoiceInput {
   }
 
   private scheduleRestart(): void {
-    if (!this.active || this.restartTimer !== null) return;
+    if (!this.active || this.playbackSuppressionDepth > 0 || this.restartTimer !== null) return;
     this.restartTimer = window.setTimeout(() => {
       this.restartTimer = null;
       try {

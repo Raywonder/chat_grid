@@ -209,6 +209,9 @@ export class MediaSession {
   /** Starts local capture and replaces outbound peer tracks. */
   async setupLocalMedia(audioDeviceId = ''): Promise<void> {
     this.stopLocalMedia();
+    // Microphone monitoring is an opt-in diagnostic feature. Never carry it
+    // into a live session where it can feed speaker output back to recognition.
+    this.options.audio.setLoopbackEnabled(false);
     await this.options.audio.ensureContext();
 
     const constraints: MediaStreamConstraints = {
@@ -216,9 +219,11 @@ export class MediaSession {
         deviceId: audioDeviceId ? { exact: audioDeviceId } : undefined,
         sampleRate: 48000,
         channelCount: 2,
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
+        // Let the browser suppress speaker bleed before it reaches WebRTC or
+        // the speech recognizer. Agent playback is also gated in main.ts.
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
       },
       video: false,
     };

@@ -4161,6 +4161,21 @@ const onAppMessage = createOnMessageHandler({
       audio.playSpatialWheelFlourish({ x, y }, listenerPosition, range ?? HEARING_RADIUS);
     }
   },
+  playIncomingAgentVoice: async (message) => {
+    const listenerPosition = getListenerPosition();
+    voiceInput.suspendForPlayback();
+    try {
+      await audio.playSpatialSampleAndWait(
+        message.audioUrl,
+        { x: message.x, y: message.y },
+        listenerPosition,
+        1,
+        message.range ?? HEARING_RADIUS,
+      );
+    } finally {
+      voiceInput.resumeAfterPlayback();
+    }
+  },
   playClockAnnouncement: (sounds, x, y, range) => {
     if (sounds.length === 0) {
       void audio.playSpatialSample(ACTION_SOUND_URL, { x, y }, getListenerPosition(), 0.72, range ?? HEARING_RADIUS);

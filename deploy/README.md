@@ -24,6 +24,16 @@ cd "$REPO_ROOT"
 ./deploy/scripts/install_server.sh "$REPO_ROOT"
 ```
 
+The install also registers the optional agent capabilities (Demucs/Moises
+adapter and the host Ollama service) against a shared host root,
+`/var/lib/indiginous/tools` by default. Multiple Indiginous server copies on
+the same host reuse that root and its lock instead of creating per-server
+toolchains. Set `CHGRID_SHARED_TOOL_ROOT` to an operator-owned path when root
+access is unavailable. Set `CHGRID_INSTALL_DEMUCS=1` only when the host should
+install Demucs into that shared environment; Ollama remains one host service.
+The complete source and wrappers are included in every server checkout under
+`server/app/` and `server/tools/`.
+
 What this sets up:
 - Python venv under `server/.venv`
 - `server/config.toml` (if missing)

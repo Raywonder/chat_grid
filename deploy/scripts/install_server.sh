@@ -50,6 +50,22 @@ fi
 
 mkdir -p runtime
 
+# Register optional agent capabilities against one host-wide root. This keeps
+# separate Indiginous server installs from downloading duplicate toolchains.
+if [[ -z "${CHGRID_SHARED_TOOL_ROOT:-}" ]]; then
+  if [[ -w "/var/lib" ]]; then
+    CHGRID_SHARED_TOOL_ROOT="/var/lib/indiginous/tools"
+  else
+    CHGRID_SHARED_TOOL_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/indiginous/tools"
+  fi
+fi
+if [[ "${CHGRID_SKIP_AGENT_TOOLS:-0}" != "1" ]]; then
+  export CHGRID_SHARED_TOOL_ROOT
+  if [[ -x "$REPO_ROOT/deploy/scripts/install_agent_tools.sh" ]]; then
+    "$REPO_ROOT/deploy/scripts/install_agent_tools.sh" "$REPO_ROOT"
+  fi
+fi
+
 if [[ ! -f .env ]]; then
   AUTH_SECRET="$(
     python3 - <<'PY'
@@ -61,6 +77,10 @@ PY
   printf "# Required browser origin, for example CHGRID_HOST_ORIGIN=https://example.com\n" >> .env
   chmod 600 .env
   echo "created $SERVER_DIR/.env with CHGRID_AUTH_SECRET"
+fi
+
+if ! grep -q '^CHGRID_SHARED_TOOL_ROOT=' .env; then
+  printf "CHGRID_SHARED_TOOL_ROOT=%s\n" "$CHGRID_SHARED_TOOL_ROOT" >> .env
 fi
 
 # Load generated/shared auth secret for bootstrap checks.
