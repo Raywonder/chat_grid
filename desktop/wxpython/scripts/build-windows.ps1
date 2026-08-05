@@ -1,4 +1,9 @@
 $ErrorActionPreference = "Stop"
+# PyInstaller writes informational progress lines to stderr on Windows. Do not
+# let PowerShell 7 reinterpret those normal native-tool lines as failures.
+if ($PSVersionTable.PSVersion.Major -ge 7) {
+    $PSNativeCommandUseErrorActionPreference = $false
+}
 $Root = Split-Path -Parent $PSScriptRoot
 Push-Location $Root
 try {
@@ -63,7 +68,10 @@ if (Test-Path $Assets) {
     $Args += @("--add-data", "$Assets;assets\web")
 }
 $Args += (Join-Path $Root "src\indiginous_native\__main__.py")
-& $Python @Args
+$PyInstallerProcess = Start-Process -FilePath $Python -ArgumentList $Args -WorkingDirectory $Root -NoNewWindow -Wait -PassThru
+if ($PyInstallerProcess.ExitCode -ne 0) {
+    throw "PyInstaller failed with exit code $($PyInstallerProcess.ExitCode)."
+}
 $DistRoot = Join-Path $Root "dist\Indiginous"
 Copy-Item (Join-Path $Root "..\..\LICENSE") (Join-Path $DistRoot "LICENSE.txt") -Force
 Copy-Item (Join-Path $Root "..\..\INDIGINOUS_APPLICATION_LICENSE.txt") (Join-Path $DistRoot "INDIGINOUS_APPLICATION_LICENSE.txt") -Force

@@ -26,6 +26,7 @@ from .migration import migrate_legacy_state
 
 
 LOGGER = logging.getLogger(__name__)
+AUTO_UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000
 
 
 class IndiginousTrayIcon(wx.adv.TaskBarIcon):
@@ -273,6 +274,7 @@ class MainFrame(wx.Frame):
         self.settings = settings_store.load()
         self.backoff = ReconnectBackoff(self.settings.reconnect_initial_seconds, self.settings.reconnect_max_seconds)
         self.reconnect_timer = wx.Timer(self)
+        self.auto_update_timer = wx.Timer(self)
         self.update_thread: threading.Thread | None = None
         self.browser_auth_flow: BrowserAuthFlow | None = None
         self.auto_browser_auth_call: wx.CallLater | None = None
@@ -300,6 +302,7 @@ class MainFrame(wx.Frame):
         self.CreateStatusBar()
         self.SetStatusText("Starting Indiginous")
         self.Bind(wx.EVT_TIMER, self._on_reconnect_timer, self.reconnect_timer)
+        self.Bind(wx.EVT_TIMER, self._on_auto_update_timer, self.auto_update_timer)
         self.Bind(wx.EVT_CLOSE, self._on_close)
         self.Bind(wx.EVT_ICONIZE, self._on_iconize)
         self.Bind(wx.EVT_ACTIVATE, self._on_activate)
@@ -312,6 +315,7 @@ class MainFrame(wx.Frame):
             self.Show()
         if self.settings.auto_update:
             wx.CallLater(5000, self._check_updates_background)
+            self.auto_update_timer.Start(AUTO_UPDATE_INTERVAL_MS)
 
     def _build_menu(self) -> None:
         """Create a conventional, fully keyboard-accessible native menu bar."""
@@ -761,6 +765,11 @@ class MainFrame(wx.Frame):
         self.update_thread = threading.Thread(target=worker, name="chat-grid-updater", daemon=True)
         self.update_thread.start()
 
+    def _on_auto_update_timer(self, _event: wx.TimerEvent) -> None:
+        """Check for verified releases while the app remains open."""
+        if self.settings.auto_update and not self.force_quit:
+            self._check_updates_background()
+
     def _prepare_update_install(self, service: UpdateService, installer: Path, manifest: object) -> None:
         """Show the countdown on the UI thread before closing for installation."""
         version = str(getattr(manifest, "version", "the update"))
@@ -808,6 +817,7 @@ class MainFrame(wx.Frame):
             self.Hide()
             return
         self.reconnect_timer.Stop()
+        self.auto_update_timer.Stop()
         event.Skip()
 
 

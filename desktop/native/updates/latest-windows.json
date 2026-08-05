@@ -1,12 +1,12 @@
 {
   "version": "0.4.18",
-  "revision": "R548",
-  "releaseNotes": "Indiginous Windows 0.4.18 includes the current authenticated world client, migrated legacy install paths, and the latest verified update flow.",
+  "revision": "R549",
+  "releaseNotes": "Indiginous Windows 0.4.18 checks for verified updates in the background while the app remains open, then installs and relaunches safely.",
   "platforms": {
     "windows": {
       "url": "https://blind.software/downloads/public/7Kp3mN8vQ2xL5rT9cW6yH1/windows",
       "fileName": "Indiginous_Setup.exe",
-      "sha256": "B19C21B32E42F66EA8A1B73DB89BD38148C95082063E1847FDFA877875D1B3E4",
+      "sha256": "8fd924e3e29b9d9f3f9b1ddb3ac3d90059da17e77744ac3fe0167e1daf311ff8",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }
   }
