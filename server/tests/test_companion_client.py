@@ -11,6 +11,7 @@ import pytest
 from tools.companion_client import (
     CompanionClient,
     _choose_auto_seat,
+    _direct_world_intent,
     _is_addressed_to_companion,
 )
 
@@ -30,6 +31,12 @@ def test_world_chat_addressing_accepts_name_aliases_without_matching_unrelated_t
     assert _is_addressed_to_companion("Missi, are you there?", "Clawdia")
     assert _is_addressed_to_companion("I found Claudia in the room.", "Clawdia")
     assert not _is_addressed_to_companion("The claw is on the table.", "Clawdia")
+
+
+def test_direct_world_intent_requires_explicit_movement_language() -> None:
+    assert _direct_world_intent("Come sit on the bed") == ("seat", "bed")
+    assert _direct_world_intent("come to me") == ("person", "me")
+    assert _direct_world_intent("The TV is talking") is None
 
 
 def test_write_state_publishes_current_world_receipt(tmp_path) -> None:
@@ -241,3 +248,28 @@ async def test_companion_command_loop_supports_autonomous_move_and_social_action
         {"type": "update_position", "x": 21, "y": 19},
         {"type": "user_action", "actionId": "wave", "targetId": "dom-id"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_companion_focus_mode_suppresses_public_replies(tmp_path) -> None:
+    client = CompanionClient(
+        url="ws://example.invalid",
+        origin="https://example.invalid",
+        username="clawdia",
+        password="secret-for-test",
+        nickname="Claudia",
+        command_file=tmp_path / "commands.jsonl",
+        state_file=tmp_path / "state.json",
+    )
+    client.connected = True
+    socket = FakeWebSocket()
+    await client._apply_command(socket, {"action": "focus", "enabled": True})
+    assert client.focus_mode is True
+    await client._reply_to_world_chat(
+        socket,
+        message_type="chat_message",
+        sender_id="dom-id",
+        sender="Dom",
+        text="background room chatter",
+    )
+    assert socket.sent == []

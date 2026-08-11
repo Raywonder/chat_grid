@@ -4380,6 +4380,13 @@ function toggleLoopbackCommand(): void {
   audio.sfxUiBlip();
 }
 
+function toggleFocusModeCommand(): void {
+  const enabled = !voiceInput.isFocusModeEnabled();
+  voiceInput.setFocusMode(enabled);
+  updateStatus(enabled ? 'Voice focus on.' : 'Voice focus off.');
+  audio.sfxUiBlip();
+}
+
 function adjustMasterVolumeCommand(step: number): void {
   const next = audio.adjustMasterVolume(step);
   persistMasterVolume(next);
@@ -5375,6 +5382,7 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   toggleMute,
   toggleOutputMode: toggleOutputModeCommand,
   toggleLoopback: toggleLoopbackCommand,
+  toggleFocusMode: toggleFocusModeCommand,
   toggleVoiceLayer: () => toggleAudioLayer('voice'),
   toggleItemLayer: () => toggleAudioLayer('item'),
   toggleMediaLayer: () => toggleAudioLayer('media'),

@@ -6,6 +6,7 @@ export type MainModeCommand =
   | 'toggleMute'
   | 'toggleOutputMode'
   | 'toggleLoopback'
+  | 'toggleFocusMode'
   | 'toggleVoiceLayer'
   | 'toggleItemLayer'
   | 'toggleMediaLayer'
@@ -92,6 +93,7 @@ export function resolveMainModeCommand(
   if (code === 'KeyN') return shiftKey ? 'openNotifications' : 'editNickname';
   if (code === 'KeyM') return shiftKey ? 'toggleOutputMode' : 'toggleMute';
   if (code === 'Digit1') return shiftKey ? 'toggleLoopback' : 'toggleVoiceLayer';
+  if (code === 'KeyF' && shiftKey) return 'toggleFocusMode';
   if (code === 'Digit2') return 'toggleItemLayer';
   if (code === 'Digit3') return 'toggleMediaLayer';
   if (code === 'Digit4') return 'toggleWorldLayer';

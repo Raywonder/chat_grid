@@ -230,6 +230,26 @@ def _clamp_position(value: object, fallback: int, grid_size: int) -> int:
     return max(0, min(grid_size - 1, parsed))
 
 
+def _direct_world_intent(text: str) -> tuple[str, str] | None:
+    """Extract only strong, explicit movement requests from a private DM."""
+
+    normalized = re.sub(r"\s+", " ", text.casefold()).strip(" .!?\t")
+    patterns = (
+        (r"^(?:come|walk|move|go) (?:over )?(?:to )?(?:me|here)$", "person"),
+        (r"^(?:sit|lie) (?:down )?(?:on|in|at) (.+)$", "seat"),
+        (r"^(?:come|walk|move|go) (?:over )?(?:and )?(?:sit|lie) (?:down )?(?:on|in|at) (.+)$", "seat"),
+        (r"^(?:come|walk|move|go) (?:over )?(?:to )?(.+)$", "target"),
+    )
+    for pattern, kind in patterns:
+        match = re.match(pattern, normalized)
+        if match:
+            target = (match.group(1) if match.groups() else "me").strip()
+            target = re.sub(r"^the ", "", target)
+            if target and len(target) <= 80:
+                return kind, target
+    return None
+
+
 class CompanionClient:
     """Maintains one Indiginous websocket session and applies command-file input."""
 
@@ -267,6 +287,7 @@ class CompanionClient:
         self.posture = "standing"
         self.seated_item_id = ""
         self.mood = "settled"
+        self.focus_mode = False
         self.items: dict[str, dict[str, Any]] = {}
         self.users: dict[str, dict[str, Any]] = {}
         self.connected = False
@@ -350,6 +371,7 @@ class CompanionClient:
             "posture": self.posture,
             "seatedItemId": self.seated_item_id,
             "mood": self.mood,
+            "focusMode": self.focus_mode,
             "visibleUsers": visible_users,
             "lastMessageReceipt": self.last_message_receipt,
             "activityLedger": str(self.activity_ledger.path),
@@ -878,6 +900,9 @@ class CompanionClient:
     ) -> None:
         """Ask the main agent for a safe, short reply and post it in-world."""
 
+        if self.focus_mode and message_type != "direct_message":
+            self._record_activity("world_message_ignored_focus", sender=sender or sender_id)
+            return
         prompt = (
             "You are Claudia, the visible in-world companion in Indiginous. "
             "Reply to the person in the current world conversation in one or two "
@@ -895,6 +920,8 @@ class CompanionClient:
             f"They wrote: {text[:500]}"
         )
         try:
+            if message_type == "direct_message":
+                await self._execute_direct_intent(ws, text, sender_id)
             process = await asyncio.create_subprocess_exec(
                 OPENCLAW_BIN,
                 "agent",
@@ -934,6 +961,53 @@ class CompanionClient:
             raise
         except Exception as exc:
             print(f"world chat reply error: {exc}", flush=True)
+
+    async def _execute_direct_intent(self, ws: Any, text: str, sender_id: str) -> None:
+        """Execute only an unambiguous private movement request."""
+
+        intent = _direct_world_intent(text)
+        if intent is None:
+            return
+        kind, target = intent
+        if kind == "person":
+            person = self.users.get(sender_id)
+            if not person:
+                return
+            target_x, target_y = person.get("x"), person.get("y")
+            label = str(person.get("nickname") or "you")
+            seat = None
+        else:
+            seat = next(
+                (
+                    item for item in self.items.values()
+                    if target in str(item.get("title") or "").casefold()
+                    or target in _item_kind(item)
+                ),
+                None,
+            )
+            if seat is None:
+                return
+            target_x, target_y = seat.get("x"), seat.get("y")
+            label = str(seat.get("title") or target)
+        try:
+            target_x, target_y = int(target_x), int(target_y)
+        except (TypeError, ValueError):
+            return
+        for _ in range(self.grid_size * 2):
+            if max(abs(self.x - target_x), abs(self.y - target_y)) <= 1:
+                break
+            dx = 1 if target_x > self.x else -1 if target_x < self.x else 0
+            dy = 1 if target_y > self.y else -1 if target_y < self.y else 0
+            self.x = _clamp_position(self.x + dx, self.x, self.grid_size)
+            self.y = _clamp_position(self.y + dy, self.y, self.grid_size)
+            await ws.send(_json_packet("update_position", x=self.x, y=self.y))
+            await asyncio.sleep(0.18)
+        self._last_world_activity = time.monotonic()
+        self._record_activity("direct_movement_intent", target=label, kind=kind)
+        if seat is not None and max(abs(self.x - target_x), abs(self.y - target_y)) <= 1:
+            await ws.send(_json_packet("item_use", itemId=str(seat["id"])))
+            if kind == "seat" and _item_kind(seat) == "bed":
+                self._pending_lie_item_id = str(seat["id"])
 
     def _schedule_world_chat_reply(
         self, ws: Any, *, message_type: str, sender_id: str, sender: str, text: str
@@ -979,6 +1053,11 @@ class CompanionClient:
 
     async def _apply_command(self, ws: Any, command: dict[str, Any]) -> None:
         action = str(command.get("action", "")).strip().lower()
+        if action in {"focus", "focus_mode", "quiet"}:
+            value = command.get("enabled", command.get("value", True))
+            self.focus_mode = value if isinstance(value, bool) else str(value).casefold() in {"1", "true", "on", "yes"}
+            self._write_state(connected=self.connected, detail="focus_mode_updated")
+            return
         if action == "mood":
             mood = str(command.get("mood") or command.get("value") or "").strip().lower()
             if mood:

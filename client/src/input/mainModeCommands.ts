@@ -67,6 +67,14 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
     isAvailable: () => true,
   },
   {
+    id: 'toggleFocusMode',
+    label: 'Toggle voice focus mode',
+    shortcut: 'Shift+F',
+    tooltip: 'Ignore background speech while keeping the world connection active.',
+    section: 'Audio',
+    isAvailable: () => true,
+  },
+  {
     id: 'toggleVoiceLayer',
     label: 'Toggle voice layer',
     shortcut: '1 / 9 / Shift+9',
