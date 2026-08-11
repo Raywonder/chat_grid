@@ -171,6 +171,21 @@ export class PeerManager {
     }
   }
 
+  /** Hard-disables the outbound voice sender while muted.
+   *
+   * Track.enabled is useful UI state but can leave an already-negotiated
+   * sender alive. Replacing the track with null makes the mute boundary
+   * explicit to every remote peer and restores the current stream on unmute.
+   */
+  async setOutgoingVoiceEnabled(enabled: boolean, stream: MediaStream | null): Promise<void> {
+    const track = enabled ? stream?.getAudioTracks()[0] ?? null : null;
+    for (const peer of this.peers.values()) {
+      const sender = peer.pc.getSenders().find((candidate) => candidate.track?.kind === 'audio')
+        ?? peer.pc.getTransceivers().find((transceiver) => transceiver.sender.track?.kind === 'audio')?.sender;
+      if (sender) await sender.replaceTrack(track);
+    }
+  }
+
   /** Re-negotiate one peer connection after adding a new outbound track. */
   private async renegotiatePeer(peer: PeerRuntime): Promise<void> {
     if (peer.pc.connectionState === 'closed') return;

@@ -10742,7 +10742,6 @@ class SignalingServer:
                     for other in self.clients.values()
                     if other.id == packet.targetId
                     and other.authenticated
-                    and other.location_id == client.location_id
                 ),
                 None,
             )

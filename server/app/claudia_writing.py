@@ -61,8 +61,18 @@ def record_inworld_direct_message(
             fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
             now = datetime.now(timezone.utc)
             stamp = now.strftime("%Y-%m-%d-%H%M%S")
-            identity = f"{sender}|{location_id}|{created_at or ''}|{text}".encode("utf-8")
+            # Live websocket deliveries do not carry a timestamp.  Use the
+            # stable message content as the fallback identity so reconnects
+            # and duplicate companion readers cannot create two journal notes.
+            identity = f"{sender}|{location_id}|{text}".encode("utf-8")
             digest = hashlib.sha256(identity).hexdigest()[:12]
+            existing = next(
+                JOURNAL_DIR.glob(f"*-in-world-dm-{_slug(sender)}-{digest}.md"),
+                None,
+            )
+            if existing is not None:
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+                return existing
             target = JOURNAL_DIR / f"{stamp}-in-world-dm-{_slug(sender)}-{digest}.md"
             if target.exists():
                 fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)

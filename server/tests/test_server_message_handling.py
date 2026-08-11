@@ -647,7 +647,7 @@ async def test_user_action_rejects_target_in_other_location(
 
 
 @pytest.mark.asyncio
-async def test_direct_message_rejects_target_in_other_location(
+async def test_direct_message_delivers_target_in_other_location(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
@@ -686,10 +686,15 @@ async def test_direct_message_rejects_target_in_other_location(
         ),
     )
 
-    error = _last_packet_of_type(sent_payloads[sender_ws], BroadcastChatMessagePacket)
-    assert error.system is True
-    assert error.message == "That user is not available for direct messages."
-    assert sent_payloads[target_ws] == []
+    delivered = _last_packet_of_type(
+        sent_payloads[target_ws], DirectMessageBroadcastPacket
+    )
+    outgoing = _last_packet_of_type(
+        sent_payloads[sender_ws], DirectMessageBroadcastPacket
+    )
+    assert delivered.message == "private hello"
+    assert delivered.outgoing is False
+    assert outgoing.outgoing is True
 
 
 @pytest.mark.asyncio

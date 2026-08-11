@@ -4326,6 +4326,7 @@ function toggleMute(): void {
   }
   state.isMuted = !state.isMuted;
   mediaSession.applyMuteToTrack(state.isMuted);
+  void peerManager.setOutgoingVoiceEnabled(!state.isMuted, mediaSession.getOutboundStream());
   updateStatus(state.isMuted ? 'Muted.' : 'Unmuted.');
 }
 
