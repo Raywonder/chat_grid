@@ -308,6 +308,7 @@ export const chatMessageSchema = z.object({
   senderNickname: z.string().optional(),
   system: z.boolean().optional(),
   action: z.boolean().optional(),
+  voiceInput: z.boolean().optional(),
 });
 
 export const directMessageSchema = z.object({
@@ -318,6 +319,7 @@ export const directMessageSchema = z.object({
   targetId: z.string(),
   targetNickname: z.string(),
   outgoing: z.boolean().optional(),
+  voiceInput: z.boolean().optional(),
 });
 
 export const socialActionSchema = z.object({
@@ -669,6 +671,7 @@ export type OutgoingMessage =
   | { type: 'auth_login'; username: string; password: string }
   | { type: 'auth_resume'; sessionToken: string }
   | { type: 'auth_external'; assertion: string }
+  | { type: 'auth_guest'; nickname?: string }
   | { type: 'auth_logout' }
   | { type: 'ntfy_preferences_get' }
   | { type: 'ntfy_preferences_update'; enabled: boolean; rotateTopic?: boolean }
@@ -698,8 +701,8 @@ export type OutgoingMessage =
   | { type: 'change_location'; locationId: string }
   | { type: 'teleport_complete'; x: number; y: number }
   | { type: 'update_nickname'; nickname: string }
-  | { type: 'chat_message'; message: string }
-  | { type: 'direct_message'; targetId: string; message: string }
+  | { type: 'chat_message'; message: string; suppressSenderEcho?: boolean }
+  | { type: 'direct_message'; targetId: string; message: string; suppressSenderEcho?: boolean }
   | {
       type: 'user_action';
       actionId:

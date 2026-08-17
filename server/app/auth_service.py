@@ -107,7 +107,6 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[str]] = {
     "guest": {
         "item.use",
         "chat.send",
-        "voice.send",
         "profile.update_nickname",
     },
 }

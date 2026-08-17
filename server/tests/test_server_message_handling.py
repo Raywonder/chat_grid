@@ -2879,6 +2879,100 @@ def test_clock_auto_announce_interval_marker() -> None:
 
 
 @pytest.mark.asyncio
+async def test_guest_auth_is_ephemeral_and_public_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = ClientConnection(websocket=ws, id="guest-connection", nickname="Visitor")
+    send_payloads: list[object] = []
+    welcome_calls: list[str] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_welcome(target: ClientConnection) -> None:
+        welcome_calls.append(target.id)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_send_authenticated_welcome", fake_welcome)
+
+    await server._handle_message(
+        client, json.dumps({"type": "auth_guest", "nickname": "Guest"})
+    )
+
+    result = _last_packet_of_type(send_payloads, AuthResultPacket)
+    assert result.ok is True and result.role == "guest"
+    assert client.user_id == "guest:guest-connection"
+    assert client.session_token is None
+    assert client.permissions == {"item.use", "chat.send", "profile.update_nickname"}
+    assert "voice.send" not in client.permissions
+    assert welcome_calls == ["guest-connection"]
+
+
+@pytest.mark.asyncio
+async def test_guest_private_message_is_denied(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="guest-1", nickname="Guest"),
+        user_id="guest:guest-1",
+        username="guest:guest-1",
+        permissions={"chat.send"},
+    )
+    client.role = "guest"
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    await server._handle_message(
+        client,
+        json.dumps(
+            {"type": "direct_message", "targetId": "member-1", "message": "private"}
+        ),
+    )
+
+    denial = _last_packet_of_type(send_payloads, BroadcastChatMessagePacket)
+    assert denial.system is True
+    assert "not private messages" in denial.message
+
+
+@pytest.mark.asyncio
+async def test_voice_chat_suppresses_only_sender_echo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="member-1", nickname="Member"),
+        permissions={"chat.send"},
+    )
+    broadcasts: list[tuple[object, ServerConnection | None]] = []
+
+    async def fake_broadcast_location(
+        location_id: str, packet: object, exclude: ServerConnection | None = None
+    ) -> None:
+        broadcasts.append((packet, exclude))
+
+    monkeypatch.setattr(server, "_broadcast_location", fake_broadcast_location)
+    await server._handle_message(
+        client,
+        json.dumps(
+            {"type": "chat_message", "message": "spoken", "suppressSenderEcho": True}
+        ),
+    )
+
+    packet, excluded = broadcasts[-1]
+    assert isinstance(packet, BroadcastChatMessagePacket)
+    assert packet.voiceInput is True
+    assert excluded is ws
+
+
+@pytest.mark.asyncio
 async def test_auth_login_uses_hash_offload(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     username = f"alpha_{uuid.uuid4().hex[:8]}"

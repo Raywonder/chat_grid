@@ -34,11 +34,8 @@ if (-not (Test-Path $Python)) {
 }
 & $Python -m pip install --upgrade pip
 & $Python -m pip install -e "$Root[build,test]"
-$PytestBase = "C:\BuildCache\IndiginousPytestTemp"
-if (Test-Path $PytestBase) {
-    Remove-Item -Recurse -Force $PytestBase
-}
-New-Item -ItemType Directory -Force -Path (Split-Path -Parent $PytestBase) | Out-Null
+$PytestRunId = "{0}-{1}" -f ([DateTimeOffset]::UtcNow.ToString("yyyyMMddTHHmmssfffZ")), $PID
+$PytestBase = Join-Path $BuildCacheRoot "pytest-$PytestRunId"
 & $Python -m pytest (Join-Path $Root "tests") --basetemp $PytestBase
 if ($LASTEXITCODE -ne 0) {
     throw "Windows client tests failed with exit code $LASTEXITCODE."

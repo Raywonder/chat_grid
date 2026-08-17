@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from app.auth_service import AuthError, AuthService
+from app.auth_service import AuthError, AuthService, DEFAULT_ROLE_PERMISSIONS
 
 
 def make_auth_service(tmp_path: Path) -> AuthService:
@@ -21,6 +21,15 @@ def make_auth_service(tmp_path: Path) -> AuthService:
         username_min_length=2,
         username_max_length=32,
     )
+
+
+def test_guest_permissions_are_public_chat_only() -> None:
+    assert DEFAULT_ROLE_PERMISSIONS["guest"] == {
+        "item.use",
+        "chat.send",
+        "profile.update_nickname",
+    }
+    assert "voice.send" not in DEFAULT_ROLE_PERMISSIONS["guest"]
 
 
 def sign_external_assertion(payload: dict[str, object], secret: str) -> str:

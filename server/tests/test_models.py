@@ -3,7 +3,10 @@ from pydantic import ValidationError, TypeAdapter
 from app.models import (
     AdminAmbienceUploadBeginPacket,
     AgentVoicePacket,
+    AuthGuestPacket,
+    ChatMessagePacket,
     ClientPacket,
+    DirectMessagePacket,
     SpeakPacket,
 )
 
@@ -21,6 +24,26 @@ def test_unknown_type_rejected() -> None:
     except ValidationError:
         return
     assert False, "validation should fail"
+
+
+def test_guest_auth_and_voice_echo_flags_validate() -> None:
+    adapter: TypeAdapter[ClientPacket] = TypeAdapter(ClientPacket)
+    guest = adapter.validate_python({"type": "auth_guest", "nickname": "Guest"})
+    chat = adapter.validate_python(
+        {"type": "chat_message", "message": "hello", "suppressSenderEcho": True}
+    )
+    direct = adapter.validate_python(
+        {
+            "type": "direct_message",
+            "targetId": "companion-1",
+            "message": "hello",
+            "suppressSenderEcho": True,
+        }
+    )
+
+    assert isinstance(guest, AuthGuestPacket)
+    assert isinstance(chat, ChatMessagePacket) and chat.suppressSenderEcho is True
+    assert isinstance(direct, DirectMessagePacket) and direct.suppressSenderEcho is True
 
 
 def test_item_add_accepts_piano_type() -> None:

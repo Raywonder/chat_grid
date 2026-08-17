@@ -34,7 +34,7 @@ from websockets.exceptions import ConnectionClosed
 from websockets.http11 import Request as HttpRequest, Response as HttpResponse
 from websockets.typing import Origin
 
-from .auth_service import AuthError, AuthService
+from .auth_service import AuthError, AuthService, DEFAULT_ROLE_PERMISSIONS
 from .blind_productions_billboards import (
     fetch_public_messages as fetch_blind_productions_messages,
     upsert_blind_productions_billboards,
@@ -76,6 +76,7 @@ from .items.types.radio_station.aaastreamer import resolve_aaastreamer_playback
 from .items.types.service_link.portal_state import effective_portal_state
 from .models import (
     AuthExternalPacket,
+    AuthGuestPacket,
     AuthLoginPacket,
     AuthLogoutPacket,
     AuthPermissionsPacket,
@@ -7726,6 +7727,7 @@ class SignalingServer:
                         "system": False,
                     }
                     for entry in self.chat_history.public_for_location(client.location_id)
+                    if not (entry.get("suppressSenderEcho") and entry.get("senderUserId") == client.user_id)
                 ],
                 "direct": [
                     {
@@ -7741,6 +7743,7 @@ class SignalingServer:
                         "outgoing": entry.get("senderUserId") == client.user_id,
                     }
                     for entry in self.chat_history.direct_for_user(client.user_id or "")
+                    if not (entry.get("suppressSenderEcho") and entry.get("senderUserId") == client.user_id)
                 ],
             } if client.user_id else None,
         )
@@ -7770,7 +7773,7 @@ class SignalingServer:
             client.y = min(max(location.spawn_y, 0), self.grid_size - 1)
         now_ms = self.item_service.now_ms()
         self._refresh_client_permissions(client)
-        if client.user_id:
+        if client.user_id and client.role != "guest":
             self.auth_service.ensure_ecrypto_account(client.user_id)
         client.last_position_update_ms = now_ms
         client.movement_window_index = self._movement_window_index(now_ms)
@@ -7811,7 +7814,7 @@ class SignalingServer:
 
         if client.authenticated and isinstance(
             packet,
-            (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket, AuthExternalPacket),
+            (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket, AuthExternalPacket, AuthGuestPacket),
         ):
             await self._send(
                 client.websocket,
@@ -7822,6 +7825,37 @@ class SignalingServer:
                     authPolicy=self._auth_policy(),
                 ),
             )
+            return True
+
+        if isinstance(packet, AuthGuestPacket):
+            # Ephemeral guest sessions have no account, cookie, or private
+            # history. They can enter public areas and use general chat only.
+            guest_id = f"guest:{client.id}"
+            guest_name = str(packet.nickname or "Guest").strip()[:32] or "Guest"
+            client.authenticated = True
+            client.user_id = guest_id
+            client.username = guest_id
+            client.role = "guest"
+            client.permissions = set(DEFAULT_ROLE_PERMISSIONS["guest"])
+            client.session_token = None
+            client.nickname = guest_name
+            client.saved_x = None
+            client.saved_y = None
+            client.saved_location_id = None
+            await self._send(
+                client.websocket,
+                AuthResultPacket(
+                    type="auth_result",
+                    ok=True,
+                    message="Guest session started. Public chat only.",
+                    username=guest_id,
+                    role="guest",
+                    permissions=self._sorted_permissions(client.permissions),
+                    nickname=guest_name,
+                    authPolicy=self._auth_policy(),
+                ),
+            )
+            await self._send_authenticated_welcome(client)
             return True
 
         if isinstance(
@@ -10712,20 +10746,34 @@ class SignalingServer:
                 "senderUserId": client.user_id,
                 "senderNickname": client.nickname,
                 "message": packet.message,
+                "suppressSenderEcho": packet.suppressSenderEcho,
             })
+            chat_packet = BroadcastChatMessagePacket(
+                type="chat_message",
+                message=packet.message,
+                senderId=client.id,
+                senderNickname=client.nickname,
+                system=False,
+                voiceInput=packet.suppressSenderEcho,
+            )
             await self._broadcast_location(
                 client.location_id,
-                BroadcastChatMessagePacket(
-                    type="chat_message",
-                    message=packet.message,
-                    senderId=client.id,
-                    senderNickname=client.nickname,
-                    system=False,
-                ),
+                chat_packet,
+                exclude=client.websocket if packet.suppressSenderEcho else None,
             )
             return
 
         if isinstance(packet, DirectMessagePacket):
+            if client.role == "guest":
+                await self._send(
+                    client.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message="Guest sessions can use public chat, but not private messages.",
+                        system=True,
+                    ),
+                )
+                return
             if not self._client_has_permission(client, "chat.send"):
                 await self._send(
                     client.websocket,
@@ -10763,6 +10811,7 @@ class SignalingServer:
                 "targetUserId": target.user_id,
                 "targetNickname": target.nickname,
                 "message": packet.message,
+                "suppressSenderEcho": packet.suppressSenderEcho,
             })
             await self._send(
                 target.websocket,
@@ -10773,6 +10822,7 @@ class SignalingServer:
                     senderNickname=client.nickname,
                     targetId=target.id,
                     targetNickname=target.nickname,
+                    voiceInput=packet.suppressSenderEcho,
                 ),
             )
             if target.user_id:
@@ -10783,18 +10833,19 @@ class SignalingServer:
                     target_user_id=target.user_id,
                     actor_user_id=client.user_id,
                 )
-            await self._send(
-                client.websocket,
-                DirectMessageBroadcastPacket(
-                    type="direct_message",
-                    message=packet.message,
-                    senderId=client.id,
-                    senderNickname=client.nickname,
-                    targetId=target.id,
-                    targetNickname=target.nickname,
-                    outgoing=True,
-                ),
-            )
+            if not packet.suppressSenderEcho:
+                await self._send(
+                    client.websocket,
+                    DirectMessageBroadcastPacket(
+                        type="direct_message",
+                        message=packet.message,
+                        senderId=client.id,
+                        senderNickname=client.nickname,
+                        targetId=target.id,
+                        targetNickname=target.nickname,
+                        outgoing=True,
+                    ),
+                )
             return
 
         if isinstance(packet, ItemAddPacket):

@@ -131,6 +131,7 @@ type Dom = {
   loginView: HTMLElement;
   authSessionView: HTMLElement;
   authSessionText: HTMLParagraphElement;
+  guestButton: HTMLButtonElement;
   helpSection: HTMLElement;
   helpToggle: HTMLButtonElement;
   updatesSection: HTMLElement;
@@ -192,6 +193,7 @@ const dom: Dom = {
   loginView: requiredById('loginView'),
   authSessionView: requiredById('authSessionView'),
   authSessionText: requiredById('authSessionText'),
+  guestButton: requiredById('guestButton'),
   helpSection: requiredById('helpSection'),
   helpToggle: requiredById('helpToggle'),
   updatesSection: requiredById('updatesSection'),
@@ -870,10 +872,10 @@ const voiceInput = new VoiceInput({
       /^(clawdia|claudia|missi)$/i.test(peer.nickname.trim()),
     );
     if (companion) {
-      signaling.send({ type: 'direct_message', targetId: companion.id, message: text });
+      signaling.send({ type: 'direct_message', targetId: companion.id, message: text, suppressSenderEcho: true });
       return;
     }
-    signaling.send({ type: 'chat_message', message: text });
+    signaling.send({ type: 'chat_message', message: text, suppressSenderEcho: true });
   },
   onStatus: (message) => updateStatus(message),
 });
@@ -4326,6 +4328,8 @@ function toggleMute(): void {
   }
   state.isMuted = !state.isMuted;
   mediaSession.applyMuteToTrack(state.isMuted);
+  voiceInput.setMuted(state.isMuted);
+  if (!state.isMuted) voiceInput.start();
   void peerManager.setOutgoingVoiceEnabled(!state.isMuted, mediaSession.getOutboundStream());
   updateStatus(state.isMuted ? 'Muted.' : 'Unmuted.');
 }

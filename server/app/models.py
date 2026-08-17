@@ -44,12 +44,14 @@ class UpdateNicknamePacket(BasePacket):
 class ChatMessagePacket(BasePacket):
     type: Literal["chat_message"]
     message: str = Field(min_length=1, max_length=500)
+    suppressSenderEcho: bool = False
 
 
 class DirectMessagePacket(BasePacket):
     type: Literal["direct_message"]
     targetId: str = Field(min_length=1, max_length=128)
     message: str = Field(min_length=1, max_length=500)
+    suppressSenderEcho: bool = False
 
 
 class UserActionPacket(BasePacket):
@@ -131,6 +133,13 @@ class AuthResumePacket(BasePacket):
 class AuthExternalPacket(BasePacket):
     type: Literal["auth_external"]
     assertion: str = Field(min_length=1, max_length=8192)
+
+
+class AuthGuestPacket(BasePacket):
+    """Start a limited, non-account guest session for public conversation."""
+
+    type: Literal["auth_guest"]
+    nickname: str | None = Field(default=None, max_length=32)
 
 
 class AuthLogoutPacket(BasePacket):
@@ -491,6 +500,7 @@ ClientPacket = (
     | AuthLoginPacket
     | AuthResumePacket
     | AuthExternalPacket
+    | AuthGuestPacket
     | AuthLogoutPacket
     | NtfyPreferencesGetPacket
     | NtfyPreferencesUpdatePacket
@@ -680,6 +690,7 @@ class BroadcastChatMessagePacket(BasePacket):
     senderNickname: str | None = None
     system: bool = False
     action: bool = False
+    voiceInput: bool = False
 
 
 class DirectMessageBroadcastPacket(BasePacket):
@@ -690,6 +701,7 @@ class DirectMessageBroadcastPacket(BasePacket):
     targetId: str
     targetNickname: str
     outgoing: bool = False
+    voiceInput: bool = False
 
 
 class SocialActionPacket(BasePacket):
