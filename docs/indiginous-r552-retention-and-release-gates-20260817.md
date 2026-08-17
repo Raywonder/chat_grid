@@ -54,3 +54,14 @@ was not falsified to bypass that gate.
 
 Future shared diagnostics and release evidence should retain separate,
 truthful platform gates for Windows, macOS, and iOS/TestFlight.
+
+## Source retention
+
+The reviewed source was committed as `49ffa3261fd4880b3f9b2dac415185e3f339c81b`
+and pushed without rewriting history to Gitea branch
+`codex/indiginous-pending-release-r552`. The bare repository was added to the
+already-authorized `devinecr` safe-directory list. Its object directories were
+made group-writable with setgid, matching the `tappedin` group ownership needed
+by both Gitea and the governed release identity. `git fsck --full` reported only
+dangling objects from prior/rejected object transfers, not corrupt or missing
+reachable objects.
