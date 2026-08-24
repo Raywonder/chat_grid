@@ -14,6 +14,7 @@ type AuthDom = {
   authSessionView: HTMLElement;
   authSessionText: HTMLParagraphElement;
   connectButton: HTMLButtonElement;
+  guestButton: HTMLButtonElement;
   logoutButton: HTMLButtonElement;
 };
 
@@ -76,6 +77,8 @@ export function createAuthController(deps: AuthControllerDeps): {
   let pendingAuthRequest = false;
   let externalAuthAssertion = deps.initialExternalAuthAssertion.trim();
   let savedSessionCookieAvailable = false;
+  let sessionCheckComplete = false;
+  let guestRequested = false;
 
   function sanitizeAuthUsername(value: string): string {
     const maxLength = authPolicy?.usernameMaxLength ?? 128;
@@ -148,10 +151,16 @@ export function createAuthController(deps: AuthControllerDeps): {
 
   function updateConnectAvailability(): void {
     const hasSavedUsernameHint = sanitizeAuthUsername(authUsername).length > 0;
-    const hasSavedSessionHint = hasSavedUsernameHint || savedSessionCookieAvailable;
+    // A cached username is only a display hint.  It must never make the UI
+    // claim that an account is signed in or hide the guest choice.  The live
+    // HttpOnly cookie check is the source of truth for an active account.
+    const hasSavedSessionHint = savedSessionCookieAvailable;
     const hasExternalAuth = externalAuthAssertion.length > 0;
-    const authReady = hasExternalAuth || hasSavedSessionHint;
+    const authReady = hasExternalAuth || hasSavedSessionHint || guestRequested;
+    const canOfferGuest = sessionCheckComplete && !hasSavedSessionHint && !hasExternalAuth && !guestRequested;
     document.body.classList.toggle('auth-locked', !authReady);
+    deps.dom.guestButton.classList.toggle('hidden', !canOfferGuest);
+    deps.dom.guestButton.hidden = !canOfferGuest;
     const showLogout = deps.isRunning() || hasSavedSessionHint;
     deps.dom.logoutButton.classList.toggle('hidden', !showLogout);
     deps.dom.logoutButton.disabled = !showLogout;
@@ -183,6 +192,9 @@ export function createAuthController(deps: AuthControllerDeps): {
   }
 
   function buildAuthRequestPacket(): OutgoingMessage | null {
+    if (guestRequested) {
+      return { type: 'auth_guest', nickname: 'Guest' };
+    }
     if (externalAuthAssertion) {
       return { type: 'auth_external', assertion: externalAuthAssertion };
     }
@@ -193,7 +205,7 @@ export function createAuthController(deps: AuthControllerDeps): {
     const packet = buildAuthRequestPacket();
     if (!packet) {
       pendingAuthRequest = false;
-      if (sanitizeAuthUsername(authUsername).length > 0 || savedSessionCookieAvailable) {
+      if (savedSessionCookieAvailable) {
         deps.setConnectionStatus('Restoring saved session...');
       } else {
         deps.setConnectionStatus('Sign in with blind.software to join Indiginous.');
@@ -224,12 +236,18 @@ export function createAuthController(deps: AuthControllerDeps): {
         deps.signalingSend(packet);
         return;
       }
-      if (sanitizeAuthUsername(authUsername).length > 0 || savedSessionCookieAvailable) {
+      if (savedSessionCookieAvailable) {
         resetSavedSessionHint();
       }
       deps.setConnecting(false);
       updateConnectAvailability();
     }
+  }
+
+  function startGuestSession(): void {
+    guestRequested = true;
+    deps.setConnectionStatus('Joining as a guest. Public chat only.');
+    updateConnectAvailability();
   }
 
   async function persistHttpOnlySessionCookie(sessionToken: string): Promise<void> {
@@ -302,7 +320,12 @@ export function createAuthController(deps: AuthControllerDeps): {
       // the only resumable session during a quick reconnect.
       await persistHttpOnlySessionCookie(message.sessionToken);
     }
-    if (message.username) {
+    if (message.role === 'guest') {
+      // Guest identity is connection-scoped; never persist it as an account
+      // hint that could look like a resumable login after refresh.
+      authUsername = '';
+      deps.saveAuthUsername('');
+    } else if (message.username) {
       authUsername = message.username;
       deps.saveAuthUsername(message.username);
     }
@@ -338,8 +361,11 @@ export function createAuthController(deps: AuthControllerDeps): {
   }
 
   function logOutAccount(): void {
+    guestRequested = false;
     authUserId = '';
     authUsername = '';
+    savedSessionCookieAvailable = false;
+    sessionCheckComplete = true;
     void clearHttpOnlySessionCookie();
     deps.saveAuthUsername('');
     applyAuthPermissions('user', []);
@@ -355,6 +381,10 @@ export function createAuthController(deps: AuthControllerDeps): {
 
   function setSavedSessionCookieAvailable(available: boolean): void {
     savedSessionCookieAvailable = available;
+    sessionCheckComplete = true;
+    if (available) {
+      guestRequested = false;
+    }
     updateConnectAvailability();
   }
 
@@ -362,7 +392,10 @@ export function createAuthController(deps: AuthControllerDeps): {
     deps.dom.logoutButton.addEventListener('click', () => {
       logOutAccount();
     });
-    void uiDeps;
+    deps.dom.guestButton.addEventListener('click', () => {
+      startGuestSession();
+      void uiDeps.connect();
+    });
   }
 
   function initializeUi(): void {
@@ -385,5 +418,6 @@ export function createAuthController(deps: AuthControllerDeps): {
     setSavedSessionCookieAvailable,
     applyWelcomeAuth,
     logOutAccount,
+    startGuestSession,
   };
 }

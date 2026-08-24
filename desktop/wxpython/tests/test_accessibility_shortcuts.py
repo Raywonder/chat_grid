@@ -33,6 +33,28 @@ def test_explicit_exit_does_not_present_an_update_dialog_and_forces_close():
     assert 'Exit cancelled. Indiginous will keep running.' not in exit_source
 
 
+def test_window_close_only_hides_when_keep_in_tray_is_enabled():
+    close_source = SOURCE[SOURCE.index("    def _on_close"):SOURCE.index("\n\n\nclass IndiginousApp")]
+    assert "self.settings.keep_in_tray" in close_source
+    assert "event.Veto()" in close_source
+    assert "self.Hide()" in close_source
+    assert "self.force_quit = True" in close_source
+
+
+def test_full_quit_stops_callbacks_and_destroys_the_world_view():
+    close_source = SOURCE[SOURCE.index("    def _on_close"):SOURCE.index("\n\n\nclass IndiginousApp")]
+    for shutdown_step in (
+        "self.reconnect_timer.Stop()",
+        "self.auto_update_timer.Stop()",
+        "self.world_focus_restore.Stop()",
+        "self.auto_browser_auth_call.Stop()",
+        "self.web.Stop()",
+        "self.web.Destroy()",
+        "app.ExitMainLoop",
+    ):
+        assert shutdown_step in close_source
+
+
 def test_windows_installer_replaces_orphaned_files():
     installer = Path(__file__).parents[1] / "installer" / "Indiginous.iss"
     source = installer.read_text(encoding="utf-8")
@@ -93,6 +115,14 @@ def test_activation_rearms_world_focus_after_restore_and_alt_tab():
     assert 'self.Bind(wx.EVT_ACTIVATE, self._on_activate)' in SOURCE
     assert 'def _queue_world_focus' in SOURCE
     assert 'self._queue_world_focus(120)' in SOURCE
+
+
+def test_world_focus_is_automatic_and_not_a_navigation_menu_action():
+    menu_source = SOURCE[SOURCE.index("def _build_menu"):SOURCE.index("@staticmethod\n    def _open_external_url")]
+    assert "Focus world" not in menu_source
+    assert "indiginousNativeActivateWorld" in SOURCE
+    assert "on-loaded-speech-bridge" in SOURCE
+    assert "message.get(\"type\") == \"speak\"" in SOURCE
 
 
 def test_signed_in_users_do_not_get_a_sign_in_menu_action():

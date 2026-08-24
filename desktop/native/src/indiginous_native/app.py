@@ -340,7 +340,7 @@ class MainFrame(wx.Frame):
         file_menu.AppendSeparator()
         file_menu.Append(wx.ID_ABOUT, "&Credits and version")
         file_menu.Append(wx.ID_EXIT, "E&xit\tAlt+F4")
-        menu_bar.Append(file_menu, "&File")
+        menu_bar.Append(file_menu, "&Indiginous")
         help_menu = wx.Menu()
         updates_id = wx.NewIdRef()
         website_id = wx.NewIdRef()
@@ -399,6 +399,8 @@ class MainFrame(wx.Frame):
 
     def _on_activate(self, event: wx.ActivateEvent) -> None:
         self._set_world_hotkeys_active(event.GetActive())
+        if event.GetActive():
+            self.screen_reader.reconnect()
         event.Skip()
 
     def _announce(self, text: str, *, speak: bool = False) -> None:
@@ -429,6 +431,7 @@ class MainFrame(wx.Frame):
     def _on_menu_open(self, event: wx.MenuEvent) -> None:
         """Keep native menu opening visible to keyboard and screen-reader users."""
         self.native_menu_open = True
+        self.web.RunScript("window.indiginousNativePlayMenuTransition?.(true);")
         menu = event.GetMenu()
         if menu is not None and self.GetMenuBar() is not None:
             index = next(
@@ -442,6 +445,7 @@ class MainFrame(wx.Frame):
 
     def _on_menu_close(self, event: wx.MenuEvent) -> None:
         self.native_menu_open = False
+        self.web.RunScript("window.indiginousNativePlayMenuTransition?.(false);")
         event.Skip()
 
     def _on_menu_highlight(self, event: wx.MenuEvent) -> None:
@@ -749,7 +753,9 @@ class MainFrame(wx.Frame):
             return
         self.web.SetFocus()
         self.web.RunScript(
-            "document.getElementById('gameCanvas')?.focus({preventScroll:true});"
+            "(() => { const button = document.getElementById('focusGridButton');"
+            "if (button && !button.classList.contains('hidden')) button.click();"
+            "document.getElementById('gameCanvas')?.focus({preventScroll:true}); })();"
         )
         self._announce("World focused. Arrow keys move your character.")
 
@@ -912,6 +918,11 @@ class MainFrame(wx.Frame):
         self.SetFocus()
         if self.web.IsShown():
             self.web.SetFocus()
+            self.web.RunScript(
+                "(() => { const button = document.getElementById('focusGridButton');"
+                "if (button && !button.classList.contains('hidden')) button.click();"
+                "document.getElementById('gameCanvas')?.focus({preventScroll:true}); })();"
+            )
 
     def exit_application(self) -> None:
         """Fully stop Indiginous, including any background session."""

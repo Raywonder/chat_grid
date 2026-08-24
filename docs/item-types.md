@@ -61,6 +61,10 @@ This is behavior-focused documentation for item types and their defaults.
   safekeeping.
 - A house keeper moves with keys entrusted to it. Taking the key back returns
   it to the user's carry state.
+- Pressing Enter while a matching key is held uses it on the locked door at
+  the user's square, even when the key itself is focused. Keys are read-only:
+  their identity cannot be edited. Residents can change a lock's required
+  key or revoke a person's house-alarm access without changing the physical key.
 - The world does not create a spare key automatically. If the only key is left
   inside a room and that room is locked again, a person outside needs a second
   physical key or another authorized means of entry, just as in real life.

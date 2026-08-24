@@ -19,6 +19,7 @@ from . import __version__
 from .config import APP_ID, APP_NAME, Settings, SettingsStore, app_data_dir
 from .browser_auth import BrowserAuthFlow
 from .reconnect import ReconnectBackoff
+from .screen_reader import ScreenReaderSpeech
 from .single_instance import SingleInstanceActivation
 from .startup import set_start_with_windows
 from .updater import UpdateService
@@ -285,6 +286,7 @@ class MainFrame(wx.Frame):
         self.settings_dialog: SettingsDialog | None = None
         self.audio_devices: dict[str, list[tuple[str, str]]] = {"inputs": [], "outputs": []}
         self.world_focus_restore: wx.CallLater | None = None
+        self.screen_reader = ScreenReaderSpeech()
         self.force_quit = False
         self.panel: wx.Panel | None = None
         self.layout: wx.BoxSizer | None = None
@@ -322,11 +324,9 @@ class MainFrame(wx.Frame):
         menu_bar = wx.MenuBar()
         file_menu = wx.Menu()
         restart_world_id = wx.NewIdRef()
-        focus_world_id = wx.NewIdRef()
         signin_id = wx.NewIdRef()
         tray_id = wx.NewIdRef()
         file_menu.Append(restart_world_id, "&Restart frozen world view\tCtrl+Shift+R", "Replace only the embedded world view")
-        file_menu.Append(focus_world_id, "&Focus world\tCtrl+L", "Move keyboard focus into the world")
         file_menu.AppendSeparator()
         self.signin_menu_item = file_menu.Append(signin_id, "Sign in to &Indiginous\tCtrl+Shift+S", "Open the Indiginous sign-in page")
         settings_shortcut = "Cmd+Alt+," if sys.platform == "darwin" else "Ctrl+Alt+,"
@@ -336,7 +336,7 @@ class MainFrame(wx.Frame):
         file_menu.Append(tray_id, "&Minimize to system tray\tCtrl+M")
         file_menu.AppendSeparator()
         file_menu.Append(wx.ID_EXIT, "E&xit Indiginous\tAlt+F4")
-        menu_bar.Append(file_menu, "&File")
+        menu_bar.Append(file_menu, "&Indiginous")
         help_menu = wx.Menu()
         update_id = wx.NewIdRef()
         website_id = wx.NewIdRef()
@@ -353,7 +353,6 @@ class MainFrame(wx.Frame):
         self.Bind(wx.EVT_MENU_CLOSE, self._on_menu_close)
         self.Bind(wx.EVT_MENU_HIGHLIGHT, self._on_menu_highlight)
         self.Bind(wx.EVT_MENU, lambda _event: self._restart_webview(), id=restart_world_id)
-        self.Bind(wx.EVT_MENU, lambda _event: self._focus_world(), id=focus_world_id)
         self.Bind(wx.EVT_MENU, lambda _event: self._login_or_logout(), id=signin_id)
         self.Bind(wx.EVT_MENU, self._show_settings, id=wx.ID_PREFERENCES)
         self.Bind(wx.EVT_MENU, lambda _event: self.web.RunScript("window.dispatchEvent(new Event('indiginous-cast-to-device'));"), id=cast_id)
@@ -372,6 +371,7 @@ class MainFrame(wx.Frame):
     def _on_menu_open(self, event: wx.MenuEvent) -> None:
         """Keep native menu opening visible to keyboard and screen-reader users."""
         self.native_menu_open = True
+        self._run_script("window.indiginousNativePlayMenuTransition?.(true);", "native-menu-open-sound")
         menu = event.GetMenu()
         if menu is not None and self.GetMenuBar() is not None:
             index = next(
@@ -380,11 +380,12 @@ class MainFrame(wx.Frame):
                 -1,
             )
             if index == 0:
-                self._announce("File menu opened. Use the arrow keys to choose an action.")
+                self._announce("Indiginous menu opened. Use the arrow keys to choose an action.")
         event.Skip()
 
     def _on_menu_close(self, event: wx.MenuEvent) -> None:
         self.native_menu_open = False
+        self._run_script("window.indiginousNativePlayMenuTransition?.(false);", "native-menu-close-sound")
         event.Skip()
 
     def _on_menu_highlight(self, event: wx.MenuEvent) -> None:
@@ -503,6 +504,8 @@ class MainFrame(wx.Frame):
             }
             if self.settings_dialog is not None:
                 self.settings_dialog.set_audio_devices(self.audio_devices)
+        elif message.get("type") == "speak" and isinstance(message.get("text"), str):
+            self.screen_reader.speak(message["text"], bool(message.get("interrupt")))
 
     def _create_webview(self) -> wx.html2.WebView:
         """Create and bind one replaceable Edge WebView world surface."""
@@ -589,6 +592,11 @@ class MainFrame(wx.Frame):
             "return 'ok';"
             "})()"
             "", "on-loaded-shell")
+        self._run_script(
+            "window.indiginousNativeSpeak=(text,options={})=>"
+            "window.chrome?.webview?.postMessage(JSON.stringify({type:'speak',text:String(text),interrupt:!!options.interrupt}));",
+            "on-loaded-speech-bridge",
+        )
         # The shared client owns saved-cookie auto-resume. Native should only
         # submit the one-use browser assertion; a second Connect click races
         # cookie restoration and can leave the renderer displaying signed-in
@@ -604,8 +612,7 @@ class MainFrame(wx.Frame):
             "(() => {"
             "let attempts = 0;"
             "const activate = () => {"
-            "const button = document.getElementById('focusGridButton');"
-            "if (button && !button.classList.contains('hidden')) { button.click(); return; }"
+            "if (typeof window.indiginousNativeActivateWorld === 'function') { window.indiginousNativeActivateWorld(); return; }"
             "if (++attempts < 80) setTimeout(activate, 250);"
             "};"
             "activate();"
@@ -620,6 +627,14 @@ class MainFrame(wx.Frame):
         # callback can race a WebView2 navigation and surface wx's opaque
         # "Error running JavaScript" dialog.  Native focus is sufficient for
         # Alt+Tab/minimize restoration and is safe during every page state.
+        self._run_script(
+            "(() => {"
+            "if (typeof window.indiginousNativeActivateWorld === 'function') window.indiginousNativeActivateWorld();"
+            "else { const canvas = document.querySelector('canvas'); if (canvas && typeof canvas.focus === 'function') canvas.focus({preventScroll:true}); }"
+            "return 'ok';"
+            "})()",
+            "restore-world-focus",
+        )
         self.web.SetFocus()
 
     def _queue_world_focus(self, delay_ms: int = 100) -> None:
@@ -704,8 +719,10 @@ class MainFrame(wx.Frame):
 
     def _on_activate(self, event: wx.ActivateEvent) -> None:
         """Re-arm world keyboard focus after Alt+Tab, restore, or tray reopen."""
-        if event.GetActive() and self.settings_dialog is None:
-            self._queue_world_focus(120)
+        if event.GetActive():
+            self.screen_reader.reconnect()
+            if self.settings_dialog is None:
+                self._queue_world_focus(120)
         event.Skip()
 
     def _show_settings(self, _event: wx.CommandEvent) -> None:
@@ -812,12 +829,33 @@ class MainFrame(wx.Frame):
         event.Skip()
 
     def _on_close(self, event: wx.CloseEvent) -> None:
-        if event.CanVeto() and not self.force_quit:
+        if event.CanVeto() and not self.force_quit and self.settings.keep_in_tray:
             event.Veto()
             self.Hide()
             return
+        self.force_quit = True
         self.reconnect_timer.Stop()
         self.auto_update_timer.Stop()
+        if self.world_focus_restore is not None:
+            self.world_focus_restore.Stop()
+            self.world_focus_restore = None
+        if self.auto_browser_auth_call is not None:
+            self.auto_browser_auth_call.Stop()
+            self.auto_browser_auth_call = None
+        if self.settings_dialog is not None:
+            self.settings_dialog.Destroy()
+            self.settings_dialog = None
+        try:
+            self.web.Stop()
+        except (AttributeError, RuntimeError):
+            LOGGER.debug("WebView stop was unavailable during shutdown", exc_info=True)
+        try:
+            self.web.Destroy()
+        except (AttributeError, RuntimeError):
+            LOGGER.debug("WebView destruction was unavailable during shutdown", exc_info=True)
+        app = wx.GetApp()
+        if app is not None:
+            wx.CallAfter(app.ExitMainLoop)
         event.Skip()
 
 

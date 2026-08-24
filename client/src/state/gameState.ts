@@ -11,6 +11,8 @@ export type WorldItem = {
   locationId?: string;
   x: number;
   y: number;
+  /** Listener-facing direction: 0=north, increasing clockwise. */
+  headingDeg?: number;
   createdBy: string;
   createdByName?: string;
   updatedBy: string;
@@ -163,6 +165,7 @@ export function createInitialState(): GameState {
       nickname: 'anon',
       x: 20,
       y: 20,
+      headingDeg: 0,
       posture: 'standing',
       seatedItemId: null,
       seatedOffset: 0,

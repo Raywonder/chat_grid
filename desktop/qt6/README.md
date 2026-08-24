@@ -1,9 +1,9 @@
-# Indiginous native Qt 6 foundation
+# Indiginous native Qt 6 client
 
-This directory is an isolated, initial Qt 6 Widgets foundation for a native
-Indiginous client. It is intentionally disjoint from the existing browser,
-wxPython, and Windows client trees. It contains no WebView, browser widget,
-HTML UI, or deployment integration.
+This directory contains the native Qt6 client track for Indiginous. It is
+intentionally disjoint from the existing browser and wxPython client trees,
+so the older desktop client remains a rollback path until this client has
+passed its platform gates. It contains no WebView, browser widget, or HTML UI.
 
 ## What is here
 
@@ -12,9 +12,11 @@ HTML UI, or deployment integration.
 - Native status, settings, and about dialogs.
 - A native placeholder world viewport abstraction that paints a simple grid and
   exposes world-state hooks without pretending to implement the world yet.
-- A protocol-facing client seam with packet names and connection/auth/world
-  state transitions taken from `docs/protocol-notes.md` and
-  `docs/runtime-flow.md`.
+- A real Qt WebSocket transport using the Indiginous authentication and world
+  packet contracts, including secure-origin handshaking, login, guest entry,
+  welcome snapshots, movement, location changes, and chat status.
+- A native keyboard world viewport with automatic focus on show/activation and
+  no user-visible focus workaround in the navigation menu.
 - A Python source-contract test that runs without Qt and rejects accidental
   WebView/browser dependencies in this foundation.
 
@@ -32,14 +34,12 @@ On a machine without Qt 6, configuration still succeeds and runs the source
 contract check; CMake reports that the native executable was skipped. This is
 useful for CI/source validation, but it is not a Qt build.
 
-## Deliberately not implemented yet
+## Still being ported
 
-- WebSocket transport and the server's origin/base-path/session-cookie rules.
-- Login/register/resume forms and session-token-to-cookie handoff.
-- Welcome snapshot parsing, authoritative movement, location changes, and
+- Session-token persistence, browser external-auth handoff, and reconnect
+  reconciliation.
+- Full world item rendering and interaction, chat/direct-message panes, and
   server-authored UI metadata.
-- World rendering, item interaction, chat/direct-message outboxes, and admin
-  actions.
 - WebRTC voice, radio/TV streams, item emitters, spatial audio, reconnect
   reconciliation, and local asset packaging.
 - Native platform audio/device setup and accessibility polish beyond the
@@ -49,5 +49,6 @@ useful for CI/source validation, but it is not a Qt build.
   should share only deliberately ported protocol/domain contracts, not this
   desktop widget UI.
 
-The project is a foundation only; it is not a release claim and is not wired
-into any existing build, installer, or deployment path.
+The project is not a release claim and is not wired into any existing build,
+installer, update feed, or deployment path. Qt6 Widgets, Network, and
+WebSockets must be installed on the target build machine before compiling.

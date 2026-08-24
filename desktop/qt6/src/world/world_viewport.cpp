@@ -2,6 +2,9 @@
 
 #include <QPainter>
 #include <QPaintEvent>
+#include <QKeyEvent>
+#include <QFocusEvent>
+#include <QJsonArray>
 
 namespace indiginous::world {
 
@@ -23,6 +26,21 @@ void WorldViewport::applySnapshot(const WorldSnapshot& snapshot) {
     emit viewportStatus(QStringLiteral("Location: %1; grid: %2 by %2.")
                             .arg(snapshot_.locationName.isEmpty() ? QStringLiteral("unknown") : snapshot_.locationName)
                             .arg(snapshot_.gridSize));
+}
+
+void WorldViewport::applyWelcome(const QJsonObject& welcome) {
+    WorldSnapshot next;
+    const QJsonObject world = welcome.value("worldConfig").toObject();
+    const QJsonObject player = welcome.value("player").toObject();
+    next.gridSize = qMax(1, world.value("gridSize").toInt(20));
+    next.locationId = world.value("locationId").toString(player.value("locationId").toString("city"));
+    next.locationName = world.value("locationName").toString(next.locationId);
+    next.playerPosition = QPointF(player.value("x").toInt(), player.value("y").toInt());
+    for (const QJsonValue& value : welcome.value("users").toArray()) {
+        const QJsonObject user = value.toObject();
+        next.otherPlayers.append(QPointF(user.value("x").toInt(), user.value("y").toInt()));
+    }
+    applySnapshot(next);
 }
 
 void WorldViewport::clearSnapshot() {
@@ -61,9 +79,42 @@ void WorldViewport::paintEvent(QPaintEvent* event) {
     const QPointF player(offsetX + snapshot_.playerPosition.x() * cell,
                           offsetY + snapshot_.playerPosition.y() * cell);
     painter.drawEllipse(player, qMax<qreal>(4.0, cell * 0.25), qMax<qreal>(4.0, cell * 0.25));
+    painter.setBrush(QColor(QStringLiteral("#e8b45f")));
+    for (const QPointF& remote : snapshot_.otherPlayers) {
+        painter.drawEllipse(QPointF(offsetX + remote.x() * cell, offsetY + remote.y() * cell),
+                            qMax<qreal>(3.0, cell * 0.18), qMax<qreal>(3.0, cell * 0.18));
+    }
     painter.setPen(Qt::white);
     painter.drawText(QRectF(12, 12, width() - 24, 24), Qt::AlignLeft,
                      snapshot_.locationName.isEmpty() ? QStringLiteral("World") : snapshot_.locationName);
+}
+
+void WorldViewport::keyPressEvent(QKeyEvent* event) {
+    if (!hasSnapshot_) { event->ignore(); return; }
+    QPointF next = snapshot_.playerPosition;
+    switch (event->key()) {
+    case Qt::Key_Left: case Qt::Key_A: --next.rx(); break;
+    case Qt::Key_Right: case Qt::Key_D: ++next.rx(); break;
+    case Qt::Key_Up: case Qt::Key_W: --next.ry(); break;
+    case Qt::Key_Down: case Qt::Key_S: ++next.ry(); break;
+    default: event->ignore(); return;
+    }
+    const int maxX = qMax(0, snapshot_.gridSize - 1);
+    const int maxY = qMax(0, snapshot_.gridSize - 1);
+    next.setX(qBound(0.0, next.x(), static_cast<qreal>(maxX)));
+    next.setY(qBound(0.0, next.y(), static_cast<qreal>(maxY)));
+    snapshot_.playerPosition = next;
+    update();
+    emit moveRequested(qRound(next.x()), qRound(next.y()));
+    event->accept();
+}
+
+void WorldViewport::focusInEvent(QFocusEvent* event) {
+    QWidget::focusInEvent(event);
+    if (!focusedOnce_) {
+        focusedOnce_ = true;
+        emit viewportStatus(QStringLiteral("World is ready for keyboard input."));
+    }
 }
 
 }  // namespace indiginous::world

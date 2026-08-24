@@ -22,7 +22,7 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `Shift+L`: List users alphabetically; `Enter` teleports to selected user; `ArrowLeft`/`ArrowRight` adjust selected user volume
 - `Shift+R`: Open reactions and actions toward the selected, focused, or nearest user, including hug, focus, tap, hand, walk, teleport, and direct message options. `Enter` runs the highlighted action; `Space` lets the system pick a safe dynamic action such as announcing focus or tapping a shoulder
 - Desktop clients also use `Ctrl+R` for this in-world reactions and actions menu. In the browser Web UI, `Ctrl+R` remains the normal browser refresh shortcut.
-- `Shift+H`: Ask the server to allow the selected, focused, or nearest visitor into the guarded house. The owner or authorized resident must be inside that house or standing with the visitor on the exact exterior-door square; the visitor does not need an access code.
+- `Shift+H`: Allow a visitor only when they are actually outside and waiting on a guarded exterior-door square. If nobody is waiting there, the command says so and does not send an approval request.
 - `U`: Speak your current location, connected-user count, and connected users
 - `N`: Edit nickname
 - `/`: Start chat
@@ -49,8 +49,8 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `I`: Locate nearest item
 - `Shift+I`: List items and teleport to selected item with `Enter`
 - `A`: Add item
-- `O`: Edit item properties
-- `Shift+O`: Inspect all item properties
+- `O`: Edit item properties when the focused item supports editing
+- `Shift+O`: Inspect item properties, including read-only key identity and house-alarm access lists
 - `D`: Pick up or set down an item. Picking up movable furniture automatically carries everything resting on it as one balanced load; setting it down preserves every supported item's surface placement. Small carried objects and portable radios auto-place on an open focused surface when one is available.
 - `Shift+D`: Pick up/drop the selected item with attached or linked parts. Furniture already includes its supported contents with normal `D`.
 - `J`: Take the last focused grabbable item from a table, shelf, counter, or other surface. Fixed, wall-mounted, ceiling-mounted, window-mounted, and fixture items cannot be grabbed.

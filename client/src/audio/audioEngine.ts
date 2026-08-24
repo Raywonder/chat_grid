@@ -13,7 +13,13 @@ import {
   updateDistanceReflections,
   type DistanceReflectionRuntime,
 } from './distanceReflections';
-import { SPATIAL_TIME_CONSTANT_SECONDS, applySpatialMixToNodes, resolveSpatialMix } from './spatial';
+import {
+  SPATIAL_TIME_CONSTANT_SECONDS,
+  applySpatialMixToNodes,
+  resolveSpatialMix,
+  resolveSpatialPan,
+  rotateRelativePosition,
+} from './spatial';
 
 export type SpatialPeerRuntime = {
   nickname: string;
@@ -33,6 +39,7 @@ type SoundSpec = {
   gain?: number;
   sourcePosition?: { x: number; y: number };
   range?: number;
+  headingDeg?: number;
   delay?: number;
 };
 
@@ -549,49 +556,57 @@ export class AudioEngine {
     peer.binauralPanner = binauralPannerNode;
   }
 
-  updateSpatialAudio(peers: Iterable<SpatialPeerRuntime>, playerPosition: { x: number; y: number }): void {
+  updateSpatialAudio(peers: Iterable<SpatialPeerRuntime>, playerPosition: { x: number; y: number; headingDeg?: number }): void {
     if (!this.audioCtx) return;
 
     for (const peer of peers) {
       if (!peer.gain) continue;
+      const worldDx = peer.x - playerPosition.x;
+      const worldDy = peer.y - playerPosition.y;
+      const relative = rotateRelativePosition(worldDx, worldDy, playerPosition.headingDeg);
       const mix = resolveSpatialMix({
-        dx: peer.x - playerPosition.x,
-        dy: peer.y - playerPosition.y,
+        dx: worldDx,
+        dy: worldDy,
         range: HEARING_RADIUS,
         nearFieldDistance: 1.5,
         nearFieldGain: 1,
       });
       const listenGain = Number.isFinite(peer.listenGain) ? Math.max(0, peer.listenGain as number) : 1;
-      const scaledMix = mix ? { ...mix, gain: mix.gain * listenGain } : null;
+      const scaledMix = mix
+        ? { ...mix, gain: mix.gain * listenGain, pan: resolveSpatialPan(relative.dx, HEARING_RADIUS) }
+        : null;
       applySpatialMixToNodes({
         audioCtx: this.audioCtx,
         gainNode: peer.gain,
         pannerNode: peer.panner ?? null,
         mix: scaledMix,
+        binauralPosition: relative,
         outputMode: this.outputMode,
         transition: 'target',
       });
       if (peer.binauralPanner) {
-        const dx = this.outputMode === 'mono' ? 0 : peer.x - playerPosition.x;
-        const dy = this.outputMode === 'mono' ? 0 : peer.y - playerPosition.y;
-        this.setBinauralPannerPosition(peer.binauralPanner, dx, dy);
+        this.setBinauralPannerPosition(
+          peer.binauralPanner,
+          this.outputMode === 'mono' ? 0 : relative.dx,
+          this.outputMode === 'mono' ? 0 : relative.dy,
+        );
       }
     }
   }
 
   /** Updates active one-shot spatial sample gain/pan against current listener position. */
-  updateSpatialSamples(playerPosition: { x: number; y: number }): void {
+  updateSpatialSamples(playerPosition: { x: number; y: number; headingDeg?: number }): void {
     if (!this.audioCtx) return;
     for (const sample of Array.from(this.activeSpatialSamples)) {
       this.applySpatialSampleRuntime(sample, playerPosition);
     }
   }
 
-  sfxLocate(peer: { x: number; y: number }, range = HEARING_RADIUS): void {
+  sfxLocate(peer: { x: number; y: number }, range = HEARING_RADIUS, headingDeg = 0): void {
     const safeRange = Math.max(1, range);
     const distanceRatio = Math.max(0, Math.min(1, Math.hypot(peer.x, peer.y) / safeRange));
     const freq = 1040 - distanceRatio * 360;
-    this.playSound({ freq, duration: 0.2, type: 'sine', gain: 0.5, sourcePosition: peer, range: safeRange });
+    this.playSound({ freq, duration: 0.2, type: 'sine', gain: 0.5, sourcePosition: peer, range: safeRange, headingDeg });
   }
 
   sfxUiConfirm(): void {
@@ -629,15 +644,15 @@ export class AudioEngine {
     });
   }
 
-  sfxItemBeacon(sourcePosition: { x: number; y: number }, range: number): void {
+  sfxItemBeacon(sourcePosition: { x: number; y: number }, range: number, headingDeg = 0): void {
     const safeRange = Math.max(1, range);
     const distanceRatio = Math.max(0, Math.min(1, Math.hypot(sourcePosition.x, sourcePosition.y) / safeRange));
     const playbackRate = 1.2 - distanceRatio * 0.45;
     const gain = 0.56 + (1 - distanceRatio) * 0.14;
-    void this.playSpatialSample(
+      void this.playSpatialSample(
       ACTION_SOUND_URLS.tileItemPing,
       sourcePosition,
-      { x: 0, y: 0 },
+      { x: 0, y: 0, headingDeg },
       gain,
       safeRange,
       playbackRate,
@@ -650,6 +665,7 @@ export class AudioEngine {
         gain: 0.45,
         sourcePosition,
         range: safeRange,
+        headingDeg,
       });
     });
   }
@@ -720,7 +736,7 @@ export class AudioEngine {
   async playSpatialSample(
     url: string,
     sourcePosition: { x: number; y: number },
-    playerPosition: { x: number; y: number },
+    playerPosition: { x: number; y: number; headingDeg?: number },
     gain = 1,
     range = HEARING_RADIUS,
     playbackRate = 1,
@@ -799,7 +815,7 @@ export class AudioEngine {
     identity: string;
     nickname: string;
     sourcePosition?: { x: number; y: number };
-    playerPosition?: { x: number; y: number };
+    playerPosition?: { x: number; y: number; headingDeg?: number };
     range?: number;
   }): void {
     void this.ensureContext().then(() => {
@@ -818,6 +834,11 @@ export class AudioEngine {
       const sourcePosition = options.sourcePosition;
       const playerPosition = options.playerPosition;
       if (sourcePosition && playerPosition) {
+        const relative = rotateRelativePosition(
+          sourcePosition.x - playerPosition.x,
+          sourcePosition.y - playerPosition.y,
+          playerPosition.headingDeg,
+        );
         const mix = resolveSpatialMix({
           dx: sourcePosition.x - playerPosition.x,
           dy: sourcePosition.y - playerPosition.y,
@@ -839,7 +860,7 @@ export class AudioEngine {
           outputGain.connect(binauralPannerNode).connect(sfxGainNode);
         } else if (this.supportsStereoPanner() && this.outputMode === 'stereo') {
           pannerNode = audioCtx.createStereoPanner();
-          pannerNode.pan.setValueAtTime(Math.max(-1, Math.min(1, mix.pan)), now);
+          pannerNode.pan.setValueAtTime(resolveSpatialPan(relative.dx, range), now);
           outputGain.connect(pannerNode).connect(sfxGainNode);
         } else {
           outputGain.connect(sfxGainNode);
@@ -890,7 +911,7 @@ export class AudioEngine {
     identity: string;
     nickname: string;
     sourcePosition: { x: number; y: number };
-    playerPosition: { x: number; y: number };
+    playerPosition: { x: number; y: number; headingDeg?: number };
     range?: number;
   }): void {
     void this.ensureContext().then(() => {
@@ -898,6 +919,11 @@ export class AudioEngine {
       if (!audioCtx || !sfxGainNode) return;
 
       const range = Math.max(1, options.range ?? HEARING_RADIUS);
+      const relative = rotateRelativePosition(
+        options.sourcePosition.x - options.playerPosition.x,
+        options.sourcePosition.y - options.playerPosition.y,
+        options.playerPosition.headingDeg,
+      );
       const mix = resolveSpatialMix({
         dx: options.sourcePosition.x - options.playerPosition.x,
         dy: options.sourcePosition.y - options.playerPosition.y,
@@ -933,7 +959,7 @@ export class AudioEngine {
         outputGain.connect(binauralPannerNode).connect(sfxGainNode);
       } else if (this.supportsStereoPanner() && this.outputMode === 'stereo') {
         pannerNode = audioCtx.createStereoPanner();
-        pannerNode.pan.setValueAtTime(Math.max(-1, Math.min(1, mix.pan)), now);
+        pannerNode.pan.setValueAtTime(resolveSpatialPan(relative.dx, range), now);
         outputGain.connect(pannerNode).connect(sfxGainNode);
       } else {
         outputGain.connect(sfxGainNode);
@@ -969,7 +995,7 @@ export class AudioEngine {
   async playSpatialSampleAndWait(
     url: string,
     sourcePosition: { x: number; y: number },
-    playerPosition: { x: number; y: number },
+    playerPosition: { x: number; y: number; headingDeg?: number },
     gain = 1,
     range = HEARING_RADIUS,
   ): Promise<boolean> {
@@ -1524,6 +1550,9 @@ export class AudioEngine {
     if (!audioCtx || !sfxGainNode) return;
 
     const baseGain = spec.gain ?? 1;
+    const relative = spec.sourcePosition
+      ? rotateRelativePosition(spec.sourcePosition.x, spec.sourcePosition.y, spec.headingDeg)
+      : null;
     const resolved = spec.sourcePosition
       ? resolveSpatialMix({
           dx: spec.sourcePosition.x,
@@ -1534,7 +1563,7 @@ export class AudioEngine {
       : { gain: baseGain, pan: 0 };
     if (!resolved) return;
     const finalGain = resolved.gain;
-    const panValue = spec.sourcePosition ? resolved.pan : undefined;
+    const panValue = relative ? resolveSpatialPan(relative.dx, Math.max(1, spec.range ?? HEARING_RADIUS)) : undefined;
 
     if (finalGain <= 0) return;
 
@@ -1589,14 +1618,17 @@ export class AudioEngine {
 
   private applySpatialSampleRuntime(
     sample: ActiveSpatialSampleRuntime,
-    playerPosition: { x: number; y: number },
+    playerPosition: { x: number; y: number; headingDeg?: number },
     initial = false,
     startAt?: number,
   ): void {
     if (!this.audioCtx) return;
+    const worldDx = sample.sourceX - playerPosition.x;
+    const worldDy = sample.sourceY - playerPosition.y;
+    const relative = rotateRelativePosition(worldDx, worldDy, playerPosition.headingDeg);
     const mix = resolveSpatialMix({
-      dx: sample.sourceX - playerPosition.x,
-      dy: sample.sourceY - playerPosition.y,
+      dx: worldDx,
+      dy: worldDy,
       range: sample.range,
       baseGain: sample.baseGain,
     });
@@ -1607,15 +1639,14 @@ export class AudioEngine {
       sample.gainNode.gain.setValueAtTime(0, this.audioCtx.currentTime);
       sample.gainNode.gain.setTargetAtTime(gainValue, targetTime, ONE_SHOT_ATTACK_SECONDS);
       if (sample.pannerNode) {
-        const panValue = mix?.pan ?? 0;
-        const resolvedPan = this.outputMode === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
+        const resolvedPan = this.outputMode === 'mono' ? 0 : resolveSpatialPan(relative.dx, sample.range);
         sample.pannerNode.pan.setValueAtTime(resolvedPan, this.audioCtx.currentTime);
       }
       if (sample.binauralPannerNode) {
         this.setBinauralPannerPosition(
           sample.binauralPannerNode,
-          this.outputMode === 'mono' ? 0 : sample.sourceX - playerPosition.x,
-          this.outputMode === 'mono' ? 0 : sample.sourceY - playerPosition.y,
+          this.outputMode === 'mono' ? 0 : relative.dx,
+          this.outputMode === 'mono' ? 0 : relative.dy,
         );
       }
       if (sample.distanceReflections) {
@@ -1638,14 +1669,15 @@ export class AudioEngine {
       gainNode: sample.gainNode,
       pannerNode: sample.pannerNode,
       mix,
+      binauralPosition: relative,
       outputMode: this.outputMode,
       transition: 'target',
     });
     if (sample.binauralPannerNode) {
       this.setBinauralPannerPosition(
         sample.binauralPannerNode,
-        this.outputMode === 'mono' ? 0 : sample.sourceX - playerPosition.x,
-        this.outputMode === 'mono' ? 0 : sample.sourceY - playerPosition.y,
+        this.outputMode === 'mono' ? 0 : relative.dx,
+        this.outputMode === 'mono' ? 0 : relative.dy,
       );
     }
     if (sample.distanceReflections) {

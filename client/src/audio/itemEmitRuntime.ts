@@ -9,7 +9,7 @@ import {
 } from './distanceReflections';
 import { connectEffectChain, disconnectEffectRuntime, type EffectId, type EffectRuntime } from './effects';
 import { normalizeRadioEffect, normalizeRadioEffectValue } from './radioStationRuntime';
-import { applySpatialMixToNodes, resolveSpatialMix } from './spatial';
+import { applySpatialMixToNodes, resolveSpatialMix, resolveSpatialPan, rotateRelativePosition } from './spatial';
 import { volumePercentToGain } from './volume';
 
 type EmitOutput = {
@@ -30,6 +30,7 @@ type EmitOutput = {
   loopDelaySeconds: number;
   gain: GainNode;
   panner: StereoPannerNode | null;
+  binauralPanner: PannerNode | null;
   reflections: DistanceReflectionRuntime;
 };
 
@@ -425,7 +426,19 @@ export class ItemEmitRuntime {
         }
       }
       const destination = this.audio.getOutputDestinationNode() ?? audioCtx.destination;
-      if (this.audio.supportsStereoPanner()) {
+      let binauralPanner: PannerNode | null = null;
+      if (this.audio.supportsBinauralPanner() && this.audio.getOutputMode() === 'stereo') {
+        binauralPanner = audioCtx.createPanner();
+        binauralPanner.panningModel = 'HRTF';
+        binauralPanner.distanceModel = 'linear';
+        binauralPanner.refDistance = 1;
+        binauralPanner.maxDistance = Math.max(1, this.getSpatialConfig(item).range || HEARING_RADIUS);
+        binauralPanner.rolloffFactor = 0;
+        binauralPanner.coneInnerAngle = 360;
+        binauralPanner.coneOuterAngle = 360;
+        binauralPanner.coneOuterGain = 1;
+        gain.connect(binauralPanner).connect(destination);
+      } else if (this.audio.supportsStereoPanner()) {
         panner = audioCtx.createStereoPanner();
         gain.connect(panner).connect(destination);
       } else {
@@ -450,6 +463,7 @@ export class ItemEmitRuntime {
         loopDelaySeconds,
         gain,
         panner,
+        binauralPanner,
         reflections,
       });
       if (!matchingResumeState && !this.nextEmitStartAtMs.has(item.id) && initialDelaySeconds > 0) {
@@ -477,7 +491,7 @@ export class ItemEmitRuntime {
     }
   }
 
-  updateSpatialAudio(items: Map<string, WorldItem>, playerPosition: { x: number; y: number }): void {
+  updateSpatialAudio(items: Map<string, WorldItem>, playerPosition: { x: number; y: number; headingDeg?: number }): void {
     if (!this.layerEnabled) return;
     const audioCtx = this.audio.context;
     if (!audioCtx) return;
@@ -537,12 +551,21 @@ export class ItemEmitRuntime {
           rearGain: 0.4,
         },
       });
+      const listenerRelative = rotateRelativePosition(item.x - playerPosition.x, item.y - playerPosition.y, playerPosition.headingDeg);
       const emitVolume = volumePercentToGain(item.params.emitVolume, 100);
-      const scaledMix = mix ? { ...mix, gain: mix.gain * emitVolume } : null;
+      const scaledMix = mix
+        ? {
+            ...mix,
+            gain: mix.gain * emitVolume,
+            pan: mix.distance < 1 ? 0 : resolveSpatialPan(listenerRelative.dx, spatialRange),
+          }
+        : null;
       applySpatialMixToNodes({
         audioCtx,
         gainNode: output.gain,
         pannerNode: output.panner,
+        binauralPannerNode: output.binauralPanner,
+        binauralPosition: listenerRelative,
         mix: scaledMix,
         outputMode: this.audio.getOutputMode(),
         transition: 'target',

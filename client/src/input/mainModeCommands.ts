@@ -294,9 +294,9 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
     id: 'castToDevice',
     label: 'Cast local media to device',
     shortcut: 'Shift+K',
-    tooltip: 'Choose a nearby TV or radio and cast an available local screen, window, tab, or app media source through the carried universal remote.',
+    tooltip: 'Choose a TV or radio in your current room and cast an available local screen, window, tab, or app media source through a carried universal remote.',
     section: 'Media',
-    isAvailable: (context) => context.hasCarriedRadioRemote,
+    isAvailable: () => true,
   },
   {
     id: 'openWorldPhone',

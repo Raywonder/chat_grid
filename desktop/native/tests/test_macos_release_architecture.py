@@ -7,5 +7,5 @@ def test_macos_release_defaults_to_universal2_and_current_bundle_version() -> No
     )
     assert 'INDIGINOUS_MAC_TARGET_ARCH", "universal2"' in spec
     assert 'target_arch="x86_64"' not in spec
-    assert '"CFBundleShortVersionString": "0.4.18"' in spec
-    assert '"CFBundleVersion": "0.4.18"' in spec
+    assert '"CFBundleShortVersionString": "0.4.19"' in spec
+    assert '"CFBundleVersion": "0.4.19"' in spec

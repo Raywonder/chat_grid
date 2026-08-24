@@ -103,6 +103,7 @@ type MessageHandlerDeps = {
   narrateRemoteMovement: (nickname: string, fromX: number, fromY: number, toX: number, toY: number) => void;
   handleItemActionResultStatus: (message: Extract<IncomingMessage, { type: 'item_action_result' }>) => boolean;
   handleMediaCastState: (message: Extract<IncomingMessage, { type: 'media_cast_state' }>) => void;
+  handleJellyfinMediaResult?: (message: Extract<IncomingMessage, { type: 'jellyfin_media_result' }>) => void;
   handleWorldPhoneState?: (message: Extract<IncomingMessage, { type: 'world_phone_state' }>) => void;
   handleInteractiveItemLaunch: (item: WorldItem) => boolean;
   handleGameLaunchInvite: (message: Extract<IncomingMessage, { type: 'item_game_launch' }>) => boolean;
@@ -593,6 +594,9 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
 
       case 'media_cast_state':
         deps.handleMediaCastState(message);
+        break;
+      case 'jellyfin_media_result':
+        deps.handleJellyfinMediaResult?.(message);
         break;
       case 'world_phone_state':
         deps.handleWorldPhoneState?.(message);

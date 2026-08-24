@@ -1,5 +1,5 @@
 // Maintainer-controlled web client version metadata.
-window.CHGRID_RELEASE_VERSION = "0.4.18";
-window.CHGRID_CLIENT_REVISION = "R551";
+window.CHGRID_RELEASE_VERSION = "0.4.21";
+window.CHGRID_CLIENT_REVISION = "R557";
 // Optional display timezone for timestamps. Falls back to America/Detroit if unset/invalid.
 window.CHGRID_TIME_ZONE = "America/Detroit";

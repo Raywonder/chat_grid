@@ -34,7 +34,7 @@ from websockets.exceptions import ConnectionClosed
 from websockets.http11 import Request as HttpRequest, Response as HttpResponse
 from websockets.typing import Origin
 
-from .auth_service import AuthError, AuthService
+from .auth_service import AuthError, AuthService, DEFAULT_ROLE_PERMISSIONS
 from .blind_productions_billboards import (
     fetch_public_messages as fetch_blind_productions_messages,
     upsert_blind_productions_billboards,
@@ -63,6 +63,7 @@ from .item_catalog import (
 )
 from .item_type_handlers import get_item_type_handler
 from .item_service import ItemService
+from .jellyfin_media import JellyfinMediaService
 from .seed_items import ensure_tv_channel_defaults
 from .items.types.clock.time_format import parse_alarm_time_flexible
 from .items.types.house_alarm.actions import evaluate_access as evaluate_house_alarm_access
@@ -76,6 +77,7 @@ from .items.types.radio_station.aaastreamer import resolve_aaastreamer_playback
 from .items.types.service_link.portal_state import effective_portal_state
 from .models import (
     AuthExternalPacket,
+    AuthGuestPacket,
     AuthLoginPacket,
     AuthLogoutPacket,
     AuthPermissionsPacket,
@@ -155,6 +157,8 @@ from .models import (
     ItemUsePacket,
     ItemUseSoundPacket,
     LocationChangedPacket,
+    JellyfinMediaRequestPacket,
+    JellyfinMediaResultPacket,
     MediaCastPacket,
     MediaCastStatePacket,
     WorldPhonePacket,
@@ -631,6 +635,7 @@ class SignalingServer:
             username_max_length=username_max_length,
         )
         self.item_service = ItemService(state_file=state_file, seed_builtin_items=True)
+        self.jellyfin_media = JellyfinMediaService()
         history_file = (state_file or Path.cwd() / "runtime" / "items.json").with_name("chat_history.jsonl")
         self.chat_history = ChatHistory(history_file)
         self.notification_service = NotificationService()
@@ -1901,9 +1906,11 @@ class SignalingServer:
         if client is None:
             return []
         client_permissions = client.permissions or set()
+        account_actions = {"my_notifications", "mark_my_notifications_read", "owned_content"}
         return [
             {"id": action["id"], "label": action["label"], "tooltip": action["tooltip"]}
             for action in ADMIN_MENU_ACTION_DEFINITIONS
+            if (action["id"] not in account_actions or bool(client.user_id))
             if action["permission"] in client_permissions
         ]
 
@@ -3334,6 +3341,22 @@ class SignalingServer:
             token in haystack
             for token in ("tv", "television", "movie", "movies", "channel", "channels")
         )
+
+    @staticmethod
+    def _is_media_remote(item: WorldItem) -> bool:
+        """Return whether an item is a carried universal remote for media devices."""
+
+        if item.type != "house_object":
+            return False
+        return str(item.params.get("objectKind", "")).strip().lower() == "remote"
+
+    def _carried_media_remote(self, client: ClientConnection) -> WorldItem | None:
+        """Return the first universal media remote carried by the client."""
+
+        for item in self.items.values():
+            if item.carrierId == client.id and self._is_media_remote(item):
+                return item
+        return None
 
     @staticmethod
     def _remote_controls_linked_radios(remote: WorldItem) -> bool:
@@ -7715,6 +7738,11 @@ class SignalingServer:
                 "role": client.role if client.authenticated else None,
                 "permissions": self._sorted_permissions(client.permissions),
                 "policy": self._auth_policy(),
+                "jellyfinMedia": {
+                    **self.jellyfin_media.access_for(client.username).as_dict(),
+                    "configured": self.jellyfin_media.configured,
+                    "provisioningMode": self.jellyfin_media.provisioning_mode(),
+                },
             },
             chatHistory={
                 "public": [
@@ -7726,6 +7754,7 @@ class SignalingServer:
                         "system": False,
                     }
                     for entry in self.chat_history.public_for_location(client.location_id)
+                    if not (entry.get("suppressSenderEcho") and entry.get("senderUserId") == client.user_id)
                 ],
                 "direct": [
                     {
@@ -7741,6 +7770,7 @@ class SignalingServer:
                         "outgoing": entry.get("senderUserId") == client.user_id,
                     }
                     for entry in self.chat_history.direct_for_user(client.user_id or "")
+                    if not (entry.get("suppressSenderEcho") and entry.get("senderUserId") == client.user_id)
                 ],
             } if client.user_id else None,
         )
@@ -7770,7 +7800,7 @@ class SignalingServer:
             client.y = min(max(location.spawn_y, 0), self.grid_size - 1)
         now_ms = self.item_service.now_ms()
         self._refresh_client_permissions(client)
-        if client.user_id:
+        if client.user_id and client.role != "guest":
             self.auth_service.ensure_ecrypto_account(client.user_id)
         client.last_position_update_ms = now_ms
         client.movement_window_index = self._movement_window_index(now_ms)
@@ -7811,7 +7841,7 @@ class SignalingServer:
 
         if client.authenticated and isinstance(
             packet,
-            (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket, AuthExternalPacket),
+            (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket, AuthExternalPacket, AuthGuestPacket),
         ):
             await self._send(
                 client.websocket,
@@ -7822,6 +7852,37 @@ class SignalingServer:
                     authPolicy=self._auth_policy(),
                 ),
             )
+            return True
+
+        if isinstance(packet, AuthGuestPacket):
+            # Ephemeral guest sessions have no account, cookie, or private
+            # history. They can enter public areas and use general chat only.
+            guest_id = f"guest:{client.id}"
+            guest_name = str(packet.nickname or "Guest").strip()[:32] or "Guest"
+            client.authenticated = True
+            client.user_id = guest_id
+            client.username = guest_id
+            client.role = "guest"
+            client.permissions = set(DEFAULT_ROLE_PERMISSIONS["guest"])
+            client.session_token = None
+            client.nickname = guest_name
+            client.saved_x = None
+            client.saved_y = None
+            client.saved_location_id = None
+            await self._send(
+                client.websocket,
+                AuthResultPacket(
+                    type="auth_result",
+                    ok=True,
+                    message="Guest session started. Public chat only.",
+                    username=guest_id,
+                    role="guest",
+                    permissions=self._sorted_permissions(client.permissions),
+                    nickname=guest_name,
+                    authPolicy=self._auth_policy(),
+                ),
+            )
+            await self._send_authenticated_welcome(client)
             return True
 
         if isinstance(
@@ -10384,6 +10445,45 @@ class SignalingServer:
             await self._handle_world_phone(client, packet)
             return
 
+        if isinstance(packet, JellyfinMediaRequestPacket):
+            access = self.jellyfin_media.access_for(client.username)
+            playback_url = ""
+            segments: list[dict] = []
+            if packet.mediaKind and packet.itemId:
+                playback_url = self.jellyfin_media.playback_url(
+                    username=client.username,
+                    media_kind=packet.mediaKind,
+                    item_id=packet.itemId,
+                ) or ""
+                if packet.includePlan:
+                    target = self.items.get(packet.itemId)
+                    if target is not None:
+                        segments = self.jellyfin_media.playback_plan(
+                            target.params.get("jellyfinProgram")
+                        )
+            await self._send(
+                client.websocket,
+                JellyfinMediaResultPacket(
+                    type="jellyfin_media_result",
+                    ok=bool(access.enabled and (not packet.mediaKind or playback_url)),
+                    message=(
+                        "Jellyfin media is ready."
+                        if access.enabled
+                        else "Jellyfin media is not enabled for this account."
+                    ),
+                    access={
+                        **access.as_dict(),
+                        "configured": self.jellyfin_media.configured,
+                        "provisioningMode": self.jellyfin_media.provisioning_mode(),
+                    },
+                    playbackUrl=playback_url,
+                    mediaKind=packet.mediaKind,
+                    itemId=packet.itemId,
+                    segments=segments,
+                ),
+            )
+            return
+
         if await self._handle_flexpbx_preferences_packet(client, packet):
             return
 
@@ -10712,20 +10812,34 @@ class SignalingServer:
                 "senderUserId": client.user_id,
                 "senderNickname": client.nickname,
                 "message": packet.message,
+                "suppressSenderEcho": packet.suppressSenderEcho,
             })
+            chat_packet = BroadcastChatMessagePacket(
+                type="chat_message",
+                message=packet.message,
+                senderId=client.id,
+                senderNickname=client.nickname,
+                system=False,
+                voiceInput=packet.suppressSenderEcho,
+            )
             await self._broadcast_location(
                 client.location_id,
-                BroadcastChatMessagePacket(
-                    type="chat_message",
-                    message=packet.message,
-                    senderId=client.id,
-                    senderNickname=client.nickname,
-                    system=False,
-                ),
+                chat_packet,
+                exclude=client.websocket if packet.suppressSenderEcho else None,
             )
             return
 
         if isinstance(packet, DirectMessagePacket):
+            if client.role == "guest":
+                await self._send(
+                    client.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message="Guest sessions can use public chat, but not private messages.",
+                        system=True,
+                    ),
+                )
+                return
             if not self._client_has_permission(client, "chat.send"):
                 await self._send(
                     client.websocket,
@@ -10763,6 +10877,7 @@ class SignalingServer:
                 "targetUserId": target.user_id,
                 "targetNickname": target.nickname,
                 "message": packet.message,
+                "suppressSenderEcho": packet.suppressSenderEcho,
             })
             await self._send(
                 target.websocket,
@@ -10773,6 +10888,7 @@ class SignalingServer:
                     senderNickname=client.nickname,
                     targetId=target.id,
                     targetNickname=target.nickname,
+                    voiceInput=packet.suppressSenderEcho,
                 ),
             )
             if target.user_id:
@@ -10783,18 +10899,19 @@ class SignalingServer:
                     target_user_id=target.user_id,
                     actor_user_id=client.user_id,
                 )
-            await self._send(
-                client.websocket,
-                DirectMessageBroadcastPacket(
-                    type="direct_message",
-                    message=packet.message,
-                    senderId=client.id,
-                    senderNickname=client.nickname,
-                    targetId=target.id,
-                    targetNickname=target.nickname,
-                    outgoing=True,
-                ),
-            )
+            if not packet.suppressSenderEcho:
+                await self._send(
+                    client.websocket,
+                    DirectMessageBroadcastPacket(
+                        type="direct_message",
+                        message=packet.message,
+                        senderId=client.id,
+                        senderNickname=client.nickname,
+                        targetId=target.id,
+                        targetNickname=target.nickname,
+                        outgoing=True,
+                    ),
+                )
             return
 
         if isinstance(packet, ItemAddPacket):
@@ -11823,11 +11940,30 @@ class SignalingServer:
         if isinstance(packet, MediaCastPacket):
             target = self.items.get(packet.targetItemId)
             target_kind = str(target.params.get("objectKind", "")).strip().lower() if target else ""
-            valid_target = target is not None and target.locationId == client.location_id and (
+            valid_receiver = target is not None and (
                 target.type == "radio_station" or target_kind == "tv"
             )
-            if not valid_target:
+            if not valid_receiver:
                 await self._send_item_result(client, False, "use", "That cast receiver is not available here.", packet.targetItemId)
+                return
+            if target.locationId != client.location_id:
+                await self._send_item_result(
+                    client,
+                    False,
+                    "use",
+                    f"Move to {target.locationId} before casting to {target.title}. The receiver must be in your current room or location.",
+                    target.id,
+                )
+                return
+            remote = self._carried_media_remote(client)
+            if remote is None:
+                await self._send_item_result(
+                    client,
+                    False,
+                    "use",
+                    f"Carry a universal media remote before casting to {target.title}. If you were not given one, obtain one from the in-world item service.",
+                    target.id,
+                )
                 return
             state_packet = MediaCastStatePacket(
                 type="media_cast_state",
@@ -12177,6 +12313,15 @@ class SignalingServer:
             update_item = self.items.get(packet.itemId)
             if not update_item:
                 await self._send_item_result(client, False, "update", "Item not found.")
+                return
+            if self._is_key_item(update_item):
+                await self._send_item_result(
+                    client,
+                    False,
+                    "update",
+                    "Keys are physical items and cannot be edited.",
+                    update_item.id,
+                )
                 return
             if update_item.carrierId not in (None, client.id):
                 await self._send_item_result(

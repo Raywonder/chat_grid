@@ -118,6 +118,16 @@ export const welcomeMessageSchema = z.object({
           passwordMaxLength: z.number().int().positive(),
         })
         .optional(),
+      jellyfinMedia: z.object({
+        enabled: z.boolean(),
+        mode: z.string(),
+        canPlayTv: z.boolean(),
+        canPlayRadio: z.boolean(),
+        libraries: z.array(z.string()),
+        universalRemotes: z.array(z.string()),
+        configured: z.boolean().optional(),
+        provisioningMode: z.enum(['shared', 'provisioned']).optional(),
+      }).optional(),
     })
     .optional(),
   uiDefinitions: z
@@ -308,6 +318,7 @@ export const chatMessageSchema = z.object({
   senderNickname: z.string().optional(),
   system: z.boolean().optional(),
   action: z.boolean().optional(),
+  voiceInput: z.boolean().optional(),
 });
 
 export const directMessageSchema = z.object({
@@ -318,6 +329,7 @@ export const directMessageSchema = z.object({
   targetId: z.string(),
   targetNickname: z.string(),
   outgoing: z.boolean().optional(),
+  voiceInput: z.boolean().optional(),
 });
 
 export const socialActionSchema = z.object({
@@ -392,6 +404,26 @@ export const mediaCastStateSchema = z.object({
   stationName: z.string(),
   title: z.string(),
   artist: z.string(),
+});
+
+export const jellyfinMediaResultSchema = z.object({
+  type: z.literal('jellyfin_media_result'),
+  ok: z.boolean(),
+  message: z.string(),
+  access: z.object({
+    enabled: z.boolean(),
+    mode: z.string(),
+    canPlayTv: z.boolean(),
+    canPlayRadio: z.boolean(),
+    libraries: z.array(z.string()),
+    universalRemotes: z.array(z.string()),
+    configured: z.boolean().optional(),
+    provisioningMode: z.enum(['shared', 'provisioned']).optional(),
+  }),
+  playbackUrl: z.string(),
+  mediaKind: z.enum(['tv', 'radio']).nullable().optional(),
+  itemId: z.string(),
+  segments: z.array(z.record(z.string(), z.unknown())),
 });
 
 export const worldPhoneStateSchema = z.object({
@@ -643,6 +675,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   itemActionResultSchema,
   worldConfigUpdateSchema,
   mediaCastStateSchema,
+  jellyfinMediaResultSchema,
   worldPhoneStateSchema,
   itemTransferTargetsSchema,
   itemUseSoundSchema,
@@ -669,11 +702,13 @@ export type OutgoingMessage =
   | { type: 'auth_login'; username: string; password: string }
   | { type: 'auth_resume'; sessionToken: string }
   | { type: 'auth_external'; assertion: string }
+  | { type: 'auth_guest'; nickname?: string }
   | { type: 'auth_logout' }
   | { type: 'ntfy_preferences_get' }
   | { type: 'ntfy_preferences_update'; enabled: boolean; rotateTopic?: boolean }
   | { type: 'flexpbx_dialing_preferences_get' }
   | { type: 'flexpbx_dialing_preferences_update'; enabled: boolean; prefixes: string[] }
+  | { type: 'jellyfin_media_request'; mediaKind?: 'tv' | 'radio'; itemId?: string; includePlan?: boolean }
   | { type: 'welcome_ready' }
   | { type: 'admin_roles_list' }
   | { type: 'admin_role_create'; name: string }
@@ -698,8 +733,8 @@ export type OutgoingMessage =
   | { type: 'change_location'; locationId: string }
   | { type: 'teleport_complete'; x: number; y: number }
   | { type: 'update_nickname'; nickname: string }
-  | { type: 'chat_message'; message: string }
-  | { type: 'direct_message'; targetId: string; message: string }
+  | { type: 'chat_message'; message: string; suppressSenderEcho?: boolean }
+  | { type: 'direct_message'; targetId: string; message: string; suppressSenderEcho?: boolean }
   | {
       type: 'user_action';
       actionId:

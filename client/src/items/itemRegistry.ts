@@ -203,6 +203,15 @@ export function itemPropertyLabel(key: string): string {
 
 /** Returns editable properties for one item instance/type. */
 export function getEditableItemPropertyKeys(item: WorldItem): string[] {
+  // Physical keys keep their identity fixed. They can be carried, inspected,
+  // exchanged, and used on a matching lock, but are not configurable items.
+  if (
+    item.type === 'house_object' &&
+    String(item.params.objectKind ?? '').trim().toLowerCase() === 'keys' &&
+    String(item.params.keyId ?? '').trim().length > 0
+  ) {
+    return [];
+  }
   const rawKeys = itemTypeEditableProperties[item.type];
   if (!rawKeys || rawKeys.length === 0) {
     return [];

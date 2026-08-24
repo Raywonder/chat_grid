@@ -36,6 +36,7 @@ export class VoiceInput {
   private playbackSuppressionDepth = 0;
   private ignoreResultsUntilMs = 0;
   private focusMode = false;
+  private muted = false;
 
   constructor(private readonly options: VoiceInputOptions) {}
 
@@ -44,6 +45,7 @@ export class VoiceInput {
   }
 
   start(): boolean {
+    if (this.muted) return false;
     if (this.active && this.recognition !== null) return true;
     const Constructor = this.getConstructor();
     if (!Constructor) {
@@ -57,7 +59,7 @@ export class VoiceInput {
     this.recognition.interimResults = false;
     this.recognition.lang = document.documentElement.lang || 'en-US';
     this.recognition.onresult = (event) => {
-      if (this.focusMode || this.playbackSuppressionDepth > 0 || Date.now() < this.ignoreResultsUntilMs) return;
+      if (this.muted || this.focusMode || this.playbackSuppressionDepth > 0 || Date.now() < this.ignoreResultsUntilMs) return;
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const result = event.results[index];
         if (!result.isFinal) continue;
@@ -116,6 +118,19 @@ export class VoiceInput {
 
   isFocusModeEnabled(): boolean {
     return this.focusMode;
+  }
+
+  /** Applies the same hard mute boundary to speech recognition as to audio. */
+  setMuted(muted: boolean): void {
+    this.muted = muted;
+    if (muted) {
+      this.stopRecognitionInstance();
+      return;
+    }
+    if (this.active && !this.focusMode && this.playbackSuppressionDepth === 0 && this.recognition === null) {
+      this.ignoreResultsUntilMs = Date.now() + 500;
+      this.start();
+    }
   }
 
   /** Temporarily pauses recognition while agent speech is audible. */

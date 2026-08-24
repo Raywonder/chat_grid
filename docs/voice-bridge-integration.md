@@ -37,6 +37,17 @@ TeamTalk native bridge. It gives the in-world companion a real, spatial,
 interruptible voice source without claiming that TeamTalk audio has been
 silently converted into a live Grid media gateway.
 
+### Local audio.cpp comparison path
+
+The companion speech path also supports an explicit local provider for private
+voice testing. Set `CHGRID_VOICE_BACKEND=local_cpp` to use the tested audio.cpp
+Supertonic setup; `CHGRID_LOCAL_TTS_VOICE` defaults to `F5`. The provider
+writes WAV audio into the same runtime voice directory, and the existing
+same-origin validation, spatial client playback, and WebRTC queue are reused.
+The ElevenLabs provider remains selectable with
+`CHGRID_VOICE_BACKEND=elevenlabs`. This is a provider comparison switch, not a
+claim that the two voices are identical or that public voice policy changed.
+
 ## Reusable rules
 
 Use the Rocco path as the reference for low-latency speech, interruption, reconnect, quiet/noise gating, speaker identity, and expressive ElevenLabs output. Carry those rules into Grid, VoiceLink, OpenLink, PBX, WhatsApp voice, and future audio surfaces without copying private conversation text or credentials.

@@ -70,8 +70,9 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
       code === 'KeyR' && Boolean(options.ctrlKey) && !options.shiftKey && !deps.isTextEditingMode(deps.state.mode);
     if (!isArrow && !isDesktopWorldShortcut) return false;
     if (deps.hasBlockedArrowTeleport(code)) return false;
+    const isTurnArrow = isArrow && Boolean(options.shiftKey);
     deps.dom.canvas.focus({ preventScroll: true });
-    deps.state.keysPressed[code] = true;
+    if (!isTurnArrow) deps.state.keysPressed[code] = true;
     try {
       deps.handleModeInput({
         code,
@@ -80,18 +81,20 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
         shiftKey: Boolean(options.shiftKey),
         source: 'native',
       });
-      if (isArrow) {
+      if (isArrow && !isTurnArrow) {
         deps.runImmediateMovement();
       }
-      const previousTimer = nativeArrowReleaseTimers.get(code);
-      if (previousTimer !== undefined) window.clearTimeout(previousTimer);
-      nativeArrowReleaseTimers.set(
-        code,
-        window.setTimeout(() => {
-          deps.state.keysPressed[code] = false;
-          nativeArrowReleaseTimers.delete(code);
-        }, 250),
-      );
+      if (!isTurnArrow) {
+        const previousTimer = nativeArrowReleaseTimers.get(code);
+        if (previousTimer !== undefined) window.clearTimeout(previousTimer);
+        nativeArrowReleaseTimers.set(
+          code,
+          window.setTimeout(() => {
+            deps.state.keysPressed[code] = false;
+            nativeArrowReleaseTimers.delete(code);
+          }, 250),
+        );
+      }
     } catch (error) {
       recoverFromInputError(error);
     }
@@ -296,8 +299,9 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
 
     try {
       deps.handleModeInput(input);
-      deps.state.keysPressed[code] = true;
-      if (code.startsWith('Arrow')) {
+      const isTurnArrow = code.startsWith('Arrow') && event.shiftKey;
+      if (!isTurnArrow) deps.state.keysPressed[code] = true;
+      if (code.startsWith('Arrow') && !isTurnArrow) {
         deps.runImmediateMovement();
       }
     } catch (error) {

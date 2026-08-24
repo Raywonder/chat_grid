@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,21 @@ ENV_API_KEY = "CHGRID_VOICE_API_KEY"
 ENV_VOICE_ID = "CHGRID_VOICE_ID"
 FALLBACK_API_KEY_NAMES = ("ELEVENLABS_API_KEY",)
 FALLBACK_VOICE_ID_NAMES = ("CLAWDIA_ELEVENLABS_VOICE_ID", "ELEVENLABS_VOICE_ID")
+
+# The local audio.cpp provider is selected explicitly so the existing
+# ElevenLabs path remains available for comparison.
+VOICE_BACKEND_ENV = "CHGRID_VOICE_BACKEND"
+LOCAL_CLI_ENV = "CHGRID_LOCAL_TTS_CLI"
+LOCAL_MODEL_ENV = "CHGRID_LOCAL_TTS_MODEL"
+LOCAL_VOICE_ENV = "CHGRID_LOCAL_TTS_VOICE"
+DEFAULT_LOCAL_CLI = Path(
+    "/home/tappedin/.openclaw/workspace/projects/audio-cpp-lab/"
+    "build/linux-cpu-release/bin/audiocpp_cli"
+)
+DEFAULT_LOCAL_MODEL = Path(
+    "/home/tappedin/.openclaw/workspace/projects/audio-cpp-lab/"
+    "models/Supertonic-3-GGUF"
+)
 
 # Same-origin URL prefix the client expects to fetch audio from.
 VOICE_URL_PREFIX = "/voice/"
@@ -82,6 +98,40 @@ def _elevenlabs_rest_url(voice_id: str) -> str:
     return f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 
 
+def _synthesize_local_cpp(text: str, *, runtime_root: Path | None = None) -> tuple[Path, str]:
+    """Render speech with the local audio.cpp Supertonic provider."""
+
+    cli = Path(os.getenv(LOCAL_CLI_ENV, str(DEFAULT_LOCAL_CLI))).expanduser()
+    model = Path(os.getenv(LOCAL_MODEL_ENV, str(DEFAULT_LOCAL_MODEL))).expanduser()
+    voice_id = os.getenv(LOCAL_VOICE_ENV, "F5").strip() or "F5"
+    if not cli.is_file() or not os.access(cli, os.X_OK):
+        raise RuntimeError(f"Local TTS CLI is unavailable: {cli}")
+    if not model.exists():
+        raise RuntimeError(f"Local TTS model is unavailable: {model}")
+
+    content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    filename = _sanitize_filename(f"agent_{int(time.time())}_{content_hash}", ".wav")
+    output_path = _voice_dir_for(runtime_root) / filename
+    command = [
+        str(cli), "--task", "tts", "--family", "supertonic",
+        "--model", str(model), "--backend", "cpu", "--threads",
+        os.getenv("CHGRID_LOCAL_TTS_THREADS", "4"), "--language", "en",
+        "--voice-id", voice_id, "--text", text, "--out", str(output_path),
+    ]
+    try:
+        subprocess.run(
+            command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        output_path.unlink(missing_ok=True)
+        raise RuntimeError(f"Local TTS synthesis failed: {exc}") from exc
+    if not output_path.is_file() or output_path.stat().st_size == 0:
+        raise RuntimeError("Local TTS returned no audio data.")
+    os.chmod(output_path, 0o644)
+    return output_path, VOICE_URL_PREFIX + filename
+
+
 def synthesize_to_file(
     text: str,
     *,
@@ -109,6 +159,11 @@ def synthesize_to_file(
     if not text:
         raise ValueError("Text must not be empty.")
     text = text[:MAX_TEXT_LENGTH]
+
+    if os.getenv(VOICE_BACKEND_ENV, "elevenlabs").strip().lower() in {
+        "local", "local_cpp", "audiocpp",
+    }:
+        return _synthesize_local_cpp(text, runtime_root=runtime_root)
 
     resolved_api_key = api_key or ""
     resolved_voice_id = voice_id or ""

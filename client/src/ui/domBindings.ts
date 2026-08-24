@@ -29,6 +29,7 @@ type UiBindingsDeps = {
   disconnect: () => void;
   closeSettings: () => void;
   openSettings: () => void;
+  activateWorld: () => void;
   updateStatus: (message: string) => void;
   getGridName: () => string;
   sfxUiBlip: () => void;
@@ -57,7 +58,7 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
   });
 
   deps.dom.focusGridButton.addEventListener('click', () => {
-    deps.dom.canvas.focus();
+    deps.activateWorld();
     deps.updateStatus(`${deps.getGridName()} focused.`);
     deps.sfxUiBlip();
   });

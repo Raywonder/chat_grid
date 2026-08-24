@@ -3,6 +3,7 @@
 #include <QAction>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QEvent>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -13,13 +14,14 @@
 #include <QStatusBar>
 #include <QTextEdit>
 #include <QVBoxLayout>
+#include <QJsonObject>
 
 #include "world/world_viewport.h"
 
 namespace indiginous::app {
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
-    setWindowTitle(QStringLiteral("Indiginous — Native Qt 6 foundation"));
+    setWindowTitle(QStringLiteral("Indiginous — Native Qt 6"));
     resize(900, 620);
     buildMenus();
     buildCentralView();
@@ -28,13 +30,23 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             this, &MainWindow::updateConnectionStatus);
     connect(&protocolClient_, &transport::ProtocolClient::statusMessage,
             this, &MainWindow::showStatus);
+    connect(&protocolClient_, &transport::ProtocolClient::authenticationRequired,
+            this, &MainWindow::handleAuthenticationRequired);
+    connect(&protocolClient_, &transport::ProtocolClient::authenticationResult,
+            this, &MainWindow::handleAuthenticationResult);
+    connect(&protocolClient_, &transport::ProtocolClient::welcomeReceived,
+            this, &MainWindow::handleWelcome);
+    connect(&protocolClient_, &transport::ProtocolClient::locationReceived,
+            this, &MainWindow::handleLocation);
     connect(viewport_, &world::WorldViewport::viewportStatus,
             this, &MainWindow::showStatus);
+    connect(viewport_, &world::WorldViewport::moveRequested,
+            &protocolClient_, &transport::ProtocolClient::sendMove);
     updateConnectionStatus(protocolClient_.state());
 }
 
 void MainWindow::buildMenus() {
-    auto* fileMenu = menuBar()->addMenu(QStringLiteral("&File"));
+    auto* fileMenu = menuBar()->addMenu(QStringLiteral("&Indiginous"));
     auto* connectAction = fileMenu->addAction(QStringLiteral("&Connect"));
     connectAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+L")));
     connect(connectAction, &QAction::triggered, this, &MainWindow::connectToEndpoint);
@@ -46,8 +58,6 @@ void MainWindow::buildMenus() {
     connect(quitAction, &QAction::triggered, this, &QWidget::close);
 
     auto* viewMenu = menuBar()->addMenu(QStringLiteral("&View"));
-    auto* focusWorldAction = viewMenu->addAction(QStringLiteral("Focus world viewport"));
-    connect(focusWorldAction, &QAction::triggered, viewport_, [this] { viewport_->setFocus(); });
     auto* settingsAction = viewMenu->addAction(QStringLiteral("&Settings…"));
     connect(settingsAction, &QAction::triggered, this, &MainWindow::showSettings);
 
@@ -61,7 +71,7 @@ void MainWindow::buildCentralView() {
     auto* layout = new QVBoxLayout(root);
     auto* connectionBox = new QGroupBox(QStringLiteral("Connection"), root);
     auto* connectionLayout = new QHBoxLayout(connectionBox);
-    endpointEdit_ = new QLineEdit(QStringLiteral("wss://example.invalid/chat-grid/ws"), connectionBox);
+    endpointEdit_ = new QLineEdit(QStringLiteral("wss://blind.software/indiginous/ws"), connectionBox);
     endpointEdit_->setAccessibleName(QStringLiteral("Indiginous server endpoint"));
     auto* connectButton = new QPushButton(QStringLiteral("Connect"), connectionBox);
     connectButton->setDefault(true);
@@ -72,10 +82,36 @@ void MainWindow::buildCentralView() {
     connectionLayout->addWidget(connectionLabel_);
     layout->addWidget(connectionBox);
 
+    auto* authBox = new QGroupBox(QStringLiteral("Sign in"), root);
+    auto* authLayout = new QFormLayout(authBox);
+    usernameEdit_ = new QLineEdit(authBox);
+    usernameEdit_->setAccessibleName(QStringLiteral("Indiginous username"));
+    passwordEdit_ = new QLineEdit(authBox);
+    passwordEdit_->setEchoMode(QLineEdit::Password);
+    passwordEdit_->setAccessibleName(QStringLiteral("Indiginous password"));
+    nicknameEdit_ = new QLineEdit(QStringLiteral("Guest"), authBox);
+    nicknameEdit_->setAccessibleName(QStringLiteral("Guest nickname"));
+    auto* loginButton = new QPushButton(QStringLiteral("Sign in"), authBox);
+    auto* guestButton = new QPushButton(QStringLiteral("Continue as guest"), authBox);
+    authLabel_ = new QLabel(QStringLiteral("Connect first, then sign in or continue as guest."), authBox);
+    authLayout->addRow(QStringLiteral("Username:"), usernameEdit_);
+    authLayout->addRow(QStringLiteral("Password:"), passwordEdit_);
+    authLayout->addRow(loginButton, guestButton);
+    authLayout->addRow(authLabel_);
+    authLayout->addRow(QStringLiteral("Guest name:"), nicknameEdit_);
+    connect(loginButton, &QPushButton::clicked, this, [this] {
+        protocolClient_.login(usernameEdit_->text(), passwordEdit_->text());
+    });
+    connect(guestButton, &QPushButton::clicked, this, [this] {
+        protocolClient_.continueAsGuest(nicknameEdit_->text());
+    });
+    layout->addWidget(authBox);
+
     viewport_ = new world::WorldViewport(root);
     layout->addWidget(viewport_, 1);
     setCentralWidget(root);
-    statusBar()->showMessage(QStringLiteral("Native foundation — no server connection yet."));
+    statusBar()->showMessage(QStringLiteral("Native Indiginous client — no server connection yet."));
+    viewport_->setFocus();
 }
 
 void MainWindow::connectToEndpoint() {
@@ -89,6 +125,51 @@ void MainWindow::updateConnectionStatus(transport::ConnectionState state) {
 
 void MainWindow::showStatus(const QString& message) {
     statusBar()->showMessage(message);
+    accessibilityAnnouncer_.announce(statusBar(), message);
+}
+
+void MainWindow::handleAuthenticationRequired(const QString& message) {
+    authLabel_->setText(message.isEmpty() ? QStringLiteral("Sign in or continue as guest.") : message);
+    usernameEdit_->setFocus();
+}
+
+void MainWindow::handleAuthenticationResult(bool ok, const QString& message, const QString& sessionToken) {
+    Q_UNUSED(sessionToken)
+    authLabel_->setText(message);
+    if (ok) activateWorld();
+}
+
+void MainWindow::handleWelcome(const QJsonObject& welcome) {
+    viewport_->applyWelcome(welcome);
+    activateWorld();
+    showStatus(QStringLiteral("World connected."));
+    accessibilityAnnouncer_.announce(
+        statusBar(),
+        QStringLiteral("World joined. Location: %1. Arrow keys or W A S D move.")
+            .arg(viewport_->snapshot().locationName),
+        true,
+        true);
+}
+
+void MainWindow::handleLocation(const QString& locationId, const QString& locationName, int x, int y) {
+    auto snapshot = viewport_->snapshot();
+    snapshot.locationId = locationId;
+    snapshot.locationName = locationName;
+    snapshot.playerPosition = QPointF(x, y);
+    viewport_->applySnapshot(snapshot);
+    activateWorld();
+}
+
+void MainWindow::activateWorld() {
+    if (isMinimized()) return;
+    viewport_->setFocus(Qt::OtherFocusReason);
+}
+
+bool MainWindow::event(QEvent* event) {
+    if (event->type() == QEvent::WindowActivate || event->type() == QEvent::Show) {
+        QMetaObject::invokeMethod(this, &MainWindow::activateWorld, Qt::QueuedConnection);
+    }
+    return QMainWindow::event(event);
 }
 
 void MainWindow::showSettings() {
@@ -113,11 +194,10 @@ void MainWindow::showAbout() {
     auto* text = new QTextEdit(&dialog);
     text->setReadOnly(true);
     text->setPlainText(QStringLiteral(
-        "Indiginous native Qt 6 foundation\n\n"
-        "A platform-neutral Widgets shell with native menus, status, settings, "
-        "about, and a placeholder world viewport.\n\n"
-        "This is not a release build. Authentication, world protocol, media, "
-        "audio, packaging, and platform integration remain to be ported."));
+        "Indiginous native Qt 6 client\n\n"
+        "Native menus, secure websocket transport, authentication, guest entry, "
+        "world snapshots, keyboard movement, and automatic world focus are active.\n\n"
+        "Media, spatial audio, WebRTC voice, and platform packaging remain in the next porting phase."));
     layout->addWidget(text);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);

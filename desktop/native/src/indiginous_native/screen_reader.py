@@ -6,6 +6,7 @@ import ctypes
 from pathlib import Path
 import subprocess
 import sys
+import threading
 
 
 MAX_SPEECH_LENGTH = 2000
@@ -32,8 +33,16 @@ class ScreenReaderSpeech:
 
     def __init__(self) -> None:
         self.library = None
+        self._retry_timer: threading.Timer | None = None
+        self._retry_lock = threading.Lock()
+        self._retry_attempts = 0
         if sys.platform != "win32":
             return
+        self._load_library()
+
+    def _load_library(self) -> None:
+        """Load or re-probe the controller after NVDA restarts."""
+        self.library = None
         candidate = _resource_root() / "nvda" / "nvdaControllerClient.dll"
         try:
             library = ctypes.WinDLL(str(candidate))
@@ -44,6 +53,11 @@ class ScreenReaderSpeech:
             self.library = library
         except (OSError, AttributeError):
             self.library = None
+
+    def reconnect(self) -> None:
+        """Re-probe the NVDA bridge without requiring an app restart."""
+        if sys.platform == "win32":
+            self._load_library()
 
     def available(self) -> bool:
         return bool(self.library and self.library.nvdaController_testIfRunning() == 0)
@@ -62,7 +76,39 @@ class ScreenReaderSpeech:
             except OSError:
                 return False
         if not self.available():
+            self._schedule_retry(clean, interrupt)
             return False
         if interrupt:
             self.library.nvdaController_cancelSpeech()
-        return self.library.nvdaController_speakText(clean) == 0
+        try:
+            spoken = self.library.nvdaController_speakText(clean) == 0
+        except (OSError, AttributeError):
+            spoken = False
+        if not spoken:
+            self._schedule_retry(clean, interrupt)
+        else:
+            with self._retry_lock:
+                self._retry_attempts = 0
+        return spoken
+
+    def _schedule_retry(self, text: str, interrupt: bool) -> None:
+        """Retry short-lived NVDA startup/controller failures quietly."""
+        if sys.platform != "win32":
+            return
+        with self._retry_lock:
+            if self._retry_timer is not None:
+                return
+            if self._retry_attempts >= 3:
+                self._retry_attempts = 0
+                return
+            self._retry_attempts += 1
+
+            def retry() -> None:
+                with self._retry_lock:
+                    self._retry_timer = None
+                self.reconnect()
+                self.speak(text, interrupt)
+
+            self._retry_timer = threading.Timer(0.35, retry)
+            self._retry_timer.daemon = True
+            self._retry_timer.start()

@@ -33,6 +33,7 @@ import { createAdminController, type AdminMenuAction } from './input/adminContro
 import { setupKeyboardInputHandlers } from './input/keyboardController';
 import { setupGamepadInputHandlers } from './input/gamepadController';
 import { setupMidiInputHandlers, type MidiControllerHandle } from './input/midiController';
+import { turnHeading, type TurnDirection } from './input/orientation';
 import { getEditSessionAction } from './input/editSession';
 import { formatSteppedNumber, snapNumberToStep } from './input/numeric';
 import { type IncomingMessage, type OutgoingMessage } from './network/protocol';
@@ -131,6 +132,7 @@ type Dom = {
   loginView: HTMLElement;
   authSessionView: HTMLElement;
   authSessionText: HTMLParagraphElement;
+  guestButton: HTMLButtonElement;
   helpSection: HTMLElement;
   helpToggle: HTMLButtonElement;
   updatesSection: HTMLElement;
@@ -192,6 +194,7 @@ const dom: Dom = {
   loginView: requiredById('loginView'),
   authSessionView: requiredById('authSessionView'),
   authSessionText: requiredById('authSessionText'),
+  guestButton: requiredById('guestButton'),
   helpSection: requiredById('helpSection'),
   helpToggle: requiredById('helpToggle'),
   updatesSection: requiredById('updatesSection'),
@@ -508,10 +511,11 @@ const WALL_SOUND_URL = withBase('sounds/wall.ogg');
 // Walking should remain usable with a screen reader without turning every
 // held-arrow step into an interrupting spoken paragraph. Meaningful arrivals
 // still announce, but repeated movement context is coalesced.
-const MOVEMENT_NARRATION_INTERVAL_MS = 1200;
 const RUN_MOVEMENT_TICK_MULTIPLIER = 0.55;
 const CAREFUL_MOVEMENT_TICK_MULTIPLIER = 1.25;
-const ITEM_BEACON_RADIUS = 3.5;
+// Item proximity is intentionally short. Walking past a room full of objects
+// should not turn ordinary arrow-key movement into a running commentary.
+const ITEM_BEACON_RADIUS = 2;
 const ITEM_BEACON_INTERVAL_MS = 3200;
 const RUNTIME_RECOVERY_STATUS_INTERVAL_MS = 5_000;
 const SEAT_INTERACTION_RADIUS = 1.5;
@@ -544,8 +548,6 @@ let lastAnnouncementText = '';
 let lastAnnouncementAt = 0;
 const ANNOUNCEMENT_DEDUPE_WINDOW_MS = 1_500;
 let lastRuntimeRecoveryStatusAt = 0;
-let lastMovementNarrationAt = 0;
-let lastMovementNarrationContext = '';
 let outputMode = settings.loadOutputMode();
 let activeGridName = DEFAULT_GRID_NAME;
 let activeWelcomeMessage = DEFAULT_WELCOME_MESSAGE;
@@ -852,6 +854,9 @@ let activeTeleport:
 const signalingProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
 const signalingUrl = `${signalingProtocol}://${window.location.host}${withBase('ws')}`;
 const signaling = new SignalingClient(signalingUrl, handleSignalingStatus);
+tvScreenRuntime.setJellyfinPlaybackRequester((mediaKind, itemId) => {
+  signaling.send({ type: 'jellyfin_media_request', mediaKind, itemId });
+});
 
 const peerManager = new PeerManager(
   audio,
@@ -870,10 +875,10 @@ const voiceInput = new VoiceInput({
       /^(clawdia|claudia|missi)$/i.test(peer.nickname.trim()),
     );
     if (companion) {
-      signaling.send({ type: 'direct_message', targetId: companion.id, message: text });
+      signaling.send({ type: 'direct_message', targetId: companion.id, message: text, suppressSenderEcho: true });
       return;
     }
-    signaling.send({ type: 'chat_message', message: text });
+    signaling.send({ type: 'chat_message', message: text, suppressSenderEcho: true });
   },
   onStatus: (message) => updateStatus(message),
 });
@@ -1092,6 +1097,12 @@ async function syncLocationAmbience(forceRestart = false): Promise<void> {
 async function startWorldAudio(forceRestart = false): Promise<void> {
   await audio.ensureContext();
   await syncLocationAmbience(forceRestart);
+}
+
+/** Focuses the world and primes its listener-local audio graph in one path. */
+function activateWorldForInput(): void {
+  dom.canvas.focus({ preventScroll: true });
+  void startWorldAudio(false);
 }
 
 /** Re-primes world audio when a browser/tab/audio-context pause has recovered. */
@@ -2116,16 +2127,19 @@ function sendOrQueueChatMessage(rawMessage: string): void {
 function updateGridDashboard(): void {
   if (!state.running) return;
   const peerCount = state.peers.size;
-  const itemCount = Array.from(state.items.values()).filter((item) => !item.carrierId && !isItemQuiet(item)).length;
+  const visibleItemCount = Array.from(state.items.values()).filter((item) => !item.carrierId && !isItemQuiet(item)).length;
   const namesHere = getPeerNamesAtPosition(state.player.x, state.player.y);
-  const itemsHere = getItemsAtPosition(state.player.x, state.player.y);
+  const itemsHere = getNearbyAnnounceableItems(state.player.x, state.player.y);
   const itemSummary = itemsHere.length > 0 ? formatItemNarrationSummary(itemsHere) : '';
   const hereSummary = [...namesHere, itemSummary].filter(Boolean).join(', ') || 'just you';
 
   const positionText = `${formatCoordinate(state.player.x)}, ${formatCoordinate(state.player.y)}`;
   const peopleText = peerCount === 1 ? '1 other user' : `${peerCount} other users`;
-  const itemsText = itemCount === 1 ? '1 item' : `${itemCount} items`;
-  const worldSummary = `You are at ${positionText}. ${hereSummary}. ${peopleText}; ${itemsText}.`;
+  const itemsText = visibleItemCount === 1 ? '1 item' : `${visibleItemCount} items`;
+  // Keep coordinates in the visible dashboard, but out of the live region.
+  // The live summary must not be rewritten just because an arrow key changed
+  // the user's position.
+  const worldSummary = `${hereSummary}. ${peopleText}.`;
   if (dom.gridPosition.textContent !== positionText) dom.gridPosition.textContent = positionText;
   if (dom.gridPeople.textContent !== peopleText) dom.gridPeople.textContent = peopleText;
   if (dom.gridItems.textContent !== itemsText) dom.gridItems.textContent = itemsText;
@@ -2563,11 +2577,21 @@ function getNearestSeatableItem(): WorldItem | null {
 }
 
 /** Returns the current local listener position, including seated head-offset controls. */
-function getListenerPosition(): { x: number; y: number; locationId: string } {
+function getListenerPosition(): { x: number; y: number; locationId: string; headingDeg: number } {
+  const headingDeg = state.player.headingDeg ?? 0;
   if (state.player.posture === 'standing') {
-    return { x: state.player.x, y: state.player.y, locationId: currentLocationId };
+    return { x: state.player.x, y: state.player.y, locationId: currentLocationId, headingDeg };
   }
-  return { x: state.player.x + state.player.seatedOffset, y: state.player.y, locationId: currentLocationId };
+  return { x: state.player.x + state.player.seatedOffset, y: state.player.y, locationId: currentLocationId, headingDeg };
+}
+
+function turnPlayerInPlace(direction: TurnDirection): void {
+  state.player.headingDeg = turnHeading(state.player.headingDeg ?? 0, direction);
+  const roundedHeading = Math.round(state.player.headingDeg);
+  const directionLabel = direction === 'left' ? 'left' : 'right';
+  updateStatus(`Turned ${directionLabel}. Facing ${roundedHeading} degrees clockwise from north.`);
+  void startWorldAudio();
+  audio.sfxUiBlip();
 }
 
 /** Returns all items currently carried by the local player. */
@@ -2584,6 +2608,34 @@ function getCarriedItem(): WorldItem | null {
     if (focused) return focused;
   }
   return carried[0] ?? null;
+}
+
+function isPhysicalKeyItem(item: WorldItem | null): item is WorldItem {
+  return Boolean(
+    item &&
+      item.type === 'house_object' &&
+      String(item.params.objectKind ?? '').trim().toLowerCase() === 'keys' &&
+      String(item.params.keyId ?? '').trim().length > 0,
+  );
+}
+
+function getCarriedKeyItem(): WorldItem | null {
+  return getCarriedItems().find((item) => isPhysicalKeyItem(item)) ?? null;
+}
+
+function isLockedDoorItem(item: WorldItem | null): item is WorldItem {
+  return Boolean(
+    item &&
+      String(item.params.doorState ?? '').trim().toLowerCase() === 'locked' &&
+      String(item.params.requiredKeyId ?? '').trim().length > 0,
+  );
+}
+
+function getLockedDoorForHeldKey(key: WorldItem): WorldItem | null {
+  const keyId = String(key.params.keyId ?? '').trim();
+  return getCurrentSquareItems().find((item) =>
+    isLockedDoorItem(item) && String(item.params.requiredKeyId ?? '').trim() === keyId,
+  ) ?? null;
 }
 
 /** Returns whether one carried house object should behave as a radio remote. */
@@ -3237,7 +3289,7 @@ function describeTileArrival(dx = 0, dy = 0): string {
     parts.push(`You hear ${namesOnTile.join(', ')} here.`);
   }
 
-  const itemsOnTile = getItemsAtPosition(x, y);
+  const itemsOnTile = getNearbyAnnounceableItems(x, y);
   if (itemsOnTile.length > 0) {
     parts.push(`You notice ${formatItemNarrationSummary(itemsOnTile)}.`);
   }
@@ -3245,16 +3297,14 @@ function describeTileArrival(dx = 0, dy = 0): string {
   return parts.join(' ');
 }
 
-/** Announces only useful item discoveries; routine walking stays silent. */
-function narrateLocalMovement(x: number, y: number): void {
-  const now = performance.now();
-  const items = getItemsAtPosition(x, y).filter((item) => !item.carrierId && !isItemQuiet(item) && shouldSpeakItemAnnouncement(item));
-  if (items.length === 0) return;
-  const context = items.map((item) => item.id).join(',');
-  if (context === lastMovementNarrationContext && now - lastMovementNarrationAt < MOVEMENT_NARRATION_INTERVAL_MS) return;
-  lastMovementNarrationAt = now;
-  lastMovementNarrationContext = context;
-  updateStatus(`You notice ${formatItemNarrationSummary(items)}.`);
+/** Returns carried items and only genuinely close loose items for narration. */
+function getNearbyAnnounceableItems(x: number, y: number): WorldItem[] {
+  return Array.from(state.items.values()).filter((item) => {
+    if (item.locationId !== currentLocationId || isItemQuiet(item)) return false;
+    if (item.carrierId === state.player.id) return true;
+    if (item.carrierId) return false;
+    return Math.hypot(item.x - x, item.y - y) <= ITEM_BEACON_RADIUS;
+  });
 }
 
 /** Announces a user-facing arrival after a location change. */
@@ -3560,14 +3610,9 @@ function handleMovement(): void {
   }
 
   const namesOnTile = getPeerNamesAtPosition(nextX, nextY);
-  const itemsOnTile = getItemsAtPosition(nextX, nextY);
   if (namesOnTile.length > 0) {
     audio.sfxTileUserPing();
   }
-  if (itemsOnTile.length > 0) {
-    audio.sfxTileItemPing();
-  }
-  narrateLocalMovement(nextX, nextY);
   if (isDrivingVehicle(drivingVehicle)) {
     updateStatus(`Driving ${drivingVehicle.title}. ${movementDirectionPhrase(dx, dy)}.`);
   }
@@ -4118,6 +4163,20 @@ const onAppMessage = createOnMessageHandler({
       ? `${message.casterNickname} is casting ${message.title || 'media'} to ${target.title} as ${message.stationCode}.`
       : `${message.casterNickname} stopped casting from ${target.title}.`);
   },
+  handleJellyfinMediaResult: (message) => {
+    const item = state.items.get(message.itemId);
+    if (!message.ok || !item) {
+      updateStatus(message.message || 'That Jellyfin media is not available for this account.');
+      return;
+    }
+    item.params = {
+      ...item.params,
+      playbackUrl: message.playbackUrl,
+      mediaKind: message.mediaKind || item.params.mediaKind,
+      jellyfinSegments: message.segments,
+    };
+    updateStatus('Jellyfin media is ready in the room.');
+  },
   handleWorldPhoneState: (message) => {
     updateStatus(message.message || `World phone ${message.status}.`);
     if (message.status === 'connected') audio.sfxUiConfirm();
@@ -4154,7 +4213,11 @@ const onAppMessage = createOnMessageHandler({
   shouldAnnounceItemPropertyEcho: () => Date.now() >= suppressItemPropertyEchoUntilMs,
   playLocateToneAt: (x, y) => {
     const listenerPosition = getListenerPosition();
-    audio.sfxLocate({ x: x - listenerPosition.x, y: y - listenerPosition.y });
+    audio.sfxLocate(
+      { x: x - listenerPosition.x, y: y - listenerPosition.y },
+      HEARING_RADIUS,
+      listenerPosition.headingDeg,
+    );
   },
   resolveIncomingSoundUrl,
   playIncomingItemUseSound: (url, x, y, range) => {
@@ -4255,6 +4318,10 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   }
   await onAppMessage(message);
   if (message.type === 'welcome') {
+    // Admission can complete while the native shell is restoring or while a
+    // saved session connects in the background. The world must be active
+    // before the first announcement; no hidden focus command should be needed.
+    activateWorldForInput();
     flushQueuedChatMessages();
     // World admission is complete when welcome has been applied. Do not keep
     // the UI at "Joining world" while microphone permission or device setup
@@ -4326,6 +4393,8 @@ function toggleMute(): void {
   }
   state.isMuted = !state.isMuted;
   mediaSession.applyMuteToTrack(state.isMuted);
+  voiceInput.setMuted(state.isMuted);
+  if (!state.isMuted) voiceInput.start();
   void peerManager.setOutgoingVoiceEnabled(!state.isMuted, mediaSession.getOutboundStream());
   updateStatus(state.isMuted ? 'Muted.' : 'Unmuted.');
 }
@@ -4347,11 +4416,17 @@ function getUsableItemsOnCurrentSquare(): WorldItem[] {
 }
 
 function getManageableItemsOnCurrentSquare(): WorldItem[] {
-  return getCurrentSquareItems().filter((item) => itemManagementOptionsFor(item).length > 0);
+  const candidates = [...getCarriedItems(), ...getCurrentSquareItems()];
+  return candidates.filter(
+    (item, index) =>
+      candidates.findIndex((candidate) => candidate.id === item.id) === index &&
+      itemManagementOptionsFor(item).length > 0,
+  );
 }
 
 function canEditCurrentItem(): boolean {
-  return getCurrentSquareItems().length > 0 || Boolean(getCarriedItem());
+  return getCurrentSquareItems().some((item) => getEditableItemPropertyKeys(item).length > 0) ||
+    getCarriedItems().some((item) => getEditableItemPropertyKeys(item).length > 0);
 }
 
 function canInspectCurrentItem(): boolean {
@@ -4476,11 +4551,27 @@ function useItemCommand(): void {
     }
   }
   const focused = getFocusedActionItem();
+  const carried = getCarriedItem();
+  if (isPhysicalKeyItem(focused)) {
+    const door = getLockedDoorForHeldKey(focused);
+    if (door) {
+      useItem(door);
+      return;
+    }
+    updateStatus(`${itemLabel(focused)} is a key. Take it to a matching locked door.`);
+    audio.sfxUiCancel();
+    return;
+  }
   if (focused) {
     useItem(focused);
     return;
   }
-  const carried = getCarriedItem();
+  const carriedKey = getCarriedKeyItem();
+  const carriedKeyDoor = carriedKey ? getLockedDoorForHeldKey(carriedKey) : null;
+  if (carriedKeyDoor) {
+    useItem(carriedKeyDoor);
+    return;
+  }
   if (carried) {
     useItem(carried);
     return;
@@ -4853,13 +4944,27 @@ function stopLocalCast(): void {
 /** Starts a user-approved local screen/window/tab/app cast and publishes its receiver metadata. */
 async function castToNearestDevice(): Promise<void> {
   const candidates = Array.from(state.items.values()).filter((item) => {
-    if (item.locationId && item.locationId !== currentLocationId) return false;
     const kind = String(item.params.objectKind ?? '').trim().toLowerCase();
     return item.type === 'radio_station' || kind === 'tv';
   });
-  const target = candidates.sort((a, b) => Math.hypot(a.x - state.player.x, a.y - state.player.y) - Math.hypot(b.x - state.player.x, b.y - state.player.y))[0];
+  const target = candidates.sort((a, b) => {
+    const aRoomPenalty = a.locationId === currentLocationId ? 0 : 1;
+    const bRoomPenalty = b.locationId === currentLocationId ? 0 : 1;
+    return aRoomPenalty - bRoomPenalty
+      || Math.hypot(a.x - state.player.x, a.y - state.player.y) - Math.hypot(b.x - state.player.x, b.y - state.player.y);
+  })[0];
   if (!target) {
     updateStatus('There is no TV or radio receiver nearby.');
+    audio.sfxUiCancel();
+    return;
+  }
+  if (target.locationId && target.locationId !== currentLocationId) {
+    updateStatus(`Move to ${target.locationId} before casting to ${target.title}. You must be in the same room or location as the receiver.`);
+    audio.sfxUiCancel();
+    return;
+  }
+  if (!getCarriedMediaRemote()) {
+    updateStatus(`Carry a universal media remote before casting to ${target.title}. If you were not given one, obtain one from the in-world item service.`);
     audio.sfxUiCancel();
     return;
   }
@@ -5001,13 +5106,28 @@ function locateNearestItemCommand(): void {
   const item = state.items.get(nearest.itemId);
   if (!item) return;
   focusItemForAction(item);
-  audio.sfxLocate({ x: item.x - state.player.x, y: item.y - state.player.y }, HEARING_RADIUS);
+  audio.sfxLocate(
+    { x: item.x - state.player.x, y: item.y - state.player.y },
+    HEARING_RADIUS,
+    state.player.headingDeg ?? 0,
+  );
   updateStatus(`${itemLabelWithInteractionHint(item)}, ${distanceDirectionPhrase(state.player.x, state.player.y, item.x, item.y)}, ${item.x}, ${item.y}`);
 }
 
 /** Plays a gentle proximity beacon for nearby discoverable items when enabled. */
 function updateItemBeacon(): void {
   if (!audioLayers.item) return;
+  const movementActive = Boolean(
+    state.keysPressed.ArrowUp ||
+      state.keysPressed.ArrowDown ||
+      state.keysPressed.ArrowLeft ||
+      state.keysPressed.ArrowRight ||
+      gamepadDirections.ArrowUp ||
+      gamepadDirections.ArrowDown ||
+      gamepadDirections.ArrowLeft ||
+      gamepadDirections.ArrowRight,
+  );
+  if (movementActive) return;
   const nowMs = Date.now();
   const tileKey = `${Math.round(state.player.x)},${Math.round(state.player.y)}`;
   let nearest: { item: WorldItem; distance: number } | null = null;
@@ -5036,7 +5156,11 @@ function updateItemBeacon(): void {
   lastItemBeaconTile = tileKey;
   lastItemBeaconItemId = nearest.item.id;
   lastItemBeaconAtMs = nowMs;
-  audio.sfxItemBeacon({ x: nearest.item.x - state.player.x, y: nearest.item.y - state.player.y }, ITEM_BEACON_RADIUS);
+  audio.sfxItemBeacon(
+    { x: nearest.item.x - state.player.x, y: nearest.item.y - state.player.y },
+    ITEM_BEACON_RADIUS,
+    state.player.headingDeg ?? 0,
+  );
 }
 
 function pickupDropItemCommand(moveAttached = false): void {
@@ -5101,15 +5225,14 @@ function pickupDropAttachedItemsCommand(): void {
 }
 
 function openItemManagementCommand(): void {
-  const squareItems = getCurrentSquareItems();
-  if (squareItems.length === 0) {
-    updateStatus('No items to manage on this square.');
-    audio.sfxUiCancel();
-    return;
-  }
-  const manageable = squareItems.filter((item) => itemManagementOptionsFor(item).length > 0);
+  const candidates = [...getCarriedItems(), ...getCurrentSquareItems()];
+  const manageable = candidates.filter(
+    (item, index) =>
+      candidates.findIndex((candidate) => candidate.id === item.id) === index &&
+      itemManagementOptionsFor(item).length > 0,
+  );
   if (manageable.length === 0) {
-    updateStatus('No permitted item management actions here.');
+    updateStatus('No permitted item management actions for your carried items or this square.');
     audio.sfxUiCancel();
     return;
   }
@@ -5117,11 +5240,21 @@ function openItemManagementCommand(): void {
     beginItemManagement(manageable[0]);
     return;
   }
-  beginItemSelection('manage', manageable);
+  beginItemSelection('manage', manageable, preferredItemIdFor(manageable));
 }
 
 function editItemCommand(): void {
-  const squareItems = getCurrentSquareItems();
+  const focused = getFocusedActionItem();
+  if (focused) {
+    if (getEditableItemPropertyKeys(focused).length === 0) {
+      updateStatus(`${itemLabel(focused)} is not editable.`);
+      audio.sfxUiCancel();
+      return;
+    }
+    beginItemProperties(focused);
+    return;
+  }
+  const squareItems = getCurrentSquareItems().filter((item) => getEditableItemPropertyKeys(item).length > 0);
   const carried = getCarriedItem();
   if (squareItems.length === 0) {
     if (!carried) {
@@ -5140,6 +5273,11 @@ function editItemCommand(): void {
 }
 
 function inspectItemCommand(): void {
+  const focused = getFocusedActionItem();
+  if (focused) {
+    beginItemProperties(focused, true);
+    return;
+  }
   const squareItems = getCurrentSquareItems();
   const carried = getCarriedItem();
   if (squareItems.length === 0) {
@@ -5194,7 +5332,11 @@ function locateNearestUserCommand(): void {
   const peer = state.peers.get(nearest.peerId);
   if (!peer) return;
   if ((peer.locationId || currentLocationId) === currentLocationId) {
-    audio.sfxLocate({ x: peer.x - state.player.x, y: peer.y - state.player.y });
+    audio.sfxLocate(
+      { x: peer.x - state.player.x, y: peer.y - state.player.y },
+      HEARING_RADIUS,
+      state.player.headingDeg ?? 0,
+    );
   } else {
     audio.sfxUiBlip();
   }
@@ -5312,9 +5454,18 @@ function openUserActionMenuCommand(): void {
 }
 
 function allowNearbyUserCommand(): void {
-  const target = getSelectedOrNearestPeer();
+  const guardedDoors = Array.from(state.items.values()).filter((item) =>
+    String(item.params.accessAlarmItemId ?? '').trim().length > 0,
+  );
+  const waiting = Array.from(state.peers.values()).filter((peer) =>
+    guardedDoors.some(
+      (door) => peer.locationId === door.locationId && peer.x === door.x && peer.y === door.y,
+    ),
+  );
+  const selected = getSelectedOrNearestPeer();
+  const target = selected && waiting.some((peer) => peer.id === selected.id) ? selected : null;
   if (!target) {
-    updateStatus('No nearby user to allow into the house.');
+    updateStatus('No one is outside waiting.');
     audio.sfxUiCancel();
     return;
   }
@@ -5580,11 +5731,11 @@ function handleNormalModeInput(input: ModeInput): void {
         radioRemoteButtonCommand('guide');
         return;
       }
-      if (code === 'ArrowRight') {
+      if (!shiftKey && code === 'ArrowRight') {
         radioRemoteControlCommand('station_next');
         return;
       }
-      if (code === 'ArrowLeft') {
+      if (!shiftKey && code === 'ArrowLeft') {
         radioRemoteControlCommand('station_previous');
         return;
       }
@@ -5597,6 +5748,12 @@ function handleNormalModeInput(input: ModeInput): void {
         return;
       }
     }
+  }
+  // Shift+Left/Right rotates the listener without changing grid position.
+  // A focused media remote keeps ownership of its arrow controls above.
+  if (shiftKey && !ctrlKey && (code === 'ArrowLeft' || code === 'ArrowRight')) {
+    turnPlayerInPlace(code === 'ArrowLeft' ? 'left' : 'right');
+    return;
   }
   if (code === 'Tab') {
     if (shiftKey) {
@@ -6264,6 +6421,12 @@ if (IS_NATIVE_CLIENT) {
     openSettings();
     return true;
   };
+  const playNativeMenuTransition = (opening: boolean) => {
+    void audio.playSample(
+      opening ? withBase('sounds/teleport_departure_whoosh.ogg') : withBase('sounds/teleport_arrival_chime.ogg'),
+      opening ? 0.42 : 0.34,
+    );
+  };
   const applyNativeAudioSettings = (value: unknown) => {
     if (!value || typeof value !== 'object') return;
     const next = value as Partial<{
@@ -6301,10 +6464,14 @@ if (IS_NATIVE_CLIENT) {
   };
   (window as Window & {
     indiginousNativeOpenSettings?: () => boolean;
+    indiginousNativeActivateWorld?: () => void;
+    indiginousNativePlayMenuTransition?: (opening: boolean) => void;
     chatGridNativeOpenSettings?: () => boolean;
     indiginousNativeApplyAudioSettings?: (value: unknown) => void;
     chatGridNativeApplyAudioSettings?: (value: unknown) => void;
   }).indiginousNativeOpenSettings = openNativeSettings;
+  (window as Window & { indiginousNativeActivateWorld?: () => void }).indiginousNativeActivateWorld = activateWorldForInput;
+  (window as Window & { indiginousNativePlayMenuTransition?: (opening: boolean) => void }).indiginousNativePlayMenuTransition = playNativeMenuTransition;
   (window as Window & {
     indiginousNativeOpenSettings?: () => boolean;
     chatGridNativeOpenSettings?: () => boolean;
@@ -6443,6 +6610,7 @@ setupDomUiHandlers({
   disconnect,
   closeSettings,
   openSettings,
+  activateWorld: activateWorldForInput,
   updateStatus,
   sfxUiBlip: () => audio.sfxUiBlip(),
   setupLocalMedia,

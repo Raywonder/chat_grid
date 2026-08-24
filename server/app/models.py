@@ -44,12 +44,14 @@ class UpdateNicknamePacket(BasePacket):
 class ChatMessagePacket(BasePacket):
     type: Literal["chat_message"]
     message: str = Field(min_length=1, max_length=500)
+    suppressSenderEcho: bool = False
 
 
 class DirectMessagePacket(BasePacket):
     type: Literal["direct_message"]
     targetId: str = Field(min_length=1, max_length=128)
     message: str = Field(min_length=1, max_length=500)
+    suppressSenderEcho: bool = False
 
 
 class UserActionPacket(BasePacket):
@@ -131,6 +133,13 @@ class AuthResumePacket(BasePacket):
 class AuthExternalPacket(BasePacket):
     type: Literal["auth_external"]
     assertion: str = Field(min_length=1, max_length=8192)
+
+
+class AuthGuestPacket(BasePacket):
+    """Start a limited, non-account guest session for public conversation."""
+
+    type: Literal["auth_guest"]
+    nickname: str | None = Field(default=None, max_length=32)
 
 
 class AuthLogoutPacket(BasePacket):
@@ -447,6 +456,28 @@ class MediaCastStatePacket(BasePacket):
     artist: str = ""
 
 
+class JellyfinMediaRequestPacket(BasePacket):
+    """Request the authenticated user's permitted Jellyfin media view."""
+
+    type: Literal["jellyfin_media_request"]
+    mediaKind: Literal["tv", "radio"] | None = None
+    itemId: str = ""
+    includePlan: bool = True
+
+
+class JellyfinMediaResultPacket(BasePacket):
+    """Return only server-filtered Jellyfin capabilities and playback data."""
+
+    type: Literal["jellyfin_media_result"]
+    ok: bool
+    message: str = ""
+    access: dict = Field(default_factory=dict)
+    playbackUrl: str = ""
+    mediaKind: Literal["tv", "radio"] | None = None
+    itemId: str = ""
+    segments: list[dict] = Field(default_factory=list)
+
+
 class WorldPhoneStatePacket(BasePacket):
     """Authoritative state for an in-world phone call/device."""
 
@@ -491,6 +522,7 @@ ClientPacket = (
     | AuthLoginPacket
     | AuthResumePacket
     | AuthExternalPacket
+    | AuthGuestPacket
     | AuthLogoutPacket
     | NtfyPreferencesGetPacket
     | NtfyPreferencesUpdatePacket
@@ -526,6 +558,7 @@ ClientPacket = (
     | ItemSecondaryUsePacket
     | ItemRemoteControlPacket
     | MediaCastPacket
+    | JellyfinMediaRequestPacket
     | WorldPhonePacket
     | ItemInteractPacket
     | ItemPianoNotePacket
@@ -680,6 +713,7 @@ class BroadcastChatMessagePacket(BasePacket):
     senderNickname: str | None = None
     system: bool = False
     action: bool = False
+    voiceInput: bool = False
 
 
 class DirectMessageBroadcastPacket(BasePacket):
@@ -690,6 +724,7 @@ class DirectMessageBroadcastPacket(BasePacket):
     targetId: str
     targetNickname: str
     outgoing: bool = False
+    voiceInput: bool = False
 
 
 class SocialActionPacket(BasePacket):

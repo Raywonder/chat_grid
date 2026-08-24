@@ -32,6 +32,15 @@ export class TvScreenRuntime {
   private hls: Hls | null = null;
   private activeItemId = '';
   private activeUrl = '';
+  private pendingJellyfinItemId = '';
+  private programSegments: Array<{ url: string; kind: string; title?: string }> = [];
+  private programSegmentIndex = 0;
+
+  setJellyfinPlaybackRequester(requester: ((mediaKind: 'tv' | 'radio', itemId: string) => void) | null): void {
+    this.jellyfinPlaybackRequester = requester;
+  }
+
+  private jellyfinPlaybackRequester: ((mediaKind: 'tv' | 'radio', itemId: string) => void) | null = null;
 
   constructor() {
     this.region.id = 'indiginous-tv-screen';
@@ -87,13 +96,24 @@ export class TvScreenRuntime {
     this.renderSources(selected.item);
     this.region.hidden = false;
     const hasVideo = Boolean(selected.url) && looksLikeVideo(selected.item, selected.url);
+    const jellyfinItemId = String(selected.item.params.jellyfinItemId ?? '').trim();
+    if (!selected.url && jellyfinItemId && this.pendingJellyfinItemId !== jellyfinItemId) {
+      this.pendingJellyfinItemId = jellyfinItemId;
+      this.jellyfinPlaybackRequester?.('tv', jellyfinItemId);
+    }
     this.video.hidden = !hasVideo;
     if (!hasVideo) {
+      if (jellyfinItemId) return;
       this.stop();
       return;
     }
     if (selected.item.id === this.activeItemId && selected.url === this.activeUrl) return;
-    this.load(selected.item.id, selected.url, Number(selected.item.params.playStartedAt) || 0);
+    const segments = Array.isArray(selected.item.params.jellyfinSegments)
+      ? selected.item.params.jellyfinSegments.filter((entry): entry is { url: string; kind: string; title?: string } =>
+        Boolean(entry) && typeof entry === 'object' && typeof (entry as Record<string, unknown>).url === 'string',
+      )
+      : [];
+    this.load(selected.item.id, selected.url, Number(selected.item.params.playStartedAt) || 0, segments);
   }
 
   private renderSources(item: WorldItem): void {
@@ -113,17 +133,26 @@ export class TvScreenRuntime {
     this.stop();
   }
 
-  private load(itemId: string, url: string, playStartedAt: number): void {
+  private load(itemId: string, url: string, playStartedAt: number, segments: Array<{ url: string; kind: string; title?: string }> = []): void {
     this.stop();
     this.activeItemId = itemId;
     this.activeUrl = url;
-    const source = proxied(url);
+    this.pendingJellyfinItemId = '';
+    this.programSegments = segments.length > 0 ? segments.filter((segment) => segment.url.trim()) : [{ url, kind: 'content' }];
+    this.programSegmentIndex = 0;
+    this.playProgramSegment(playStartedAt);
+  }
+
+  private playProgramSegment(playStartedAt: number): void {
+    const segment = this.programSegments[this.programSegmentIndex];
+    if (!segment) return;
+    const source = proxied(segment.url);
     if (/\.m3u8(?:$|[?#])/i.test(source) && Hls.isSupported()) {
       this.hls = new Hls({ enableWorker: true, maxBufferLength: 30 });
       this.hls.loadSource(source);
       this.hls.attachMedia(this.video);
     } else {
-      this.video.src = source;
+      this.video.src = proxied(segment.url);
     }
     this.video.addEventListener('loadedmetadata', () => {
       if (!playStartedAt || !Number.isFinite(this.video.duration) || this.video.duration <= 1) return;
@@ -133,6 +162,11 @@ export class TvScreenRuntime {
     void this.video.play().catch(() => {
       // Native controls remain available when autoplay requires a user gesture.
     });
+    this.video.onended = () => {
+      if (this.programSegmentIndex + 1 >= this.programSegments.length) return;
+      this.programSegmentIndex += 1;
+      this.playProgramSegment(0);
+    };
   }
 
   private stop(): void {
@@ -143,5 +177,8 @@ export class TvScreenRuntime {
     this.video.load();
     this.activeItemId = '';
     this.activeUrl = '';
+    this.programSegments = [];
+    this.programSegmentIndex = 0;
+    this.video.onended = null;
   }
 }

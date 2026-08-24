@@ -353,6 +353,9 @@ class CompanionClient:
                 "locationId": str(user.get("locationId") or self.location_id),
                 "x": user.get("x"),
                 "y": user.get("y"),
+                "posture": str(user.get("posture") or "standing"),
+                "seatedItemId": str(user.get("seatedItemId") or ""),
+                "lastSeenAt": user.get("lastSeenAt"),
             }
             for user in self.users.values()
             if str(user.get("id") or "") != self.client_id
@@ -480,7 +483,7 @@ class CompanionClient:
                 print(f"grid voice ice ignored: {exc}", flush=True)
 
     @staticmethod
-    def _decode_mp3_to_grid_pcm(path: Path) -> bytes:
+    def _decode_audio_to_grid_pcm(path: Path) -> bytes:
         """Decode generated speech to the browser mic-compatible PCM format."""
 
         result = subprocess.run(
@@ -498,7 +501,7 @@ class CompanionClient:
     async def _queue_grid_voice(self, path: Path) -> bool:
         if self._grid_voice_track is None:
             return False
-        pcm = await asyncio.to_thread(self._decode_mp3_to_grid_pcm, path)
+        pcm = await asyncio.to_thread(self._decode_audio_to_grid_pcm, path)
         if not pcm:
             return False
         self._grid_voice_track.enqueue_pcm(pcm)
@@ -553,6 +556,9 @@ class CompanionClient:
                     for user in message.get("users", [])
                     if isinstance(user, dict) and user.get("id")
                 }
+                now_ms = int(time.time() * 1000)
+                for user in self.users.values():
+                    user.setdefault("lastSeenAt", now_ms)
                 await self._sync_welcome_chat_history(message)
                 self._record_activity(
                     "world_ready", location=self.location_id, x=self.x, y=self.y
@@ -592,9 +598,11 @@ class CompanionClient:
                 user_id = str(message.get("id") or "")
                 if user_id:
                     if str(message.get("locationId") or "") == self.location_id:
+                        message["lastSeenAt"] = int(time.time() * 1000)
                         self.users[user_id] = message
                     else:
                         self.users.pop(user_id, None)
+                self._write_state(connected=True, detail="user_location_updated")
                 continue
             if msg_type == "item_upsert":
                 item = message.get("item")
@@ -629,9 +637,13 @@ class CompanionClient:
                 if user_id:
                     existing = self.users.get(user_id, {})
                     existing.update(message)
+                    existing["lastSeenAt"] = int(time.time() * 1000)
                     if str(existing.get("locationId") or self.location_id) == self.location_id:
                         self.users[user_id] = existing
                         await self._maybe_react_to_posture(ws, existing)
+                    else:
+                        self.users.pop(user_id, None)
+                    self._write_state(connected=True, detail="user_presence_updated")
                 continue
             if msg_type == "update_mood" and str(message.get("id") or "") == self.client_id:
                 self.mood = str(message.get("mood") or "settled")
@@ -642,7 +654,8 @@ class CompanionClient:
                 if user_id:
                     existing = self.users.get(user_id, {})
                     existing.update(message)
-                    self.users[user_id] = existing
+                self.users[user_id] = existing
+                self._write_state(connected=True, detail="user_mood_updated")
                 continue
             if msg_type == "social_action":
                 self._record_activity(
@@ -655,6 +668,7 @@ class CompanionClient:
             if msg_type == "user_left":
                 user_id = str(message.get("id") or "")
                 self.users.pop(user_id, None)
+                self._write_state(connected=True, detail="user_left")
                 peer = self._grid_voice_peers.pop(user_id, None)
                 if peer is not None:
                     await peer.close()

@@ -5250,6 +5250,124 @@ async def test_item_add_radio_remote_creates_configured_house_object(
 
 
 @pytest.mark.asyncio
+async def test_media_cast_requires_same_location_as_receiver(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(
+            websocket=ws,
+            id="u1",
+            nickname="tester",
+            location_id="raywonder_house_living_room",
+            x=7,
+            y=8,
+        ),
+        permissions={"item.use"},
+    )
+    server.clients[ws] = client
+    server.items["tv-bedroom"] = WorldItem(
+        id="tv-bedroom",
+        type="house_object",
+        title="Bedroom TV",
+        locationId="raywonder_house_bedroom",
+        x=4,
+        y=4,
+        createdBy="system",
+        createdByName="system",
+        updatedBy="system",
+        updatedByName="system",
+        createdAt=1,
+        updatedAt=1,
+        version=1,
+        capabilities=["use"],
+        params={"objectKind": "tv"},
+    )
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    await server._handle_message(
+        client,
+        json.dumps(
+            {
+                "type": "media_cast",
+                "targetItemId": "tv-bedroom",
+                "active": True,
+                "mediaKind": "video",
+            }
+        ),
+    )
+
+    result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert result.ok is False
+    assert "move to raywonder_house_bedroom" in result.message.lower()
+    assert "current room or location" in result.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_media_cast_requires_a_carried_universal_remote(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(
+            websocket=ws,
+            id="u1",
+            nickname="tester",
+            location_id="raywonder_house_living_room",
+            x=7,
+            y=8,
+        ),
+        permissions={"item.use"},
+    )
+    server.clients[ws] = client
+    server.items["tv-living"] = WorldItem(
+        id="tv-living",
+        type="house_object",
+        title="Living Room TV",
+        locationId=client.location_id,
+        x=7,
+        y=8,
+        createdBy="system",
+        createdByName="system",
+        updatedBy="system",
+        updatedByName="system",
+        createdAt=1,
+        updatedAt=1,
+        version=1,
+        capabilities=["use"],
+        params={"objectKind": "tv"},
+    )
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    await server._handle_message(
+        client,
+        json.dumps(
+            {
+                "type": "media_cast",
+                "targetItemId": "tv-living",
+                "active": True,
+                "mediaKind": "video",
+            }
+        ),
+    )
+
+    result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert result.ok is False
+    assert "universal media remote" in result.message.lower()
+    assert "in-world item service" in result.message.lower()
+
+
+@pytest.mark.asyncio
 async def test_update_position_enforces_cumulative_budget_per_tick(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

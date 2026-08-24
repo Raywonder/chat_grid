@@ -31,6 +31,8 @@ type ApplySpatialNodeOptions = {
   audioCtx: AudioContext;
   gainNode: GainNode;
   pannerNode: StereoPannerNode | null;
+  binauralPannerNode?: PannerNode | null;
+  binauralPosition?: { dx: number; dy: number };
   mix: SpatialMixResult | null;
   outputMode: SpatialOutputMode;
   transition: 'linear' | 'target';
@@ -41,7 +43,7 @@ type ApplySpatialNodeOptions = {
  * Applies one resolved spatial mix to gain/pan nodes with a shared transition profile.
  */
 export function applySpatialMixToNodes(options: ApplySpatialNodeOptions): void {
-  const { audioCtx, gainNode, pannerNode, mix, outputMode, transition } = options;
+  const { audioCtx, gainNode, pannerNode, binauralPannerNode, binauralPosition, mix, outputMode, transition } = options;
   const transitionSeconds =
     typeof options.transitionSeconds === 'number' && Number.isFinite(options.transitionSeconds)
       ? Math.max(0.01, options.transitionSeconds)
@@ -49,6 +51,18 @@ export function applySpatialMixToNodes(options: ApplySpatialNodeOptions): void {
   const gainValue = mix?.gain ?? 0;
   const panValue = mix?.pan ?? 0;
   const resolvedPan = outputMode === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
+  if (binauralPannerNode && binauralPosition && outputMode === 'stereo') {
+    const x = Number.isFinite(binauralPosition.dx) ? binauralPosition.dx : 0;
+    const z = Number.isFinite(binauralPosition.dy) ? -binauralPosition.dy : 0;
+    const now = audioCtx.currentTime;
+    if ('positionX' in binauralPannerNode) {
+      binauralPannerNode.positionX.setTargetAtTime(x, now, SPATIAL_TIME_CONSTANT_SECONDS);
+      binauralPannerNode.positionY.setTargetAtTime(0, now, SPATIAL_TIME_CONSTANT_SECONDS);
+      binauralPannerNode.positionZ.setTargetAtTime(z, now, SPATIAL_TIME_CONSTANT_SECONDS);
+    } else {
+      binauralPannerNode.setPosition(x, 0, z);
+    }
+  }
 
   if (transition === 'linear') {
     gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
@@ -115,6 +129,28 @@ export function resolveSpatialMix(options: SpatialMixOptions): SpatialMixResult 
   }
 
   return { distance, gain, pan };
+}
+
+/** Converts a world-relative source offset into listener-relative coordinates. */
+export function rotateRelativePosition(
+  dx: number,
+  dy: number,
+  headingDeg = 0,
+): { dx: number; dy: number } {
+  const heading = (normalizeDegrees(headingDeg) * Math.PI) / 180;
+  // World x is east and world y is north. The listener's local x is right
+  // and local y is forward, so clockwise heading rotates the sound field.
+  return {
+    dx: dx * Math.cos(heading) - dy * Math.sin(heading),
+    dy: dx * Math.sin(heading) + dy * Math.cos(heading),
+  };
+}
+
+/** Stereo fallback pan for a listener-relative source position. */
+export function resolveSpatialPan(dx: number, range: number): number {
+  if (!(range > 0)) return 0;
+  const clampedX = Math.max(-range, Math.min(range, dx));
+  return Math.sin((clampedX / range) * (Math.PI / 2));
 }
 
 export function resolveDirectionalMuffleRatio(

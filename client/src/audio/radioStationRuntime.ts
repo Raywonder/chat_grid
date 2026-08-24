@@ -8,7 +8,7 @@ import {
   type DistanceReflectionRuntime,
 } from './distanceReflections';
 import { freshRadioPlaybackUrl, getProxyUrlForMedia, shouldProxyExternalMediaUrl } from './mediaUrl';
-import { applySpatialMixToNodes, resolveSpatialMix } from './spatial';
+import { applySpatialMixToNodes, resolveSpatialMix, resolveSpatialPan, rotateRelativePosition } from './spatial';
 import { volumePercentToGain } from './volume';
 import Hls from 'hls.js';
 
@@ -62,6 +62,7 @@ type ItemRadioOutput = {
   roomImpulseUrl: string;
   gain: GainNode;
   panner: StereoPannerNode | null;
+  binauralPanner: PannerNode | null;
   reflections: DistanceReflectionRuntime;
 };
 
@@ -286,6 +287,7 @@ type ListenerPosition = {
   x: number;
   y: number;
   locationId?: string;
+  headingDeg?: number;
 };
 
 const STREAM_PLAY_RETRY_MS = 5000;
@@ -429,6 +431,7 @@ export class RadioStationRuntime {
   private readonly pendingSharedStarts = new Set<string>();
   private readonly nextSharedStartAtMs = new Map<string, number>();
   private readonly sharedStartFailureCount = new Map<string, number>();
+  private readonly spatialMediaPositions = new Map<string, { x: number; y: number; range: number }>();
   private layerEnabled = true;
   private listenerPositions: ListenerPosition[] = [];
 
@@ -439,6 +442,7 @@ export class RadioStationRuntime {
   ) {}
 
   cleanup(itemId: string, fadeMs = 0): void {
+    this.spatialMediaPositions.delete(itemId);
     const output = this.itemRadioOutputs.get(itemId);
     if (!output) return;
     this.itemRadioOutputs.delete(itemId);
@@ -509,6 +513,12 @@ export class RadioStationRuntime {
     const validIds = new Set<string>();
     for (const item of itemList) {
       if (!isSpatialMediaItem(item)) continue;
+      const spatialConfig = this.getSpatialConfig(item);
+      this.spatialMediaPositions.set(item.id, {
+        x: item.x,
+        y: item.y,
+        range: Math.max(1, spatialConfig.range || HEARING_RADIUS),
+      });
       validIds.add(item.id);
       const effective = this.resolveEffectiveRadioItem(item, itemList);
       this.persistRadioResumeState(item, effective);
@@ -582,11 +592,24 @@ export class RadioStationRuntime {
           rearGain: 0.4,
         },
       });
+      const worldRelative = {
+        dx: inAdjacentRoom ? 0 : dx,
+        dy: inAdjacentRoom ? Math.min(range, 4) : dy,
+      };
+      const listenerRelative = rotateRelativePosition(worldRelative.dx, worldRelative.dy, playerPosition.headingDeg);
+      const orientedMix = mix
+        ? {
+            ...mix,
+            pan: mix.distance < 1 ? 0 : resolveSpatialPan(listenerRelative.dx, range),
+          }
+        : null;
       applySpatialMixToNodes({
         audioCtx,
         gainNode: output.gain,
         pannerNode: output.panner,
-        mix,
+        binauralPannerNode: output.binauralPanner,
+        binauralPosition: listenerRelative,
+        mix: orientedMix,
         outputMode: this.audio.getOutputMode(),
         transition: 'target',
         transitionSeconds: RADIO_SPEAKER_SPATIAL_FADE_SECONDS,
@@ -845,11 +868,24 @@ export class RadioStationRuntime {
     const signalFailure = (): void => {
       if (shared.failureSignaled || shared.refCount <= 0) return;
       shared.failureSignaled = true;
-      void this.audio.playSample('sounds/radio/vinyl-static.mp3', 0.58, 0);
+      const itemId = this.findItemIdForStream(streamUrl);
+      const spatial = itemId ? this.spatialMediaPositions.get(itemId) : null;
+      const listener = this.listenerPositions[0];
+      if (spatial && listener) {
+        void this.audio.playSpatialSample(
+          'sounds/radio/vinyl-static.mp3',
+          spatial,
+          listener,
+          0.58,
+          spatial.range,
+        );
+      } else {
+        void this.audio.playSample('sounds/radio/vinyl-static.mp3', 0.58, 0);
+      }
       shared.failureTimer = window.setTimeout(() => {
         shared.failureTimer = null;
-        const itemId = this.findItemIdForStream(streamUrl);
-        if (itemId) this.callbacks.onStationFailure?.(itemId);
+        const failedItemId = this.findItemIdForStream(streamUrl);
+        if (failedItemId) this.callbacks.onStationFailure?.(failedItemId);
       }, 2800);
     };
     element.addEventListener('error', signalFailure);
@@ -1004,7 +1040,19 @@ export class RadioStationRuntime {
     }
     const destination = this.audio.getOutputDestinationNode() ?? audioCtx.destination;
     let panner: StereoPannerNode | null = null;
-    if (this.audio.supportsStereoPanner()) {
+    let binauralPanner: PannerNode | null = null;
+    if (this.audio.supportsBinauralPanner() && this.audio.getOutputMode() === 'stereo') {
+      binauralPanner = audioCtx.createPanner();
+      binauralPanner.panningModel = 'HRTF';
+      binauralPanner.distanceModel = 'linear';
+      binauralPanner.refDistance = 1;
+      binauralPanner.maxDistance = Math.max(1, this.getSpatialConfig(item).range || HEARING_RADIUS);
+      binauralPanner.rolloffFactor = 0;
+      binauralPanner.coneInnerAngle = 360;
+      binauralPanner.coneOuterAngle = 360;
+      binauralPanner.coneOuterGain = 1;
+      gain.connect(binauralPanner).connect(destination);
+    } else if (this.audio.supportsStereoPanner()) {
       panner = audioCtx.createStereoPanner();
       gain.connect(panner).connect(destination);
     } else {
@@ -1033,6 +1081,7 @@ export class RadioStationRuntime {
       roomImpulseUrl: effective.roomImpulseUrl,
       gain,
       panner,
+      binauralPanner,
       reflections,
     });
   }
@@ -1117,7 +1166,7 @@ export class RadioStationRuntime {
 
   private playTuneCue(
     item: WorldItem,
-    listenerPosition: { x: number; y: number } | null,
+    listenerPosition: { x: number; y: number; headingDeg?: number } | null,
     range: number,
   ): void {
     const audioCtx = this.audio.context;
@@ -1133,6 +1182,9 @@ export class RadioStationRuntime {
           nearFieldGain: 0.82,
           nearFieldCenterPan: true,
         })
+      : null;
+    const listenerRelative = listenerPosition
+      ? rotateRelativePosition(item.x - listenerPosition.x, item.y - listenerPosition.y, listenerPosition.headingDeg)
       : null;
     if (listenerPosition && (!mix || mix.gain <= 0)) return;
     const osc = audioCtx.createOscillator();
@@ -1152,7 +1204,10 @@ export class RadioStationRuntime {
     let panner: StereoPannerNode | null = null;
     if (mix && this.audio.supportsStereoPanner() && this.audio.getOutputMode() === 'stereo') {
       panner = audioCtx.createStereoPanner();
-      panner.pan.setValueAtTime(Math.max(-1, Math.min(1, mix.pan)), audioCtx.currentTime);
+      panner.pan.setValueAtTime(
+        listenerRelative ? resolveSpatialPan(listenerRelative.dx, range) : mix.pan,
+        audioCtx.currentTime,
+      );
       osc.connect(filter).connect(gain).connect(panner).connect(destination);
     } else {
       osc.connect(filter).connect(gain).connect(destination);

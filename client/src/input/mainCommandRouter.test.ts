@@ -42,4 +42,9 @@ describe('conversation shortcuts', () => {
     expect(resolveMainModeCommand('KeyH', true, false)).toBe('allowNearbyUser');
     expect(resolveMainModeCommand('KeyH', false, false)).toBe('openChat');
   });
+
+  it('keeps Z for item management and Shift+Z for the permission-filtered account/admin menu', () => {
+    expect(resolveMainModeCommand('KeyZ', false, false)).toBe('openItemManagement');
+    expect(resolveMainModeCommand('KeyZ', true, false)).toBe('openAdminMenu');
+  });
 });

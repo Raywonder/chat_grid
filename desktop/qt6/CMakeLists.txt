@@ -17,6 +17,7 @@ option(INDIGINOUS_QT6_BUILD_APP "Build the Qt 6 Widgets application when Qt is a
 
 set(INDIGINOUS_QT6_SOURCES
     src/main.cpp
+    src/accessibility/accessibility_announcer.cpp
     src/app/main_window.cpp
     src/transport/protocol_client.cpp
     src/world/world_viewport.cpp
@@ -24,16 +25,17 @@ set(INDIGINOUS_QT6_SOURCES
 
 set(INDIGINOUS_QT6_HEADERS
     src/app/main_window.h
+    src/accessibility/accessibility_announcer.h
     src/transport/protocol_client.h
     src/world/world_viewport.h
 )
 
 if(INDIGINOUS_QT6_BUILD_APP)
-    find_package(Qt6 6.2 COMPONENTS Widgets QUIET)
-    if(Qt6Widgets_FOUND)
+    find_package(Qt6 6.2 COMPONENTS Widgets Network WebSockets QUIET)
+    if(Qt6Widgets_FOUND AND Qt6Network_FOUND AND Qt6WebSockets_FOUND)
         qt_add_executable(indiginous_qt6 ${INDIGINOUS_QT6_SOURCES} ${INDIGINOUS_QT6_HEADERS})
         target_include_directories(indiginous_qt6 PRIVATE src)
-        target_link_libraries(indiginous_qt6 PRIVATE Qt6::Widgets)
+        target_link_libraries(indiginous_qt6 PRIVATE Qt6::Widgets Qt6::Network Qt6::WebSockets)
         target_compile_definitions(indiginous_qt6 PRIVATE
             INDIGINOUS_QT6_FOUND=1
             INDIGINOUS_QT6_FOUNDATION_VERSION="${PROJECT_VERSION}"
@@ -44,8 +46,8 @@ if(INDIGINOUS_QT6_BUILD_APP)
         )
     else()
         message(WARNING
-            "Qt 6 Widgets was not found; skipping indiginous_qt6. "
-            "Install Qt 6 with the Widgets module to build the native client.")
+            "Qt 6 Widgets, Network, and WebSockets were not found; skipping "
+            "indiginous_qt6. Install the complete Qt 6 desktop toolchain to build the native client.")
     endif()
 endif()
 
