@@ -107,17 +107,16 @@ describe('admin controller', () => {
       ],
     });
 
-    harness.controller.handleNotificationsModeInput('ArrowDown', 'ArrowDown');
-    expect(harness.statuses.at(-1)).toContain('read notification 2 of 2. Second.');
+    expect(harness.statuses.at(-1)).toContain('unread notification 1 of 1. First.');
 
     harness.controller.handleNotificationsModeInput('Space', ' ');
-    expect(harness.statuses.at(-1)).toContain('Second message.');
+    expect(harness.statuses.at(-1)).toContain('First message.');
 
     harness.controller.handleNotificationsModeInput('Enter', 'Enter');
     expect(harness.sent.at(-1)).toEqual({
       type: 'admin_notification_mark_read',
       scope: 'own',
-      notificationId: 'n2',
+      notificationId: 'n1',
     });
 
     harness.controller.handleNotificationsModeInput('KeyA', 'a');
@@ -128,6 +127,27 @@ describe('admin controller', () => {
 
     harness.controller.handleNotificationsModeInput('KeyG', 'g');
     expect(harness.sent.at(-1)).toEqual({ type: 'admin_notifications_list', scope: 'admin' });
+  });
+
+  it('removes notifications from the visible list after the server marks them read', () => {
+    const harness = createHarness();
+    harness.controller.openNotifications();
+    harness.controller.handleAdminNotificationsList({
+      type: 'admin_notifications_list',
+      scope: 'own',
+      unreadCount: 0,
+      notifications: [{
+        id: 'old',
+        createdAt: 1_720_000_000_000,
+        kind: 'account',
+        title: 'Already read',
+        message: 'This is history.',
+        read: true,
+      }],
+    });
+
+    expect(harness.statuses.at(-1)).toContain('No notifications.');
+    expect(harness.statuses.at(-1)).not.toContain('Already read');
   });
 
   it('speaks richer user-list detail before admin user actions', () => {

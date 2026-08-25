@@ -13,6 +13,7 @@ type AuthDom = {
   loginView: HTMLElement;
   authSessionView: HTMLElement;
   authSessionText: HTMLParagraphElement;
+  signInButton: HTMLButtonElement;
   connectButton: HTMLButtonElement;
   guestButton: HTMLButtonElement;
   logoutButton: HTMLButtonElement;
@@ -191,6 +192,13 @@ export function createAuthController(deps: AuthControllerDeps): {
     deps.dom.connectButton.disabled = deps.isConnecting() || !authReady;
   }
 
+  function focusAuthRecoveryControl(): void {
+    const target = !deps.dom.guestButton.hidden && !deps.dom.guestButton.disabled
+      ? deps.dom.guestButton
+      : deps.dom.signInButton;
+    window.setTimeout(() => target.focus(), 0);
+  }
+
   function buildAuthRequestPacket(): OutgoingMessage | null {
     if (guestRequested) {
       return { type: 'auth_guest', nickname: 'Guest' };
@@ -308,6 +316,7 @@ export function createAuthController(deps: AuthControllerDeps): {
       deps.notifyNativeAuthState?.(false, message.message);
       deps.setConnecting(false);
       updateConnectAvailability();
+      focusAuthRecoveryControl();
       deps.disconnect();
       return;
     }

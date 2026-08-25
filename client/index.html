@@ -18,9 +18,12 @@
       <div id="connectionStatus" role="status" aria-live="polite" aria-atomic="true"></div>
       <section id="loginView" class="auth-panel">
         <h2>Sign in</h2>
-        <p class="auth-hint">
-          <a class="button-link" href="/?route=indiginous_auth_start">Sign in to Indiginous with blind.software</a>
-        </p>
+        <div class="auth-hint">
+          <form action="/" method="get">
+            <input type="hidden" name="route" value="indiginous_auth_start" />
+            <button id="blindSoftwareSignInButton" type="submit">Sign in to Indiginous with blind.software</button>
+          </form>
+        </div>
         <p class="auth-hint">Use the normal blind.software account sign-in, then return here to join Indiginous.</p>
         <p class="auth-hint">
           <button id="guestButton" type="button" class="hidden" hidden>Continue as guest</button>
@@ -67,7 +70,7 @@
         <p><b>People</b> <span id="gridPeople">--</span></p>
         <p><b>Items</b> <span id="gridItems">--</span></p>
         <p><b>Here</b> <span id="gridHere">--</span></p>
-        <nav class="user-navigation" aria-label="User navigation">
+        <section class="user-navigation" aria-label="User navigation">
           <section id="updatesSection" class="updates-section">
             <h2>World updates</h2>
             <button id="updatesToggle" type="button" aria-expanded="false" aria-controls="updatesPanel">
@@ -75,7 +78,7 @@
             </button>
             <div id="updatesPanel" class="hidden" hidden></div>
           </section>
-        </nav>
+        </section>
       </section>
       <canvas
         id="gameCanvas"

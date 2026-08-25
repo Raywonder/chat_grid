@@ -6051,6 +6051,34 @@ async def test_user_notifications_list_and_mark_read(
     assert updated.notifications[0].read is True
 
 
+def test_notifications_keep_older_unread_items_in_the_visible_page() -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    service = server.notification_service
+    user_id = "reader-id"
+    older = service.add(
+        now_ms=1,
+        kind="account",
+        title="Older unread",
+        message="Still needs attention.",
+        target_user_id=user_id,
+    )
+    for index in range(2, 22):
+        record = service.add(
+            now_ms=index,
+            kind="account",
+            title=f"Read {index}",
+            message="Already handled.",
+            target_user_id=user_id,
+        )
+        record.read_by.add(user_id)
+
+    visible = service.list_for_user(user_id=user_id, limit=20)
+
+    assert visible[0].id == older.id
+    assert older in visible
+    assert service.unread_count(user_id=user_id) == 1
+
+
 @pytest.mark.asyncio
 async def test_admin_notifications_require_permission(
     monkeypatch: pytest.MonkeyPatch,

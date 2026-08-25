@@ -132,6 +132,7 @@ type Dom = {
   loginView: HTMLElement;
   authSessionView: HTMLElement;
   authSessionText: HTMLParagraphElement;
+  signInButton: HTMLButtonElement;
   guestButton: HTMLButtonElement;
   helpSection: HTMLElement;
   helpToggle: HTMLButtonElement;
@@ -194,6 +195,7 @@ const dom: Dom = {
   loginView: requiredById('loginView'),
   authSessionView: requiredById('authSessionView'),
   authSessionText: requiredById('authSessionText'),
+  signInButton: requiredById('blindSoftwareSignInButton'),
   guestButton: requiredById('guestButton'),
   helpSection: requiredById('helpSection'),
   helpToggle: requiredById('helpToggle'),

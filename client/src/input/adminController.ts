@@ -287,7 +287,10 @@ export function createAdminController(deps: AdminControllerDeps): {
   }
 
   function handleAdminNotificationsList(message: Extract<IncomingMessage, { type: 'admin_notifications_list' }>): void {
-    notifications = [...message.notifications];
+    // Read notifications are history, not pending work.  Keep them out of the
+    // interactive list so marking one (or all) read immediately removes it
+    // from the user's screen and from subsequent announcements.
+    notifications = message.notifications.filter((entry) => !entry.read);
     notificationScope = message.scope === 'admin' ? 'admin' : 'own';
     notificationIndex = setListIndex(notificationIndex, notifications.length);
     deps.state.mode = 'notifications';

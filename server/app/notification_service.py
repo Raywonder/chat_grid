@@ -85,9 +85,24 @@ class NotificationService:
                 if record.target_user_id == normalized_user_id
             ]
         max_items = max(1, min(int(limit), 100))
-        return sorted(
+        newest_first = sorted(
             candidates, key=lambda record: record.created_at_ms, reverse=True
-        )[:max_items]
+        )
+        # Keep pending notifications ahead of read history.  The client may
+        # intentionally hide read records, so returning the newest mixed page
+        # could otherwise hide an older unread notification behind 20 newer
+        # records that have already been read.
+        unread = [
+            record
+            for record in newest_first
+            if not record.is_read_for(normalized_user_id)
+        ]
+        read = [
+            record
+            for record in newest_first
+            if record.is_read_for(normalized_user_id)
+        ]
+        return (unread + read)[:max_items]
 
     def mark_read(
         self,
