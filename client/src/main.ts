@@ -2594,11 +2594,10 @@ function getListenerPosition(): { x: number; y: number; locationId: string; head
 
 function turnPlayerInPlace(direction: TurnDirection): void {
   state.player.headingDeg = turnHeading(state.player.headingDeg ?? 0, direction);
-  const roundedHeading = Math.round(state.player.headingDeg);
-  const directionLabel = direction === 'left' ? 'left' : 'right';
-  updateStatus(`Turned ${directionLabel}. Facing ${roundedHeading} degrees clockwise from north.`);
+  // Turning changes the spatial sound field without changing position. Keep
+  // the surrounding world audible, but do not add a turn blip or spoken cue
+  // on top of it while the user is navigating with Shift+Arrow.
   void startWorldAudio();
-  audio.sfxUiBlip();
 }
 
 /** Returns all items currently carried by the local player. */
