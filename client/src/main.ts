@@ -805,6 +805,8 @@ let heartbeatNextPingId = -1;
 let heartbeatAwaitingPong = false;
 let reconnectInFlight = false;
 let autoReconnectEnabled = false;
+let sessionAutoConnectAllowed = true;
+let sessionAutoConnectInFlight = false;
 let activeServerInstanceId: string | null = null;
 let reloadScheduledForVersionMismatch = false;
 let peerNegotiationReady = false;
@@ -826,7 +828,6 @@ let flexPbxServerState: {
 let lastItemBeaconTile = '';
 let lastItemBeaconItemId = '';
 let lastItemBeaconAtMs = 0;
-let lastAutoSeatItemId = '';
 let lastSubscriptionRefreshAt = 0;
 let lastSubscriptionRefreshTileX = Math.round(state.player.x);
 let lastSubscriptionRefreshTileY = Math.round(state.player.y);
@@ -2131,9 +2132,10 @@ function updateGridDashboard(): void {
   const peerCount = state.peers.size;
   const visibleItemCount = Array.from(state.items.values()).filter((item) => !item.carrierId && !isItemQuiet(item)).length;
   const namesHere = getPeerNamesAtPosition(state.player.x, state.player.y);
-  const itemsHere = getNearbyAnnounceableItems(state.player.x, state.player.y);
-  const itemSummary = itemsHere.length > 0 ? formatItemNarrationSummary(itemsHere) : '';
-  const hereSummary = [...namesHere, itemSummary].filter(Boolean).join(', ') || 'just you';
+  // Keep the visible "Here" field useful, but do not put nearby item titles in
+  // the live world summary. A room with several objects used to make every
+  // small step sound like a new paragraph as the radius membership changed.
+  const hereSummary = namesHere.join(', ') || 'just you';
 
   const positionText = `${formatCoordinate(state.player.x)}, ${formatCoordinate(state.player.y)}`;
   const peopleText = peerCount === 1 ? '1 other user' : `${peerCount} other users`;
@@ -2141,7 +2143,10 @@ function updateGridDashboard(): void {
   // Keep coordinates in the visible dashboard, but out of the live region.
   // The live summary must not be rewritten just because an arrow key changed
   // the user's position.
-  const worldSummary = `${hereSummary}. ${peopleText}.`;
+  // Coordinates and nearby objects remain available in the dashboard and the
+  // deliberate item/user commands. The canvas description only changes for
+  // stable room/occupancy context, not for every arrow-key movement.
+  const worldSummary = `${currentLocationName || 'Indiginous world'}. ${peopleText}.`;
   if (dom.gridPosition.textContent !== positionText) dom.gridPosition.textContent = positionText;
   if (dom.gridPeople.textContent !== peopleText) dom.gridPeople.textContent = peopleText;
   if (dom.gridItems.textContent !== itemsText) dom.gridItems.textContent = itemsText;
@@ -3286,12 +3291,12 @@ function describeTileArrival(dx = 0, dy = 0): string {
   const direction = dx || dy ? movementDirectionPhrase(dx, dy) : '';
   parts.push(direction ? `You walked ${direction} ${currentSurfacePhrase()}.` : 'You are here.');
 
-  const namesOnTile = getPeerNamesAtPosition(x, y);
+  const namesOnTile = getPeerNamesAtPosition(state.player.x, state.player.y);
   if (namesOnTile.length > 0) {
     parts.push(`You hear ${namesOnTile.join(', ')} here.`);
   }
 
-  const itemsOnTile = getNearbyAnnounceableItems(x, y);
+  const itemsOnTile = getNearbyAnnounceableItems(state.player.x, state.player.y);
   if (itemsOnTile.length > 0) {
     parts.push(`You notice ${formatItemNarrationSummary(itemsOnTile)}.`);
   }
@@ -3558,7 +3563,6 @@ function handleMovement(): void {
 
   if (dx === 0 && dy === 0) {
     lastWallCollisionDirection = null;
-    lastAutoSeatItemId = '';
     seatedMovementPressConsumed = false;
     return;
   }
@@ -3617,14 +3621,6 @@ function handleMovement(): void {
   }
   if (isDrivingVehicle(drivingVehicle)) {
     updateStatus(`Driving ${drivingVehicle.title}. ${movementDirectionPhrase(dx, dy)}.`);
-  }
-  const nearestSeat = getNearestSeatableItem();
-  if (nearestSeat && nearestSeat.id !== lastAutoSeatItemId) {
-    lastAutoSeatItemId = nearestSeat.id;
-    const kind = String(nearestSeat.params.furnitureKind ?? nearestSeat.params.objectKind ?? '').trim().toLowerCase();
-    const posture = kind === 'bed' ? 'settle onto the bed' : 'gently settle into a relaxed sitting position';
-    updateStatus(`You are close to ${nearestSeat.title}; you ${posture}.`);
-    signaling.send({ type: 'item_use', itemId: nearestSeat.id });
   }
 }
 
@@ -3990,6 +3986,7 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
 /** Performs end-to-end connect flow: validation, media setup, then signaling connection. */
 async function connect(): Promise<void> {
   autoReconnectEnabled = true;
+  sessionAutoConnectAllowed = true;
   setConnectionStatus('Connecting...');
   await runConnectFlow(getConnectionFlowDeps());
 }
@@ -3998,6 +3995,7 @@ async function connect(): Promise<void> {
 function disconnect(intentional = true): void {
   if (intentional) {
     autoReconnectEnabled = false;
+    sessionAutoConnectAllowed = false;
   }
   if (activeVehicleEngineStop) {
     activeVehicleEngineStop();
@@ -4041,16 +4039,21 @@ async function hasValidAuthSessionCookie(): Promise<boolean> {
 }
 
 async function autoConnectFromSavedSessionCookie(): Promise<void> {
-  if (state.running || mediaSession.isConnecting()) {
+  if (!sessionAutoConnectAllowed || sessionAutoConnectInFlight || state.running || mediaSession.isConnecting()) {
     return;
   }
-  const hasCookie = await hasValidAuthSessionCookie();
-  authController.setSavedSessionCookieAvailable(hasCookie);
-  if (!hasCookie || state.running || mediaSession.isConnecting()) {
-    return;
+  sessionAutoConnectInFlight = true;
+  try {
+    const hasCookie = await hasValidAuthSessionCookie();
+    authController.setSavedSessionCookieAvailable(hasCookie);
+    if (!hasCookie || state.running || mediaSession.isConnecting()) {
+      return;
+    }
+    setConnectionStatus('Restoring saved session...');
+    await connect();
+  } finally {
+    sessionAutoConnectInFlight = false;
   }
-  setConnectionStatus('Restoring saved session...');
-  await connect();
 }
 
 /** Starts peer negotiation only after welcome + media setup sequencing is complete. */
@@ -6646,6 +6649,7 @@ if (STARTED_FROM_VERSION_RELOAD) {
   clearVersionReloadMarker();
 }
 if (STARTED_FROM_VERSION_RELOAD || isConnectionRecoveryReload() || initialExternalAuthAssertion) {
+  sessionAutoConnectAllowed = true;
   window.setTimeout(() => {
     void connect();
   }, 0);
@@ -6655,3 +6659,13 @@ if (STARTED_FROM_VERSION_RELOAD || isConnectionRecoveryReload() || initialExtern
   // start a connection that says "signed in" but has no usable auth packet.
   void autoConnectFromSavedSessionCookie();
 }
+
+// A tab restored from the browser back/forward cache does not execute the
+// module again. Re-check the HttpOnly cookie on restore so returning users
+// resume their account and server-persisted room position without a hard reload.
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) void autoConnectFromSavedSessionCookie();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') void autoConnectFromSavedSessionCookie();
+});
