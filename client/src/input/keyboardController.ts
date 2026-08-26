@@ -16,6 +16,7 @@ type KeyboardControllerDeps = {
   isTextEditingMode: (mode: GameMode) => boolean;
   closeSettings: () => void;
   closeInteractiveItem: () => boolean;
+  leaveWorldControls: () => void;
   hasBlockedArrowTeleport: (code: string) => boolean;
   handleModeInput: (input: ModeInput) => void;
   runImmediateMovement: () => void;
@@ -232,6 +233,12 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
     }
 
     if (!deps.state.running) return;
+    if (code === 'Escape' && event.shiftKey) {
+      event.preventDefault();
+      clearPressedKeyState();
+      deps.leaveWorldControls();
+      return;
+    }
     if (document.activeElement !== deps.dom.canvas) {
       if (!shouldMoveFocusToCanvas(event, code)) return;
       deps.dom.canvas.focus();

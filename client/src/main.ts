@@ -549,6 +549,8 @@ let lastFocusedElement: Element | null = null;
 let lastAnnouncementText = '';
 let lastAnnouncementAt = 0;
 const ANNOUNCEMENT_DEDUPE_WINDOW_MS = 1_500;
+let lastLocalMovementNarrationAt = 0;
+const LOCAL_MOVEMENT_NARRATION_INTERVAL_MS = 1_200;
 let lastRuntimeRecoveryStatusAt = 0;
 let outputMode = settings.loadOutputMode();
 let activeGridName = DEFAULT_GRID_NAME;
@@ -1495,10 +1497,13 @@ function setStatusText(message: string, announceViaLiveRegion: boolean, spokenMe
     window.clearTimeout(statusTimeout);
   }
   dom.status.setAttribute('aria-live', announceViaLiveRegion ? 'polite' : 'off');
-  dom.status.setAttribute('aria-label', spokenMessage);
+  // Keep the announcement in the live region's text node. VoiceOver can treat
+  // an aria-label as the region's complete accessible name, which masks the
+  // descendant text mutation and leaves browser users hearing no update.
+  dom.status.removeAttribute('aria-label');
   dom.status.textContent = '';
   requestAnimationFrame(() => {
-    dom.status.textContent = message;
+    dom.status.textContent = announceViaLiveRegion ? spokenMessage : message;
   });
   // Keep the last status available for users who need time to review it with
   // a screen reader. A new status replaces it; it is never cleared silently.
@@ -2594,9 +2599,9 @@ function getListenerPosition(): { x: number; y: number; locationId: string; head
 
 function turnPlayerInPlace(direction: TurnDirection): void {
   state.player.headingDeg = turnHeading(state.player.headingDeg ?? 0, direction);
-  // Turning changes the spatial sound field without changing position. Keep
-  // the surrounding world audible, but do not add a turn blip or spoken cue
-  // on top of it while the user is navigating with Shift+Arrow.
+  if (audioAnnouncementSettings.movementDirections) {
+    updateStatus(`Turned ${direction}.`);
+  }
   void startWorldAudio();
 }
 
@@ -3303,6 +3308,18 @@ function describeTileArrival(dx = 0, dy = 0): string {
   return parts.join(' ');
 }
 
+/** Announces discrete movement while coalescing a held arrow key. */
+function narrateLocalMovement(dx: number, dy: number): void {
+  if (!audioAnnouncementSettings.movementDirections) return;
+  const now = performance.now();
+  const hasUsefulContext = getPeerNamesAtPosition(state.player.x, state.player.y).length > 0
+    || getNearbyAnnounceableItems(state.player.x, state.player.y).length > 0;
+  if (!hasUsefulContext && lastLocalMovementNarrationAt > 0
+    && now - lastLocalMovementNarrationAt < LOCAL_MOVEMENT_NARRATION_INTERVAL_MS) return;
+  lastLocalMovementNarrationAt = now;
+  updateStatus(describeTileArrival(dx, dy));
+}
+
 /** Returns carried items and only genuinely close loose items for narration. */
 function getNearbyAnnounceableItems(x: number, y: number): WorldItem[] {
   return Array.from(state.items.values()).filter((item) => {
@@ -3562,6 +3579,7 @@ function handleMovement(): void {
 
   if (dx === 0 && dy === 0) {
     lastWallCollisionDirection = null;
+    lastLocalMovementNarrationAt = 0;
     seatedMovementPressConsumed = false;
     return;
   }
@@ -3620,6 +3638,8 @@ function handleMovement(): void {
   }
   if (isDrivingVehicle(drivingVehicle)) {
     updateStatus(`Driving ${drivingVehicle.title}. ${movementDirectionPhrase(dx, dy)}.`);
+  } else {
+    narrateLocalMovement(dx, dy);
   }
 }
 
@@ -6528,6 +6548,10 @@ setupKeyboardInputHandlers({
   state,
   isTextEditingMode,
   closeSettings,
+  leaveWorldControls: () => {
+    dom.focusGridButton.focus({ preventScroll: true });
+    updateStatus('World controls released. Activate Indiginous to return to the world.');
+  },
   hasBlockedArrowTeleport: (code) => Boolean(activeTeleport && code.startsWith('Arrow')),
   handleModeInput,
   runImmediateMovement: handleMovement,
