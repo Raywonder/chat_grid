@@ -1,7 +1,7 @@
 {
-  "version": "0.4.19",
-  "revision": "R555",
-  "releaseNotes": "Indiginous macOS 0.4.19 keeps the desktop shell aligned with the current authenticated world client and verified reconnect flow.",
+  "version": "0.4.22",
+  "revision": "R560",
+  "releaseNotes": "Indiginous macOS 0.4.22 includes the fixed tab sign-in recovery, saved-position resume, and quieter movement narration.",
   "platforms": {
     "macos": {
       "url": "https://blind.software/downloads/public/4Lm9sR2vX7qT5nK8dP1hG6/macos-zip",

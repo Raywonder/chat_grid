@@ -46,11 +46,11 @@ app = BUNDLE(
     coll,
     name="Indiginous.app",
     bundle_identifier="fm.tappedin.chatgrid",
-    version="0.4.19",
+    version="0.4.22",
     info_plist={
         "CFBundleDisplayName": "Indiginous",
-        "CFBundleShortVersionString": "0.4.19",
-        "CFBundleVersion": "0.4.19",
+        "CFBundleShortVersionString": "0.4.22",
+        "CFBundleVersion": "0.4.22",
         "LSMinimumSystemVersion": "14.0",
         "NSHighResolutionCapable": True,
         "CFBundleURLTypes": [{
