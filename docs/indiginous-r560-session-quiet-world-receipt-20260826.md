@@ -64,3 +64,13 @@ Date: 2026-08-26
   pass remain outstanding.
 - Accessibility-lead review did not return before handoff; no accessibility
   finding is being represented as resolved by that review.
+
+## Follow-up: quiet Shift+Arrow turning
+
+- Shift+Left/Right still updates the listener heading and refreshes the
+  surrounding spatial sound field, but no longer emits a turn UI blip or a
+  spoken `Turned ...` status message.
+- Client tests: 35 passed.
+- Client lint: passed.
+- Client production build and public web deployment: passed.
+- Public `version.js` remains `0.4.22` / `R560` after deployment.
