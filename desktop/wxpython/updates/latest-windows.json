@@ -1,12 +1,12 @@
 {
-  "version": "0.4.18",
-  "revision": "R549",
-  "releaseNotes": "Indiginous Windows 0.4.18 checks for verified updates in the background while the app remains open, then installs and relaunches safely.",
+  "version": "0.4.22",
+  "revision": "R561",
+  "releaseNotes": "Indiginous Windows 0.4.22 / R561 includes the current accessible world client, verified background update checks, and safe install-and-relaunch behavior.",
   "platforms": {
     "windows": {
       "url": "https://blind.software/downloads/public/7Kp3mN8vQ2xL5rT9cW6yH1/windows",
       "fileName": "Indiginous_Setup.exe",
-      "sha256": "8fd924e3e29b9d9f3f9b1ddb3ac3d90059da17e77744ac3fe0167e1daf311ff8",
+      "sha256": "e69e6e9674279f31160fdb2e288a283cf36724123368d5ba8703c0cc117e4438",
       "silentArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
     }
   }
