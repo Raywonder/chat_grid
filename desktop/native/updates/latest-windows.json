@@ -1,7 +1,7 @@
 {
-  "version": "0.4.22",
-  "revision": "R560",
-  "releaseNotes": "Indiginous Windows 0.4.22 includes the fixed tab sign-in recovery, saved-position resume, and quieter movement narration.",
+  "version": "0.4.18",
+  "revision": "R549",
+  "releaseNotes": "Indiginous Windows 0.4.18 checks for verified updates in the background while the app remains open, then installs and relaunches safely.",
   "platforms": {
     "windows": {
       "url": "https://blind.software/downloads/public/7Kp3mN8vQ2xL5rT9cW6yH1/windows",

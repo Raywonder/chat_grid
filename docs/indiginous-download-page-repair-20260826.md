@@ -21,6 +21,11 @@ gate.
   and contextual remove-button names to download tables.
 - Strengthened the public focus indicator and corrected user-facing
   `Endiginous` error text to `Indiginous`.
+- Added a titled, navigable recovery page for invalid or missing public
+  artifact tokens.
+- Added version and revision to each curated download link's accessible name.
+- Aligned the checked-in Windows updater manifests with the verified public
+  Windows release at 0.4.18 / R549 until a native R561 installer exists.
 
 ## Verification
 
@@ -31,6 +36,10 @@ gate.
 - Public Windows manifest returned HTTP 200 and remains explicitly 0.4.18 / R549.
 - Public web version remains 0.4.22 / R561.
 - PHP syntax check passed for the staged site source.
+- Invalid artifact token returned HTTP 404 with `Download unavailable` and a
+  link back to the curated downloads page.
+- Both checked-in Windows manifests report 0.4.18 / R549 and the stable
+  `Indiginous_Setup.exe` filename.
 - Backups: `/home/tappedin/.openclaw/workspace/backups/blindsoftware-index-before-indiginous-downloads-20260826-221143.php`
   and the matching stylesheet backup.
 
