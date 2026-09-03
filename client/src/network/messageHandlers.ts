@@ -115,7 +115,7 @@ type MessageHandlerDeps = {
   TELEPORT_START_SOUND_URL: string;
   getAudioLayers: () => { world: boolean; voice: boolean; item: boolean };
   pushChatMessage: (message: string, announce?: boolean) => void;
-  shouldAnnounceRadioAction: () => boolean;
+  shouldAnnounceMediaAction: (item: WorldItem | undefined) => boolean;
   pushPublicChatMessage: (message: string) => void;
   pushDirectChatMessage: (message: string, peerId: string, peerName: string) => void;
   resetChatHistoryForReplay: () => void;
@@ -564,7 +564,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
             // through nativeSpeak makes NVDA repeat the time immediately.
             const announce = item?.type === 'clock'
               ? false
-              : item?.type !== 'radio_station' || deps.shouldAnnounceRadioAction();
+              : deps.shouldAnnounceMediaAction(item);
             if (text) {
               deps.pushChatMessage(text, announce);
             }

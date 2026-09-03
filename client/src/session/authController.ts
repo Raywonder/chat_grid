@@ -78,6 +78,7 @@ export function createAuthController(deps: AuthControllerDeps): {
   let pendingAuthRequest = false;
   let externalAuthAssertion = deps.initialExternalAuthAssertion.trim();
   let savedSessionCookieAvailable = false;
+  let authenticatedAccountSession = false;
   let sessionCheckComplete = false;
   let guestRequested = false;
 
@@ -147,6 +148,7 @@ export function createAuthController(deps: AuthControllerDeps): {
     authUserId = '';
     authUsername = '';
     savedSessionCookieAvailable = false;
+    authenticatedAccountSession = false;
     deps.saveAuthUsername('');
   }
 
@@ -156,13 +158,16 @@ export function createAuthController(deps: AuthControllerDeps): {
     // claim that an account is signed in or hide the guest choice.  The live
     // HttpOnly cookie check is the source of truth for an active account.
     const hasSavedSessionHint = savedSessionCookieAvailable;
+    // A successful WebSocket authentication remains authoritative for the
+    // current page even after its one-time external assertion is consumed.
+    const hasAccountSession = authenticatedAccountSession || hasSavedSessionHint;
     const hasExternalAuth = externalAuthAssertion.length > 0;
-    const authReady = hasExternalAuth || hasSavedSessionHint || guestRequested;
-    const canOfferGuest = sessionCheckComplete && !hasSavedSessionHint && !hasExternalAuth && !guestRequested;
+    const authReady = hasExternalAuth || hasAccountSession || guestRequested;
+    const canOfferGuest = sessionCheckComplete && !hasAccountSession && !hasExternalAuth && !guestRequested;
     document.body.classList.toggle('auth-locked', !authReady);
     deps.dom.guestButton.classList.toggle('hidden', !canOfferGuest);
     deps.dom.guestButton.hidden = !canOfferGuest;
-    const showLogout = deps.isRunning() || hasSavedSessionHint;
+    const showLogout = deps.isRunning() || hasAccountSession;
     deps.dom.logoutButton.classList.toggle('hidden', !showLogout);
     deps.dom.logoutButton.disabled = !showLogout;
     if (deps.isRunning()) {
@@ -172,7 +177,7 @@ export function createAuthController(deps: AuthControllerDeps): {
       deps.dom.authSessionView.classList.add('hidden');
       return;
     }
-    if (hasSavedSessionHint) {
+    if (hasAccountSession) {
       deps.dom.authSessionText.textContent = hasSavedUsernameHint
         ? `Logged in as ${sanitizeAuthUsername(authUsername)}.`
         : 'Logged in with your saved blind.software session.';
@@ -184,7 +189,7 @@ export function createAuthController(deps: AuthControllerDeps): {
     }
     deps.dom.connectButton.textContent = deps.isConnecting()
       ? 'Connecting...'
-      : hasSavedSessionHint
+      : hasAccountSession
       ? 'Connect'
       : hasExternalAuth
         ? 'Continue with blind.software'
@@ -231,6 +236,7 @@ export function createAuthController(deps: AuthControllerDeps): {
     const hadPendingRequest = pendingAuthRequest;
     pendingAuthRequest = false;
     authUserId = '';
+    authenticatedAccountSession = false;
     applyAuthPolicy(message.authPolicy);
     applyAuthPermissions('user', []);
     deps.onServerAdminMenuActions([]);
@@ -306,6 +312,7 @@ export function createAuthController(deps: AuthControllerDeps): {
       externalAuthAssertion = '';
       sessionStorage.removeItem(PENDING_EXTERNAL_AUTH_STORAGE_KEY);
       authUserId = '';
+      authenticatedAccountSession = false;
       if (message.message.toLowerCase().includes('session')) {
         resetSavedSessionHint();
         void clearHttpOnlySessionCookie();
@@ -333,10 +340,14 @@ export function createAuthController(deps: AuthControllerDeps): {
       // Guest identity is connection-scoped; never persist it as an account
       // hint that could look like a resumable login after refresh.
       authUsername = '';
+      authenticatedAccountSession = false;
       deps.saveAuthUsername('');
     } else if (message.username) {
       authUsername = message.username;
+      authenticatedAccountSession = true;
       deps.saveAuthUsername(message.username);
+    } else {
+      authenticatedAccountSession = true;
     }
     applyAuthPermissions(message.role, message.permissions);
     deps.onServerAdminMenuActions(message.adminMenuActions);
@@ -364,6 +375,7 @@ export function createAuthController(deps: AuthControllerDeps): {
     adminMenuActions: Array<{ id: string; label: string; tooltip?: string }> | null | undefined,
   ): void {
     authUserId = String(auth?.userId || '').trim();
+    authenticatedAccountSession = auth?.role !== 'guest' && authUserId.length > 0;
     applyAuthPolicy(auth?.policy);
     applyAuthPermissions(auth?.role, auth?.permissions);
     deps.onServerAdminMenuActions(adminMenuActions);
@@ -374,6 +386,7 @@ export function createAuthController(deps: AuthControllerDeps): {
     authUserId = '';
     authUsername = '';
     savedSessionCookieAvailable = false;
+    authenticatedAccountSession = false;
     sessionCheckComplete = true;
     void clearHttpOnlySessionCookie();
     deps.saveAuthUsername('');
