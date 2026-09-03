@@ -28,6 +28,7 @@ type MidiControllerDeps = {
   updateStatus: (message: string) => void;
   sfxUiBlip: () => void;
   sfxUiCancel: () => void;
+  hostLabel?: string;
 };
 
 export type MidiControllerHandle = {
@@ -88,7 +89,7 @@ export function setupMidiInputHandlers(deps: MidiControllerDeps): MidiController
   async function requestEnable(reason: 'manual' | 'piano' | 'auto' = 'manual'): Promise<boolean> {
     if (!midiSupported()) {
       if (reason === 'manual') {
-        deps.updateStatus('MIDI is unavailable in this browser.');
+        deps.updateStatus(`MIDI is unavailable in this ${deps.hostLabel ?? 'browser'}.`);
         deps.sfxUiCancel();
       }
       return false;

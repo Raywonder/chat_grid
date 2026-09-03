@@ -265,7 +265,7 @@ export function createAuthController(deps: AuthControllerDeps): {
       }
     } catch (error) {
       console.warn('Unable to clear auth cookie.', error);
-      deps.pushChatMessage('Session clear failed. Your browser may retain an old login cookie.');
+      deps.pushChatMessage('Session clear failed. This client may retain an old login cookie.');
     }
   }
 

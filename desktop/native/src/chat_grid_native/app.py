@@ -227,7 +227,7 @@ class MainFrame(wx.Frame):
         file_menu = wx.Menu()
         self.browser_sign_in_id = wx.NewIdRef()
         self.browser_sign_in_item = file_menu.Append(
-            self.browser_sign_in_id, "Sign in with &browser\tCtrl+Shift+S"
+            self.browser_sign_in_id, "Sign in to &server\tCtrl+Shift+S"
         )
         file_menu.Append(wx.ID_REFRESH, "&Reconnect\tCtrl+R")
         self.focus_world_id = wx.NewIdRef()
@@ -348,7 +348,7 @@ class MainFrame(wx.Frame):
         self.login_panel.Hide()
         self.web.Show()
         self.web.GetParent().Layout()
-        self._announce("Opening secure browser sign-in.")
+        self._announce("Opening secure desktop sign-in.")
         navigation_query = [
             (key, value) for key, value in incoming_query if key != "native_client"
         ]
@@ -392,7 +392,7 @@ class MainFrame(wx.Frame):
             lambda url, assertion: wx.CallAfter(self._finish_browser_auth, url, assertion),
             lambda message: wx.CallAfter(self._browser_auth_failed, message),
         )
-        self._announce("Complete sign-in in your browser. Chat Grid will continue automatically.")
+        self._announce("Complete sign-in in the opened sign-in window. Chat Grid will continue automatically.")
         if not webbrowser.open(flow.authorization_url, new=1):
             flow.close()
             self._browser_auth_failed("The system browser could not be opened. Try signing in again.")
@@ -465,7 +465,7 @@ class MainFrame(wx.Frame):
     def _set_signed_in(self, signed_in: bool) -> None:
         """Keep the File menu authentication action aligned with web session state."""
         self.signed_in = signed_in
-        label = "Sign &out\tCtrl+Shift+S" if signed_in else "Sign in with &browser\tCtrl+Shift+S"
+        label = "Sign &out\tCtrl+Shift+S" if signed_in else "Sign in to &server\tCtrl+Shift+S"
         self.browser_sign_in_item.SetItemLabel(label)
 
     def _on_error(self, event: wx.html2.WebViewEvent) -> None:

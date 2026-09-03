@@ -26,10 +26,11 @@ type SessionOptions = {
   micCalibrationActiveRmsThreshold: number;
   micInputGainScaleMultiplier: number;
   micInputGainStep: number;
+  hostLabel?: string;
 };
 
 /**
- * Owns browser media/session lifecycle state and related device preference handling.
+ * Owns host media/session lifecycle state and related device preference handling.
  */
 export class MediaSession {
   private localStream: MediaStream | null = null;
@@ -69,7 +70,7 @@ export class MediaSession {
     return this.preferredInputDeviceId;
   }
 
-  /** Returns browser-selected audio output mode from persisted settings. */
+  /** Returns host-selected audio output mode from persisted settings. */
   loadOutputMode(): 'mono' | 'stereo' {
     return this.options.settings.loadOutputMode();
   }
@@ -194,14 +195,15 @@ export class MediaSession {
 
   /** Maps capture/setup exceptions to user-facing text. */
   describeMediaError(error: unknown): string {
+    const host = this.options.hostLabel ?? 'browser';
     if (error instanceof DOMException) {
-      if (error.name === 'NotAllowedError') return 'Microphone blocked. Allow mic access in browser site settings.';
+      if (error.name === 'NotAllowedError') return `Microphone blocked. Allow mic access in ${host} settings.`;
       if (error.name === 'NotFoundError') return 'No microphone found. Check that an input device is connected and enabled.';
       if (error.name === 'NotReadableError') return 'Microphone is busy or unavailable. Close other apps using the mic and retry.';
       if (error.name === 'OverconstrainedError') return 'Selected audio device is unavailable. Choose another input device.';
       if (error.name === 'SecurityError') return 'Microphone access requires a secure context (HTTPS) in production.';
     }
-    return 'Audio setup failed. Check browser permissions and selected input device.';
+    return `Audio setup failed. Check ${host} permissions and selected input device.`;
   }
 
   /** Starts local capture and replaces outbound peer tracks. */
