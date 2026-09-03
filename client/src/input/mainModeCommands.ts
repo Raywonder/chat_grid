@@ -254,7 +254,7 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
     id: 'radioRemoteGuide',
     label: 'Open media guide',
     shortcut: 'Shift+M while remote focused',
-    tooltip: 'Read the available radio stations or TV channels, grouped by category, while holding a media remote.',
+    tooltip: 'Read available stations or channels and configure spoken media announcements while holding a media remote.',
     section: 'Media',
     isAvailable: (context) => context.hasCarriedRadioRemote,
   },

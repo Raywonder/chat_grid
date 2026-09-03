@@ -165,6 +165,7 @@ TV_CHANNEL_PRESETS: tuple[dict[str, str], ...] = (
     {"title": "4seven", "streamUrl": "https://2.onj.me/4seven", "sourceType": "tv", "provider": "2.onj.me", "category": "Entertainment"},
     {"title": "5", "streamUrl": "https://2.onj.me/channel5", "sourceType": "tv", "provider": "2.onj.me", "category": "General"},
     {"title": "That's 20th Century", "streamUrl": "https://2.onj.me/thatstv3", "sourceType": "tv", "provider": "2.onj.me", "category": "Movies"},
+    {"title": "Tesla Cybercab Live", "streamUrl": "https://www.youtube.com/channel/UC5WjFrtBdufl6CZojX3D8dQ/live", "sourceType": "tv", "provider": "Tesla", "category": "Live Events"},
 )
 TV_PROVIDER_SOURCES: tuple[dict[str, str], ...] = (
     {

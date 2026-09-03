@@ -77,7 +77,7 @@ import { createAuthController } from './session/authController';
 import { startClientUpdateWatcher, type ClientVersionMetadata } from './session/clientUpdateWatcher';
 import { runConnectFlow, runDisconnectFlow, type ConnectFlowDeps } from './session/connectionFlow';
 import { MediaSession } from './session/mediaSession';
-import { type AnnouncementMode, type AudioAnnouncementSettings, type AudioLayerState, type RadioAnnouncementMode } from './types/audio';
+import { type AnnouncementMode, type AudioAnnouncementSettings, type AudioLayerState, type MediaAnnouncementMode } from './types/audio';
 import { setupUiHandlers as setupDomUiHandlers } from './ui/domBindings';
 import { PeerManager } from './webrtc/peerManager';
 import { VoiceInput } from './session/voiceInput';
@@ -152,6 +152,7 @@ type Dom = {
   audioOutputSelect: HTMLSelectElement;
   announcementModeSelect: HTMLSelectElement;
   radioAnnouncementModeSelect: HTMLSelectElement;
+  tvAnnouncementModeSelect: HTMLSelectElement;
   itemBeaconsToggle: HTMLInputElement;
   movementDirectionsToggle: HTMLInputElement;
   flexPbxOutboundDialingToggle: HTMLInputElement;
@@ -215,6 +216,7 @@ const dom: Dom = {
   audioOutputSelect: requiredById('audioOutputSelect'),
   announcementModeSelect: requiredById('announcementModeSelect'),
   radioAnnouncementModeSelect: requiredById('radioAnnouncementModeSelect'),
+  tvAnnouncementModeSelect: requiredById('tvAnnouncementModeSelect'),
   itemBeaconsToggle: requiredById('itemBeaconsToggle'),
   movementDirectionsToggle: requiredById('movementDirectionsToggle'),
   flexPbxOutboundDialingToggle: requiredById('flexPbxOutboundDialingToggle'),
@@ -910,6 +912,7 @@ let midiControllerHandle: MidiControllerHandle = {
   setControlVisible: () => undefined,
 };
 let activeMediaGuide: HTMLDialogElement | null = null;
+const forceAnnounceMediaRemoteIds = new Set<string>();
 let gamepadDirections: Record<string, boolean> = {};
 const gamepadController = setupGamepadInputHandlers({
   getRunning: () => state.running,
@@ -1279,7 +1282,6 @@ const authController = createAuthController({
       JSON.stringify({ type: 'authState', signedIn, message }),
     );
   },
-  shouldAnnounceRadioAction: () => shouldAnnounceRadioStatus(),
   onServerAdminMenuActions: (actions) => {
     adminController.setServerAdminMenuActions(actions);
   },
@@ -1597,6 +1599,7 @@ function persistAudioAnnouncementSettings(): void {
 function syncAnnouncementSettingsControls(): void {
   dom.announcementModeSelect.value = audioAnnouncementSettings.mode;
   dom.radioAnnouncementModeSelect.value = audioAnnouncementSettings.radioAnnouncementMode;
+  dom.tvAnnouncementModeSelect.value = audioAnnouncementSettings.tvAnnouncementMode;
   dom.itemBeaconsToggle.checked = audioAnnouncementSettings.itemBeacons;
   dom.movementDirectionsToggle.checked = audioAnnouncementSettings.movementDirections;
 }
@@ -1645,22 +1648,38 @@ function setFlexPbxDialingPreferences(enabled: boolean, prefixesText: string): v
   }
 }
 
+function shouldAnnounceMediaStatus(kind: 'radio' | 'tv'): boolean {
+  return (kind === 'tv'
+    ? audioAnnouncementSettings.tvAnnouncementMode
+    : audioAnnouncementSettings.radioAnnouncementMode) === 'full';
+}
+
 function shouldAnnounceRadioStatus(): boolean {
-  return audioAnnouncementSettings.radioAnnouncementMode === 'full';
+  return shouldAnnounceMediaStatus('radio');
+}
+
+function setMediaAnnouncementMode(kind: 'radio' | 'tv', value: string): void {
+  const mode: MediaAnnouncementMode = value === 'sounds_only' || value === 'off' ? value : 'full';
+  audioAnnouncementSettings = kind === 'tv'
+    ? { ...audioAnnouncementSettings, tvAnnouncementMode: mode }
+    : { ...audioAnnouncementSettings, radioAnnouncementMode: mode };
+  persistAudioAnnouncementSettings();
+  syncAnnouncementSettingsControls();
+  const labels: Record<MediaAnnouncementMode, string> = {
+    full: 'spoken changes and readouts',
+    sounds_only: 'control sounds only',
+    off: 'automatic readouts off',
+  };
+  updateStatus(`${kind === 'tv' ? 'TV' : 'Radio'} announcements: ${labels[mode]}.`);
+  audio.sfxUiConfirm();
 }
 
 function setRadioAnnouncementMode(value: string): void {
-  const mode: RadioAnnouncementMode = value === 'sounds_only' || value === 'off' ? value : 'full';
-  audioAnnouncementSettings = { ...audioAnnouncementSettings, radioAnnouncementMode: mode };
-  persistAudioAnnouncementSettings();
-  syncAnnouncementSettingsControls();
-  const labels: Record<RadioAnnouncementMode, string> = {
-    full: 'radio station readouts on',
-    sounds_only: 'radio station sounds only',
-    off: 'radio station readouts off',
-  };
-  updateStatus(`Radio announcements ${labels[mode]}.`);
-  audio.sfxUiConfirm();
+  setMediaAnnouncementMode('radio', value);
+}
+
+function setTvAnnouncementMode(value: string): void {
+  setMediaAnnouncementMode('tv', value);
 }
 
 /** Returns whether a bool-like item param is explicitly enabled. */
@@ -4216,6 +4235,14 @@ const onAppMessage = createOnMessageHandler({
   TELEPORT_START_SOUND_URL,
   getAudioLayers: () => audioLayers,
   pushChatMessage,
+  shouldAnnounceMediaAction: (item) => {
+    if (item && forceAnnounceMediaRemoteIds.delete(item.id)) return true;
+    if (isTvRemoteItem(item ?? null)) return shouldAnnounceMediaStatus('tv');
+    if (isRadioRemoteItem(item ?? null) || item?.type === 'radio_station') {
+      return shouldAnnounceMediaStatus('radio');
+    }
+    return true;
+  },
   pushPublicChatMessage,
   pushDirectChatMessage,
   resetChatHistoryForReplay,
@@ -4655,7 +4682,7 @@ function radioRemoteControlCommand(action: 'station_next' | 'station_previous' |
     volume_up: 'volume up',
     volume_down: 'volume down',
   } as const;
-  if (remote.kind !== 'tv' || shouldAnnounceRadioStatus()) {
+  if (shouldAnnounceMediaStatus(remote.kind)) {
     updateStatus(`${remote.kind === 'tv' ? 'TV' : 'Radio'} remote ${labelByAction[action]}.`);
   }
   if (action === 'station_next' || action === 'station_previous') {
@@ -4675,7 +4702,10 @@ type MediaGuideAction =
   | 'volume_down'
   | 'power_toggle'
   | 'info'
-  | 'cast';
+  | 'cast'
+  | 'announcement_full'
+  | 'announcement_sounds_only'
+  | 'announcement_off';
 type MediaGuideEntry = {
   title: string;
   category: string;
@@ -4716,6 +4746,9 @@ function openMediaGuide(): void {
   )[0];
   const presets = Array.isArray(target?.params.stationPresets) ? target.params.stationPresets : [];
   const remoteLabel = isTv ? 'TV' : 'radio';
+  const announcementMode = isTv
+    ? audioAnnouncementSettings.tvAnnouncementMode
+    : audioAnnouncementSettings.radioAnnouncementMode;
   const entries: MediaGuideEntry[] = [
     { title: `Power: turn ${remoteLabel} on or off`, category: 'Remote actions', selectable: true, action: 'power_toggle' },
     { title: 'Previous channel', category: 'Remote actions', selectable: true, action: 'station_previous' },
@@ -4726,6 +4759,24 @@ function openMediaGuide(): void {
     { title: 'Last channel', category: 'Remote actions', selectable: true, action: 'station_last' },
     { title: 'Read current channel, power, volume, and program', category: 'Remote actions', selectable: true, action: 'info' },
     { title: 'Cast a local screen or media source', category: 'Remote actions', selectable: true, action: 'cast' },
+    {
+      title: `Speak changes and readouts${announcementMode === 'full' ? ' (selected)' : ''}`,
+      category: 'Announcement preferences',
+      selectable: true,
+      action: 'announcement_full',
+    },
+    {
+      title: `Use control sounds only${announcementMode === 'sounds_only' ? ' (selected)' : ''}`,
+      category: 'Announcement preferences',
+      selectable: true,
+      action: 'announcement_sounds_only',
+    },
+    {
+      title: `Turn automatic readouts off${announcementMode === 'off' ? ' (selected)' : ''}`,
+      category: 'Announcement preferences',
+      selectable: true,
+      action: 'announcement_off',
+    },
   ];
   let channelNumber = 0;
   entries.push(...presets.flatMap((raw, index) => {
@@ -4779,7 +4830,18 @@ function openMediaGuide(): void {
     } else {
       button.addEventListener('click', () => {
         if (entry.action) {
-          if (entry.action === 'cast') {
+          if (
+            entry.action === 'announcement_full'
+            || entry.action === 'announcement_sounds_only'
+            || entry.action === 'announcement_off'
+          ) {
+            const mode = entry.action === 'announcement_full'
+              ? 'full'
+              : entry.action === 'announcement_sounds_only'
+                ? 'sounds_only'
+                : 'off';
+            setMediaAnnouncementMode(remote.kind, mode);
+          } else if (entry.action === 'cast') {
             window.dispatchEvent(new Event('indiginous-cast-to-device'));
           } else if (entry.action === 'station_next' || entry.action === 'station_previous' || entry.action === 'volume_up' || entry.action === 'volume_down') {
             radioRemoteControlCommand(entry.action);
@@ -4868,7 +4930,15 @@ function radioRemoteButtonCommand(
     openMediaGuide();
     return;
   }
-  signaling.send({ type: 'item_remote_control', itemId: remote.item.id, action });
+  if (action === 'info') {
+    // Explicit information requests remain spoken even when automatic
+    // channel, volume, and power readouts are disabled.
+    forceAnnounceMediaRemoteIds.add(remote.item.id);
+  }
+  const sent = signaling.send({ type: 'item_remote_control', itemId: remote.item.id, action });
+  if (!sent && action === 'info') {
+    forceAnnounceMediaRemoteIds.delete(remote.item.id);
+  }
   audio.sfxDeviceKeypad();
 }
 
@@ -6456,7 +6526,7 @@ if (IS_NATIVE_CLIENT) {
     const next = value as Partial<{
       outputMode: 'mono' | 'stereo'; masterVolume: number; microphoneGain: number;
       inputDeviceId: string; outputDeviceId: string;
-      layers: Partial<AudioLayerState>; announcementMode: string; radioAnnouncementMode: string;
+      layers: Partial<AudioLayerState>; announcementMode: string; radioAnnouncementMode: string; tvAnnouncementMode: string;
       itemBeacons: boolean; movementDirections: boolean;
     }>;
     if (next.outputMode === 'mono' || next.outputMode === 'stereo') {
@@ -6483,6 +6553,7 @@ if (IS_NATIVE_CLIENT) {
     }
     if (typeof next.announcementMode === 'string') setAnnouncementMode(next.announcementMode);
     if (typeof next.radioAnnouncementMode === 'string') setRadioAnnouncementMode(next.radioAnnouncementMode);
+    if (typeof next.tvAnnouncementMode === 'string') setTvAnnouncementMode(next.tvAnnouncementMode);
     if (typeof next.itemBeacons === 'boolean') setItemBeacons(next.itemBeacons);
     if (typeof next.movementDirections === 'boolean') setMovementDirections(next.movementDirections);
   };
@@ -6652,6 +6723,7 @@ setupDomUiHandlers({
   setOutputDevice: (id) => peerManager.setOutputDevice(id),
   setAnnouncementMode,
   setRadioAnnouncementMode,
+  setTvAnnouncementMode,
   setItemBeacons,
   setMovementDirections,
   setFlexPbxDialingPreferences,

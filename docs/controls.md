@@ -86,7 +86,7 @@ When you join the grid, the page also shows a compact dashboard with your curren
 - `Home` / `End` with a carried media remote: Tune the first/last station or channel preset
 - `P` with a carried media remote: Toggle connected radios or TVs on or off
 - `I` with a carried media remote: Read station/channel, power, volume, and now-playing information
-- `Shift+M` with a focused carried media remote: Open the complete remote guide. It lists power on/off, previous/next channel, volume, first/last channel, current-status information, local casting, and available channels. Use Up/Down, Home/End, Enter, and Escape.
+- `Shift+M` with a focused carried media remote: Open the complete remote guide. It lists power on/off, previous/next channel, volume, first/last channel, current-status information, local casting, available channels, and independent TV or radio announcement preferences. Use Up/Down, Home/End, Enter, and Escape. Explicit Info requests remain spoken even when automatic readouts are off.
 - `C` with focused carried media remote, or `Shift+K`: Cast an available local screen, window, tab, or media app source to a nearby TV or radio
 - New radios added from the item menu start with the Town Square station presets, including Tony Gebhard Radio
 - `5` or `Shift+5`: Cycle TTS announcements between full, alert sounds only, and required only

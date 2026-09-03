@@ -37,6 +37,8 @@ def test_tv_defaults_include_onj_channels_and_guide(tmp_path: Path) -> None:
     assert ensure_tv_channel_defaults(tv) is True
     titles = [entry["title"] for entry in tv.params["stationPresets"]]
     assert [entry["title"] for entry in TV_CHANNEL_PRESETS] == titles[: len(TV_CHANNEL_PRESETS)]
+    cybercab = next(entry for entry in tv.params["stationPresets"] if entry["title"] == "Tesla Cybercab Live")
+    assert cybercab["streamUrl"] == "https://www.youtube.com/channel/UC5WjFrtBdufl6CZojX3D8dQ/live"
     guide = next(entry for entry in tv.params["tvProviderSources"] if entry["key"] == "onj-programme-guide")
     assert guide["url"] == TV_GUIDE_URL
 

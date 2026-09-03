@@ -11,6 +11,7 @@ type UiDom = {
   audioOutputSelect: HTMLSelectElement;
   announcementModeSelect: HTMLSelectElement;
   radioAnnouncementModeSelect: HTMLSelectElement;
+  tvAnnouncementModeSelect: HTMLSelectElement;
   itemBeaconsToggle: HTMLInputElement;
   movementDirectionsToggle: HTMLInputElement;
   flexPbxOutboundDialingToggle: HTMLInputElement;
@@ -40,6 +41,7 @@ type UiBindingsDeps = {
   setOutputDevice: (id: string) => Promise<void>;
   setAnnouncementMode: (mode: string) => void;
   setRadioAnnouncementMode: (mode: string) => void;
+  setTvAnnouncementMode: (mode: string) => void;
   setItemBeacons: (enabled: boolean) => void;
   setMovementDirections: (enabled: boolean) => void;
   setFlexPbxDialingPreferences: (enabled: boolean, prefixesText: string) => void;
@@ -94,6 +96,11 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
   deps.dom.radioAnnouncementModeSelect.addEventListener('change', (event) => {
     const target = event.target as HTMLSelectElement;
     deps.setRadioAnnouncementMode(target.value);
+  });
+
+  deps.dom.tvAnnouncementModeSelect.addEventListener('change', (event) => {
+    const target = event.target as HTMLSelectElement;
+    deps.setTvAnnouncementMode(target.value);
   });
 
   deps.dom.itemBeaconsToggle.addEventListener('change', (event) => {
