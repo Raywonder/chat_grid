@@ -150,7 +150,17 @@ PLUTO_TV_CHANNELS: tuple[str, ...] = (
     "Pluto TV Game Shows",
     "Pluto TV Nature",
 )
+TESLA_YOUTUBE_CHANNEL_ID = "UC5WjFrtBdufl6CZojX3D8dQ"
+TESLA_YOUTUBE_LIVE_PLAYLIST_ID = "UULV5WjFrtBdufl6CZojX3D8dQ"
+TESLA_TV_PRESET: dict[str, str] = {
+    "title": "Tesla TV",
+    "streamUrl": f"https://www.youtube.com/embed/videoseries?list={TESLA_YOUTUBE_LIVE_PLAYLIST_ID}",
+    "sourceType": "embed",
+    "provider": "Tesla",
+    "category": "Official Livestreams",
+}
 TV_CHANNEL_PRESETS: tuple[dict[str, str], ...] = (
+    TESLA_TV_PRESET,
     {"title": "BBC ONE Lon", "streamUrl": "https://2.onj.me/bbc1", "sourceType": "tv", "provider": "2.onj.me", "category": "General"},
     {"title": "BBC TWO", "streamUrl": "https://2.onj.me/bbc2", "sourceType": "tv", "provider": "2.onj.me", "category": "General"},
     {"title": "BBC NEWS", "streamUrl": "https://2.onj.me/bbcnews", "sourceType": "tv", "provider": "2.onj.me", "category": "News"},
@@ -167,6 +177,30 @@ TV_CHANNEL_PRESETS: tuple[dict[str, str], ...] = (
     {"title": "That's 20th Century", "streamUrl": "https://2.onj.me/thatstv3", "sourceType": "tv", "provider": "2.onj.me", "category": "Movies"},
 )
 TV_PROVIDER_SOURCES: tuple[dict[str, str], ...] = (
+    {
+        "key": "tesla-youtube-live",
+        "title": "Tesla official YouTube livestreams",
+        "kind": "official_live_archive",
+        "url": "https://www.youtube.com/@Tesla/streams",
+        "provider": "Tesla",
+        "mode": "live_and_on_demand",
+    },
+    {
+        "key": "tesla-livestream",
+        "title": "Tesla official livestream portal",
+        "kind": "official_live",
+        "url": "https://livestream.tesla.com/",
+        "provider": "Tesla",
+        "mode": "live_and_on_demand",
+    },
+    {
+        "key": "tesla-investor-webcasts",
+        "title": "Tesla Investor Relations webcasts",
+        "kind": "official_live_archive",
+        "url": "https://ir.tesla.com/",
+        "provider": "Tesla",
+        "mode": "live_and_on_demand",
+    },
     {
         "key": "onj-programme-guide",
         "title": "2.onj.me TV Guide",
@@ -189,6 +223,16 @@ def _tv_preset_key(entry: object) -> tuple[str, str]:
     )
 
 
+def _is_tesla_tv_preset(entry: object) -> bool:
+    """Return whether a preset is one of the old or current Tesla TV entries."""
+
+    if not isinstance(entry, dict):
+        return False
+    title = str(entry.get("title") or entry.get("name") or "").strip().casefold()
+    provider = str(entry.get("provider") or "").strip().casefold()
+    return provider == "tesla" or title.startswith("tesla ")
+
+
 def ensure_tv_channel_defaults(item: WorldItem) -> bool:
     """Add the shared TV channels and guide metadata to one TV item."""
 
@@ -200,6 +244,29 @@ def ensure_tv_channel_defaults(item: WorldItem) -> bool:
         presets = []
         item.params["stationPresets"] = presets
         changed = True
+    selected_stream = str(item.params.get("streamUrl") or "").strip()
+    selected_was_tesla = any(
+        _is_tesla_tv_preset(entry)
+        and str(entry.get("streamUrl") or entry.get("url") or "").strip()
+        == selected_stream
+        for entry in presets
+        if isinstance(entry, dict)
+    )
+    normalized_presets: list[object] = []
+    tesla_preset_seen = False
+    for entry in presets:
+        if not _is_tesla_tv_preset(entry):
+            normalized_presets.append(entry)
+            continue
+        if tesla_preset_seen:
+            changed = True
+            continue
+        tesla_preset_seen = True
+        normalized_presets.append(deepcopy(TESLA_TV_PRESET))
+        if entry != TESLA_TV_PRESET:
+            changed = True
+    if normalized_presets != presets:
+        presets[:] = normalized_presets
     existing_keys = {_tv_preset_key(entry) for entry in presets}
     for entry in (*TV_CHANNEL_PRESETS, *RADIO_STATION_PRESETS):
         key = _tv_preset_key(entry)
@@ -208,11 +275,48 @@ def ensure_tv_channel_defaults(item: WorldItem) -> bool:
         presets.append(deepcopy(entry))
         existing_keys.add(key)
         changed = True
+    if selected_was_tesla:
+        tesla_index = next(
+            index
+            for index, entry in enumerate(presets)
+            if _tv_preset_key(entry) == _tv_preset_key(TESLA_TV_PRESET)
+        )
+        item.params["stationIndex"] = tesla_index
+        item.params["stationName"] = TESLA_TV_PRESET["title"]
+        item.params["streamUrl"] = TESLA_TV_PRESET["streamUrl"]
+        item.params["playbackUrl"] = ""
+        item.params["nowPlaying"] = ""
     provider_sources = item.params.get("tvProviderSources")
     if not isinstance(provider_sources, list):
         provider_sources = []
         item.params["tvProviderSources"] = provider_sources
         changed = True
+    tesla_sources_by_key = {
+        str(entry["key"]).casefold(): entry
+        for entry in TV_PROVIDER_SOURCES
+        if str(entry.get("provider") or "").casefold() == "tesla"
+    }
+    normalized_sources: list[object] = []
+    tesla_source_keys_seen: set[str] = set()
+    for source in provider_sources:
+        if not isinstance(source, dict):
+            normalized_sources.append(source)
+            continue
+        key = str(source.get("key") or "").strip().casefold()
+        provider = str(source.get("provider") or "").strip().casefold()
+        if provider != "tesla" and not key.startswith("tesla-"):
+            normalized_sources.append(source)
+            continue
+        canonical_source = tesla_sources_by_key.get(key)
+        if canonical_source is None or key in tesla_source_keys_seen:
+            changed = True
+            continue
+        tesla_source_keys_seen.add(key)
+        normalized_sources.append(deepcopy(canonical_source))
+        if source != canonical_source:
+            changed = True
+    if normalized_sources != provider_sources:
+        provider_sources[:] = normalized_sources
     provider_keys = {
         str(entry.get("key") or "").strip().casefold()
         for entry in provider_sources

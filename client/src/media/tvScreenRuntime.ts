@@ -2,6 +2,7 @@ import Hls from 'hls.js';
 
 import { getProxyUrlForMedia, shouldProxyExternalMediaUrl } from '../audio/mediaUrl';
 import { type WorldItem } from '../state/gameState';
+import { resolveTrustedTvEmbedUrl } from './tvSourceUrl';
 
 const VIDEO_EXTENSIONS = /\.(?:mp4|m4v|mov|webm|mkv|m3u8)(?:$|[?#])/i;
 
@@ -29,6 +30,7 @@ export class TvScreenRuntime {
   private readonly nowPlaying = document.createElement('p');
   private readonly sourceSummary = document.createElement('p');
   private readonly video = document.createElement('video');
+  private readonly embed = document.createElement('iframe');
   private hls: Hls | null = null;
   private activeItemId = '';
   private activeUrl = '';
@@ -64,8 +66,18 @@ export class TvScreenRuntime {
     this.video.style.width = '100%';
     this.video.style.maxHeight = '52vh';
     this.video.style.background = '#000';
+    this.embed.hidden = true;
+    this.embed.title = 'Tesla TV official livestream player';
+    this.embed.allow = 'autoplay; encrypted-media; picture-in-picture';
+    this.embed.allowFullscreen = true;
+    this.embed.referrerPolicy = 'strict-origin-when-cross-origin';
+    this.embed.sandbox.add('allow-scripts', 'allow-same-origin', 'allow-presentation');
+    Object.assign(this.embed.style, {
+      width: '100%', aspectRatio: '16 / 9', maxHeight: '52vh', border: '0', background: '#000',
+    });
+    this.embed.setAttribute('aria-describedby', this.nowPlaying.id);
     this.sourceSummary.style.margin = '0 0 .5rem';
-    this.region.append(this.heading, this.nowPlaying, this.sourceSummary, this.video);
+    this.region.append(this.heading, this.nowPlaying, this.sourceSummary, this.video, this.embed);
     document.body.append(this.region);
   }
 
@@ -81,7 +93,8 @@ export class TvScreenRuntime {
       // The picture is hidden, but returning to the room can reuse the same
       // continuous playback position instead of restarting the programme.
       const activeStillExists = this.activeItemId.length > 0 && televisions.some(({ item, url }) =>
-        item.id === this.activeItemId && Boolean(url) && looksLikeVideo(item, url),
+        item.id === this.activeItemId && Boolean(url)
+          && (Boolean(resolveTrustedTvEmbedUrl(url)) || looksLikeVideo(item, url)),
       );
       if (activeStillExists) {
         this.region.hidden = true;
@@ -95,6 +108,7 @@ export class TvScreenRuntime {
     this.nowPlaying.textContent = title ? `Now playing: ${title}` : 'TV is on.';
     this.renderSources(selected.item);
     this.region.hidden = false;
+    const embedUrl = resolveTrustedTvEmbedUrl(selected.url);
     const hasVideo = Boolean(selected.url) && looksLikeVideo(selected.item, selected.url);
     const jellyfinItemId = String(selected.item.params.jellyfinItemId ?? '').trim();
     if (!selected.url && jellyfinItemId && this.pendingJellyfinItemId !== jellyfinItemId) {
@@ -102,12 +116,17 @@ export class TvScreenRuntime {
       this.jellyfinPlaybackRequester?.('tv', jellyfinItemId);
     }
     this.video.hidden = !hasVideo;
-    if (!hasVideo) {
+    this.embed.hidden = !embedUrl;
+    if (!embedUrl && !hasVideo) {
       if (jellyfinItemId) return;
       this.stop();
       return;
     }
     if (selected.item.id === this.activeItemId && selected.url === this.activeUrl) return;
+    if (embedUrl) {
+      this.loadEmbed(selected.item.id, selected.url, embedUrl);
+      return;
+    }
     const segments = Array.isArray(selected.item.params.jellyfinSegments)
       ? selected.item.params.jellyfinSegments.filter((entry): entry is { url: string; kind: string; title?: string } =>
         Boolean(entry) && typeof entry === 'object' && typeof (entry as Record<string, unknown>).url === 'string',
@@ -131,6 +150,14 @@ export class TvScreenRuntime {
     if (this.region.hidden) return;
     this.region.hidden = true;
     this.stop();
+  }
+
+  private loadEmbed(itemId: string, rawUrl: string, embedUrl: string): void {
+    this.stop();
+    this.activeItemId = itemId;
+    this.activeUrl = rawUrl;
+    this.embed.src = embedUrl;
+    this.embed.hidden = false;
   }
 
   private load(itemId: string, url: string, playStartedAt: number, segments: Array<{ url: string; kind: string; title?: string }> = []): void {
@@ -175,6 +202,8 @@ export class TvScreenRuntime {
     this.video.pause();
     this.video.removeAttribute('src');
     this.video.load();
+    this.embed.removeAttribute('src');
+    this.embed.hidden = true;
     this.activeItemId = '';
     this.activeUrl = '';
     this.programSegments = [];

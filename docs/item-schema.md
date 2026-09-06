@@ -124,7 +124,8 @@ and rejects missing, non-numeric, or unusably large dimensions.
 - `enabled`: boolean on/off flag.
   - UI behavior: in property menu, `Enter` toggles on/off directly.
 - `stationIndex`: preset station knob index. Left/right in properties adjusts it; `Shift+Enter` on a preset radio tunes to the next station. A carried radio remote can tune compatible radios/speakers in the current location with comma/period variants and adjust connected radio volume with Ctrl+Shift+Up/Down or Ctrl+Shift+U/D.
-- `stationPresets`: server-managed preset station list for bundled radios.
+- `stationPresets`: server-managed preset station list for bundled radios and TVs. TV entries can use `sourceType="embed"` only when the browser's trusted-source resolver accepts the exact provider URL. `Tesla TV` is restricted to Tesla's verified YouTube channel and livestream-playlist identifiers; legacy copied Tesla event MP4 entries are replaced during hydration.
+- `tvProviderSources`: credential-free metadata for official TV source directories. The Tesla entries identify Tesla's YouTube livestream archive, Tesla's livestream portal, and Tesla Investor Relations webcasts.
 - `mediaVolume`: integer, range `0-1000`, default `50`. Values above `100` boost quiet sources or individual speaker components.
 - `mediaChannel`: one of `stereo | mono | left | right`, default `stereo`.
 - `mediaEffect`: one of `reverb | echo | flanger | high_pass | low_pass | off`, default `off`.

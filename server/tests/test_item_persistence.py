@@ -8,7 +8,12 @@ from websockets.asyncio.server import ServerConnection
 
 from app.client import ClientConnection
 from app.item_service import ItemService
-from app.seed_items import TV_CHANNEL_PRESETS, TV_GUIDE_URL, ensure_tv_channel_defaults
+from app.seed_items import (
+    TESLA_TV_PRESET,
+    TV_CHANNEL_PRESETS,
+    TV_GUIDE_URL,
+    ensure_tv_channel_defaults,
+)
 from app.world import WORLD_LOCATIONS
 
 
@@ -39,6 +44,58 @@ def test_tv_defaults_include_onj_channels_and_guide(tmp_path: Path) -> None:
     assert [entry["title"] for entry in TV_CHANNEL_PRESETS] == titles[: len(TV_CHANNEL_PRESETS)]
     guide = next(entry for entry in tv.params["tvProviderSources"] if entry["key"] == "onj-programme-guide")
     assert guide["url"] == TV_GUIDE_URL
+
+
+def test_tv_defaults_replace_stale_tesla_event_loop(tmp_path: Path) -> None:
+    service = ItemService(state_file=tmp_path / "items.json")
+    client = ClientConnection(websocket=_fake_ws(), id="u1", x=3, y=4)
+    tv = service.default_item(client, "house_object")
+    tv.params.update(
+        {
+            "objectKind": "tv",
+            "stationPresets": [
+                {
+                    "title": "Tesla Cybercab Live",
+                    "streamUrl": "https://video.twimg.com/stale.mp4",
+                    "provider": "Tesla",
+                },
+                {"title": "Other", "streamUrl": "https://example.com/live.m3u8"},
+            ],
+            "stationIndex": 0,
+            "stationName": "Tesla Cybercab Live",
+            "streamUrl": "https://video.twimg.com/stale.mp4",
+            "playbackUrl": "https://video.twimg.com/stale.mp4",
+            "tvProviderSources": [
+                {
+                    "key": "tesla-cybercab-2026",
+                    "title": "Tesla Cybercab Live (official feed pending)",
+                    "url": "https://www.youtube.com/@Tesla/live",
+                    "provider": "Tesla",
+                }
+            ],
+        }
+    )
+
+    assert ensure_tv_channel_defaults(tv) is True
+    tesla_presets = [
+        entry
+        for entry in tv.params["stationPresets"]
+        if entry.get("provider") == "Tesla"
+    ]
+    assert tesla_presets == [TESLA_TV_PRESET]
+    assert tv.params["stationName"] == "Tesla TV"
+    assert tv.params["streamUrl"] == TESLA_TV_PRESET["streamUrl"]
+    assert tv.params["playbackUrl"] == ""
+    assert {
+        entry["key"]
+        for entry in tv.params["tvProviderSources"]
+        if entry.get("provider") == "Tesla"
+    } == {
+        "tesla-youtube-live",
+        "tesla-livestream",
+        "tesla-investor-webcasts",
+    }
+    assert ensure_tv_channel_defaults(tv) is False
 
 
 def test_item_persistence_omits_global_type_properties(tmp_path: Path) -> None:
