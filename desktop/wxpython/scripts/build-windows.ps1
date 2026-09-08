@@ -11,18 +11,29 @@ $BuildCacheRoot = if ($env:INDIGINOUS_BUILD_CACHE) { $env:INDIGINOUS_BUILD_CACHE
 New-Item -ItemType Directory -Force -Path $BuildCacheRoot | Out-Null
 $Venv = Join-Path $BuildCacheRoot "venv"
 $Python = Join-Path $Venv "Scripts\python.exe"
+if (Test-Path $Python) {
+    $VenvPythonMinor = (& $Python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null | Select-Object -First 1)
+    if ($VenvPythonMinor -ne "3.12") {
+        Remove-Item -Recurse -Force $Venv
+    }
+}
 if (-not (Test-Path $Python)) {
     $Python312 = $null
-    $PythonCommand = Get-Command python.exe -ErrorAction SilentlyContinue
-    if ($PythonCommand -and (Test-Path $PythonCommand.Source)) {
-        $Python312 = $PythonCommand.Source
-    }
     $Uv = Get-Command uv -ErrorAction SilentlyContinue
-    if (-not $Python312 -and $Uv) {
+    if ($Uv) {
         $Python312 = (& $Uv.Source python find 3.12 2>$null | Select-Object -First 1)
     }
     if ((-not $Python312 -or -not (Test-Path $Python312)) -and (Get-Command py.exe -ErrorAction SilentlyContinue)) {
         $Python312 = (& py -V:Astral/CPython3.12.12 -c "import sys; print(sys.executable)" 2>$null | Select-Object -First 1)
+    }
+    if (-not $Python312 -or -not (Test-Path $Python312)) {
+        $PythonCommand = Get-Command python.exe -ErrorAction SilentlyContinue
+        if ($PythonCommand -and (Test-Path $PythonCommand.Source)) {
+            $SystemPythonMinor = (& $PythonCommand.Source -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null | Select-Object -First 1)
+            if ($SystemPythonMinor -eq "3.12") {
+                $Python312 = $PythonCommand.Source
+            }
+        }
     }
     if (-not $Python312 -or -not (Test-Path $Python312)) {
         throw "Python 3.12 was not found through uv or the Python launcher."
@@ -34,7 +45,7 @@ if (-not (Test-Path $Python)) {
 }
 & $Python -m pip install --upgrade pip
 & $Python -m pip install -e "$Root[build,test]"
-$PytestBase = "C:\BuildCache\IndiginousPytestTemp"
+$PytestBase = Join-Path $BuildCacheRoot "pytest-temp"
 if (Test-Path $PytestBase) {
     Remove-Item -Recurse -Force $PytestBase
 }
@@ -52,7 +63,7 @@ $Args = @(
     "--name", "Indiginous", "--collect-all", "wx", "--hidden-import", "wx.html2",
     "--paths", (Join-Path $Root "src"),
     "--distpath", (Join-Path $Root "dist"), "--workpath", (Join-Path $Root "build"),
-    "--specpath", $Root
+    "--specpath", $BuildCacheRoot
 )
 $MsvcpCandidates = @(
     (Join-Path $env:WINDIR "System32\msvcp140.dll"),
@@ -77,6 +88,9 @@ Copy-Item (Join-Path $Root "..\..\LICENSE") (Join-Path $DistRoot "LICENSE.txt") 
 Copy-Item (Join-Path $Root "..\..\INDIGINOUS_APPLICATION_LICENSE.txt") (Join-Path $DistRoot "INDIGINOUS_APPLICATION_LICENSE.txt") -Force
 Copy-Item (Join-Path $Root "..\..\THIRD_PARTY_NOTICES.md") (Join-Path $DistRoot "THIRD_PARTY_NOTICES.md") -Force
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" (Join-Path $Root "installer\Indiginous.iss")
+if ($LASTEXITCODE -ne 0) {
+    throw "Inno Setup failed with exit code $LASTEXITCODE."
+}
 }
 finally {
     Pop-Location
