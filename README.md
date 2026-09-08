@@ -1,6 +1,26 @@
 # Indiginous
 ## A Mostly Vibed, Audio-first Interactive Playground
 
+## Name and origin
+
+The maintained product name is **Indiginous** on Windows, macOS, iOS, the web,
+and the server. New user-facing text must use that spelling.
+
+Indiginous is based on the original [Chat Grid project](https://github.com/jage9/chat_grid).
+Preserve upstream attribution, contributor credit, and applicable license notices.
+Our maintained additions are developed as part of Indiginous; this does not
+replace the attribution or licensing of inherited code and dependencies.
+
+Legacy `chatgrid`, `chat_grid`, `CHGRID_*`, and earlier product spellings may
+remain in compatibility interfaces and upgrade detection until their coordinated
+migrations are verified. They are not alternate product names. Never rename
+stored settings, login callbacks, protocol bridges, or update paths through a
+blind search-and-replace.
+
+The Windows installer keeps the stable filename `Indiginous_Setup.exe`.
+See [repository consolidation and naming](docs/indiginous-repository-consolidation.md)
+for the cross-platform migration and release gates.
+
 Indiginous is one of those projects that started with a random idea, and then grew to be many things, but most with spacial audio as its core. Briefly put, Indiginous allows users to move around a grid and interact with each other, or with items placed on the grid. Your voice, as well as items are shared as positional audio. Item types currently range from dice and a wheel to a fully-playable toy piano and media players with directional audio. New item types can be added as plugins.
 
 Indiginous is designed to be run on a secure server with users connecting via a web client. The client works best currently with Windows browsers, with minimal testing on mobile/Mac. Ideally, client apps would be better in the long-run, especially for mobile.
