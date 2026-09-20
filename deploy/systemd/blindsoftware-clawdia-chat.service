@@ -1,0 +1,23 @@
+[Unit]
+Description=BlindSoftware account-scoped Clawdia chat responder
+After=network-online.target openclaw-gateway.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tappedin
+Group=tappedin
+SupplementaryGroups=blindsoft
+WorkingDirectory=/home/tappedin/.openclaw/workspace/projects/chat_grid/server
+Environment=HOME=/home/tappedin
+Environment=OPENCLAW_BIN=/home/tappedin/.local/bin/openclaw
+ExecStart=/home/tappedin/.openclaw/workspace/projects/chat_grid/server/.venv/bin/python /home/tappedin/.openclaw/workspace/projects/chat_grid/server/tools/blindsoftware_clawdia_chat_worker.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/home/blindsoft/.platform-data /home/tappedin/.openclaw
+
+[Install]
+WantedBy=multi-user.target

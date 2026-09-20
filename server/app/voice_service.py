@@ -1,4 +1,4 @@
-"""ElevenLabs TTS synthesis and same-origin voice audio file management.
+"""VoiceLink TTS synthesis and same-origin voice audio file management.
 
 Stores generated MP3 files under ``runtime/voice/`` (gitignored) and
 returns safe same-origin URLs for the client to fetch.  Credentials are
@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import time
+import wave
 from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
@@ -43,6 +44,14 @@ DEFAULT_LOCAL_MODEL = Path(
     "/home/tappedin/.openclaw/workspace/projects/audio-cpp-lab/"
     "models/Supertonic-3-GGUF"
 )
+
+# The shared VoiceLink adapter is the authoritative agent-voice boundary.  It
+# resolves the agent's selected profile and applies the fleet's output safety
+# processing before atomically writing a 48 kHz signed 16-bit mono WAV.
+VOICELINK_HELPER_ENV = "CHGRID_VOICELINK_TTS_HELPER"
+VOICELINK_AGENT_ENV = "CHGRID_VOICELINK_AGENT"
+VOICELINK_TIMEOUT_ENV = "CHGRID_VOICELINK_TTS_TIMEOUT"
+DEFAULT_VOICELINK_HELPER = Path("/usr/local/libexec/voicelink-audio-file")
 
 # Same-origin URL prefix the client expects to fetch audio from.
 VOICE_URL_PREFIX = "/voice/"
@@ -132,6 +141,69 @@ def _synthesize_local_cpp(text: str, *, runtime_root: Path | None = None) -> tup
     return output_path, VOICE_URL_PREFIX + filename
 
 
+def _synthesize_voicelink(text: str, *, runtime_root: Path | None = None) -> tuple[Path, str]:
+    """Render speech through the shared VoiceLink agent-voice adapter.
+
+    The helper deliberately receives an agent identity rather than a model or
+    voice id.  This keeps Indiginous aligned with the voice selected for that
+    agent across WhatsApp, TeamTalk, and other connected channels.
+    """
+
+    helper = Path(
+        os.getenv(VOICELINK_HELPER_ENV, str(DEFAULT_VOICELINK_HELPER))
+    ).expanduser()
+    agent = os.getenv(VOICELINK_AGENT_ENV, "clawdia").strip() or "clawdia"
+    if not helper.is_file() or not os.access(helper, os.X_OK):
+        raise RuntimeError(f"VoiceLink TTS helper is unavailable: {helper}")
+    try:
+        timeout = max(1, min(int(os.getenv(VOICELINK_TIMEOUT_ENV, "180")), 600))
+    except ValueError as exc:
+        raise RuntimeError(f"{VOICELINK_TIMEOUT_ENV} must be an integer") from exc
+
+    content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    filename = _sanitize_filename(f"agent_{int(time.time())}_{content_hash}", ".wav")
+    output_path = _voice_dir_for(runtime_root) / filename
+    try:
+        result = subprocess.run(
+            [str(helper), "--agent", agent, "--output", str(output_path)],
+            input=text.encode("utf-8"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        output_path.unlink(missing_ok=True)
+        raise RuntimeError("VoiceLink TTS synthesis failed") from exc
+    if result.returncode != 0:
+        output_path.unlink(missing_ok=True)
+        raise RuntimeError(f"VoiceLink TTS synthesis failed with exit code {result.returncode}")
+    if not output_path.is_file() or output_path.stat().st_size <= 44:
+        output_path.unlink(missing_ok=True)
+        raise RuntimeError("VoiceLink TTS returned no WAV audio")
+    try:
+        with wave.open(str(output_path), "rb") as wav_file:
+            valid_format = (
+                wav_file.getnchannels() == 1
+                and wav_file.getsampwidth() == 2
+                and wav_file.getframerate() == 48_000
+                and wav_file.getnframes() > 0
+            )
+    except (OSError, EOFError, wave.Error):
+        valid_format = False
+    if not valid_format:
+        output_path.unlink(missing_ok=True)
+        raise RuntimeError("VoiceLink TTS returned an invalid WAV format")
+    os.chmod(output_path, 0o644)
+    LOGGER.info(
+        "VoiceLink audio saved %s (%d PCM bytes) url=%s",
+        output_path.name,
+        output_path.stat().st_size,
+        VOICE_URL_PREFIX + filename,
+    )
+    return output_path, VOICE_URL_PREFIX + filename
+
+
 def synthesize_to_file(
     text: str,
     *,
@@ -160,7 +232,10 @@ def synthesize_to_file(
         raise ValueError("Text must not be empty.")
     text = text[:MAX_TEXT_LENGTH]
 
-    if os.getenv(VOICE_BACKEND_ENV, "elevenlabs").strip().lower() in {
+    backend = os.getenv(VOICE_BACKEND_ENV, "voicelink").strip().lower()
+    if backend == "voicelink":
+        return _synthesize_voicelink(text, runtime_root=runtime_root)
+    if backend in {
         "local", "local_cpp", "audiocpp",
     }:
         return _synthesize_local_cpp(text, runtime_root=runtime_root)
