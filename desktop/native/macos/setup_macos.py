@@ -9,8 +9,8 @@ OPTIONS = {
         "CFBundleName": "Indiginous",
         "CFBundleDisplayName": "Indiginous",
         "CFBundleIdentifier": "fm.tappedin.chatgrid",
-        "CFBundleShortVersionString": "0.4.22",
-        "CFBundleVersion": "0.4.22",
+        "CFBundleShortVersionString": "0.4.23",
+        "CFBundleVersion": "0.4.23",
         "LSMinimumSystemVersion": "12.0",
         "CFBundleURLTypes": [{
             "CFBundleURLName": "Indiginous Connect",
@@ -23,7 +23,7 @@ OPTIONS = {
 setup(
     app=["macos/macos_entry.py"],
     name="Indiginous",
-        version="0.4.22",
+        version="0.4.23",
     options={"py2app": OPTIONS},
     setup_requires=["py2app"],
 )
