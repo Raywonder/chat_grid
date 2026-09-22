@@ -342,8 +342,9 @@ export function createAuthController(deps: AuthControllerDeps): {
     deps.onServerAdminMenuActions(message.adminMenuActions);
     // Keep native File-menu authentication state aligned with successful auth.
     updateConnectAvailability();
-    const authStatus = 'Signed in. Joining the Indiginous world...';
-    deps.setConnectionStatus(authStatus);
+    // Cookie persistence may finish after welcome has already activated the world.
+    const authStatus = deps.isRunning() ? 'Signed in.' : 'Signed in. Joining the Indiginous world...';
+    if (!deps.isRunning()) deps.setConnectionStatus(authStatus);
     deps.notifyNativeAuthState?.(true, authStatus);
   }
 

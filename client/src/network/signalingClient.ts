@@ -7,12 +7,18 @@ export class SignalingClient {
   private ws: WebSocket | null = null;
   private timeoutId: number | null = null;
 
-  constructor(private readonly url: string, private readonly status: StatusHandler) {}
+  constructor(
+    private readonly url: string,
+    private readonly status: StatusHandler,
+    private readonly prefersExternalAuth: () => boolean = () => false,
+  ) {}
 
   async connect(onMessage: MessageHandler): Promise<void> {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
 
-    this.ws = new WebSocket(this.url);
+    const connectionUrl = new URL(this.url);
+    if (this.prefersExternalAuth()) connectionUrl.searchParams.set('auth_mode', 'external');
+    this.ws = new WebSocket(connectionUrl.toString());
 
     await new Promise<void>((resolve, reject) => {
       if (!this.ws) {

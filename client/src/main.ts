@@ -858,7 +858,9 @@ let activeTeleport:
 
 const signalingProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
 const signalingUrl = `${signalingProtocol}://${window.location.host}${withBase('ws')}`;
-const signaling = new SignalingClient(signalingUrl, handleSignalingStatus);
+const signaling = new SignalingClient(signalingUrl, handleSignalingStatus, () =>
+  Boolean(sessionStorage.getItem(PENDING_EXTERNAL_AUTH_STORAGE_KEY)),
+);
 tvScreenRuntime.setJellyfinPlaybackRequester((mediaKind, itemId) => {
   signaling.send({ type: 'jellyfin_media_request', mediaKind, itemId });
 });

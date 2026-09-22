@@ -24,7 +24,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Literal, TypeAlias, TypedDict, cast
 from urllib.error import URLError
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError, TypeAdapter
@@ -7571,7 +7571,11 @@ class SignalingServer:
             if request_path != self.websocket_path:
                 await websocket.close()
                 return
-            cookie_token = self._session_token_from_websocket_cookie(websocket)
+            # An explicit signed-in account handoff must not race a different saved cookie.
+            # This marker disables auto-resume only; the normal assertion verifier still applies.
+            request_query = urlsplit(str(getattr(request, "path", ""))).query
+            explicit_external = parse_qs(request_query).get("auth_mode") == ["external"]
+            cookie_token = "" if explicit_external else self._session_token_from_websocket_cookie(websocket)
             if cookie_token:
                 await self._handle_auth_packet(
                     client,
