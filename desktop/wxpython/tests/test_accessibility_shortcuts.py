@@ -55,10 +55,11 @@ def test_full_quit_stops_callbacks_and_destroys_the_world_view():
         assert shutdown_step in close_source
 
 
-def test_windows_installer_replaces_orphaned_files():
+def test_windows_installer_preserves_unowned_files():
     installer = Path(__file__).parents[1] / "installer" / "Indiginous.iss"
     source = installer.read_text(encoding="utf-8")
-    assert 'Type: filesandordirs; Name: "{app}\\*"' in source
+    assert '[InstallDelete]' not in source
+    assert 'UsePreviousAppDir=yes' in source
 
 
 def test_windows_installer_shows_application_license_not_source_only_license():

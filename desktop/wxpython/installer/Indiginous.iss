@@ -13,7 +13,7 @@ AppPublisher={#MyAppPublisher}
 ; BlindSoftware is the default vendor root. The directory page remains enabled
 ; so a user may choose another permitted location when needed.
 DefaultDirName={autopf}\BlindSoftware\{#MyAppName}
-UsePreviousAppDir=no
+UsePreviousAppDir=yes
 DefaultGroupName=Indiginous
 OutputDir=..\release
 OutputBaseFilename=Indiginous_Setup
@@ -30,37 +30,8 @@ LicenseFile=..\..\..\INDIGINOUS_APPLICATION_LICENSE.txt
 [Files]
 Source: "..\dist\Indiginous\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-[InstallDelete]
-; Replace the complete application payload so renamed/removed files from an
-; Replace any older Indiginous/legacy payload before installing the new build.
-Type: filesandordirs; Name: "{app}\*"
-Type: filesandordirs; Name: "{autopf}\Indiginous"
-Type: filesandordirs; Name: "{autopf}\BlindSoftware\Indiginous"
-Type: filesandordirs; Name: "{autopf}\BlindSoftware\Endiginous"
-Type: filesandordirs; Name: "{autopf}\BlindSoftware\Indigenous"
-Type: filesandordirs; Name: "{autopf}\BlindSoftware\Chat Grid"
-Type: filesandordirs; Name: "{autopf}\BlindSoftware\ChatGrid"
-Type: filesandordirs; Name: "{autopf}\Endiginous"
-Type: filesandordirs; Name: "{autopf}\Indigenous"
-Type: filesandordirs; Name: "{autopf}\Chat Grid"
-Type: filesandordirs; Name: "{autopf}\ChatGrid"
-Type: filesandordirs; Name: "{localappdata}\Programs\Indiginous"
-Type: filesandordirs; Name: "{localappdata}\Programs\Endiginous"
-Type: filesandordirs; Name: "{localappdata}\Programs\Indigenous"
-Type: filesandordirs; Name: "{localappdata}\Programs\Chat Grid"
-Type: filesandordirs; Name: "{localappdata}\Programs\ChatGrid"
-Type: files; Name: "{autodesktop}\Indiginous.lnk"
-Type: files; Name: "{group}\Indiginous.lnk"
-Type: files; Name: "{autodesktop}\Endiginous.lnk"
-Type: files; Name: "{autodesktop}\Indigenous.lnk"
-Type: files; Name: "{group}\Endiginous.lnk"
-Type: files; Name: "{group}\Indigenous.lnk"
-Type: files; Name: "{autodesktop}\Indiginous.lnk"
-Type: files; Name: "{group}\Indiginous.lnk"
-Type: files; Name: "{autodesktop}\Chat Grid.lnk"
-Type: files; Name: "{autodesktop}\ChatGrid.lnk"
-Type: files; Name: "{group}\Chat Grid.lnk"
-Type: files; Name: "{group}\ChatGrid.lnk"
+; Legacy installations and unknown files are retained. Inno owns only its
+; installed payload; never recursively remove a guessed legacy directory.
 
 [Icons]
 Name: "{group}\Indiginous"; Filename: "{app}\{#MyAppExeName}"

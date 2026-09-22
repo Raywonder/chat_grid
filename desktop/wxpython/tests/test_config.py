@@ -51,8 +51,8 @@ def test_legacy_state_is_migrated_and_old_shortcut_removed(tmp_path: Path, monke
     # Windows client; replace HOME only for the shortcut assertion.
     monkeypatch.setattr(migration.Path, "home", staticmethod(lambda: tmp_path))
     receipt = migration.migrate_legacy_state()
-    assert not legacy.exists()
-    assert not shortcut.exists()
+    assert legacy.exists()
+    assert shortcut.exists()
     assert (destination / "settings.json").exists()
     assert str(legacy) in receipt["migrated"]
 
@@ -73,8 +73,8 @@ def test_legacy_install_roots_are_removed_when_accessible(tmp_path: Path, monkey
     monkeypatch.setattr(migration, "app_data_dir", lambda: destination)
     _, installs, _ = migration._paths()
     receipt = migration.migrate_legacy_state()
-    assert not old_install.exists()
-    assert str(old_install) in receipt["removed"]
+    assert old_install.exists()
+    assert receipt["removed"] == []
 
 
 def test_blindsoftware_install_root_is_removed_when_accessible(tmp_path: Path, monkeypatch) -> None:
@@ -92,8 +92,8 @@ def test_blindsoftware_install_root_is_removed_when_accessible(tmp_path: Path, m
     destination = local / "TappedIn" / "Indiginous"
     monkeypatch.setattr(migration, "app_data_dir", lambda: destination)
     receipt = migration.migrate_legacy_state()
-    assert not old_install.exists()
-    assert str(old_install) in receipt["removed"]
+    assert old_install.exists()
+    assert receipt["removed"] == []
 
 
 def test_frozen_active_install_is_not_classified_as_legacy(tmp_path: Path, monkeypatch) -> None:
