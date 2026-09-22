@@ -36,6 +36,27 @@ useful for CI/source validation, but it is not a Qt build.
 
 ## Still being ported
 
+### Native navigation milestone (source development, not a release)
+
+The native input resolver separates world, text, dialog, menu and media-remote
+contexts. Only unmodified arrows request movement; A adds an item and D requests
+pickup/drop instead of moving. Shift+Left/Right turns by 15 degrees, without a
+position update. World Tab routes item selection; Shift+Escape leaves world
+controls. Semantic requests whose native views are not implemented explicitly
+report that limitation; they do not pretend to complete an action.
+
+Position packets retain stable player IDs. Requests do not move the displayed
+player optimistically: authoritative self updates move self, peer updates remain
+separate, malformed/other-location packets are ignored, and a disconnected world
+cannot issue movement. Native text widgets and dialogs retain their keys/focus.
+Heading is presentation state only; native spatial audio is not yet implemented.
+
+`indiginous_qt6_navigation_test` is a QtTest executable with real widget key events,
+focus checks and a synthetic loopback WebSocket server. Qt Widgets, Network,
+WebSockets and Test are required. If unavailable, CMake explicitly warns that the
+interaction tests are NOT BUILT. A passing source-contract check is not a compiled
+test result. No production account or live server is used by these tests.
+
 - Session-token persistence, browser external-auth handoff, and reconnect
   reconciliation.
 - Full world item rendering and interaction, chat/direct-message panes, and

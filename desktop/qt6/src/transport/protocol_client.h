@@ -61,8 +61,8 @@ signals:
     void authenticationRequired(const QString& message);
     void authenticationResult(bool ok, const QString& message, const QString& sessionToken);
     void welcomeReceived(const QJsonObject& welcome);
-    void positionReceived(int x, int y);
-    void locationReceived(const QString& locationId, const QString& locationName, int x, int y);
+    void positionReceived(const QJsonObject& position);
+    void locationReceived(const QJsonObject& location);
 
 private:
     void setState(ConnectionState state);

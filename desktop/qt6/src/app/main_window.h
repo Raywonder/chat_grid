@@ -30,7 +30,7 @@ private slots:
     void handleAuthenticationRequired(const QString& message);
     void handleAuthenticationResult(bool ok, const QString& message, const QString& sessionToken);
     void handleWelcome(const QJsonObject& welcome);
-    void handleLocation(const QString& locationId, const QString& locationName, int x, int y);
+    void handleLocation(const QJsonObject& location);
     void activateWorld();
 
 private:

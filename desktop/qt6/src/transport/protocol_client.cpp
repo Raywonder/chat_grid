@@ -70,6 +70,7 @@ void ProtocolClient::resume(const QString& sessionToken) {
 }
 
 void ProtocolClient::sendMove(int x, int y) {
+    if (state_ != ConnectionState::Ready) return;
     sendObject(QJsonObject{{"type", "update_position"}, {"x", x}, {"y", y}});
 }
 
@@ -142,10 +143,9 @@ void ProtocolClient::handleTextMessage(const QString& message) {
         emit welcomeReceived(object);
         welcomeReady();
     } else if (type == QStringLiteral("update_position")) {
-        emit positionReceived(object.value("x").toInt(), object.value("y").toInt());
+        emit positionReceived(object);
     } else if (type == QStringLiteral("location_changed")) {
-        emit locationReceived(object.value("locationId").toString(), object.value("locationName").toString(),
-                              object.value("x").toInt(), object.value("y").toInt());
+        emit locationReceived(object);
     } else if (type == QStringLiteral("chat_message")) {
         emit statusMessage(QStringLiteral("%1: %2").arg(object.value("senderNickname").toString(), object.value("message").toString()));
     }

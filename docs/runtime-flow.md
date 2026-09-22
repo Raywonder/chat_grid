@@ -125,3 +125,12 @@ On disconnect:
 ## Client update freshness
 
 The browser client loads `/version.js` as the shared release metadata source and also polls it while the page is open. The poll uses timestamped `no-store` requests so Chrome does not keep an old entrypoint after rapid deploys. The watcher checks both the live `CHGRID_CLIENT_REVISION` and the live HTML module asset URL; this catches stale tabs where an old hashed bundle sees a fresh `version.js` value and would otherwise think it is current. When either value differs from the running client, the client announces the update, reloads through a cache-busted URL, and the refreshed page automatically starts the normal connect flow.
+# Qt native position reconciliation milestone
+
+The unfinished native Qt client retains `update_position.id` and applies self
+and peer positions separately. It sends movement requests without optimistic
+position mutation and waits for the server's existing acknowledgement/correction.
+Server `UpdatePositionPacket` handling acknowledges both accepted and rejected
+movement to the sender. Unknown/malformed coordinates or other-location updates
+cannot move the local player. Disconnection clears the interactive snapshot.
+This source-only milestone does not modify the live protocol or web runtime.

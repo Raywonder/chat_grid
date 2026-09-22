@@ -15,6 +15,7 @@
 #include <QTextEdit>
 #include <QVBoxLayout>
 #include <QJsonObject>
+#include <QApplication>
 
 #include "world/world_viewport.h"
 
@@ -42,6 +43,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             this, &MainWindow::showStatus);
     connect(viewport_, &world::WorldViewport::moveRequested,
             &protocolClient_, &transport::ProtocolClient::sendMove);
+    connect(&protocolClient_, &transport::ProtocolClient::positionReceived,
+            viewport_, &world::WorldViewport::applyPosition);
+    connect(viewport_, &world::WorldViewport::commandRequested, this, [this](const QString& id, bool) {
+        if (id == QStringLiteral("leaveWorldControls")) {
+            endpointEdit_->setFocus();
+            return;
+        }
+        showStatus(QStringLiteral("Native command %1 is not implemented yet.").arg(id));
+    });
     updateConnectionStatus(protocolClient_.state());
 }
 
@@ -119,7 +129,7 @@ void MainWindow::connectToEndpoint() {
 }
 
 void MainWindow::updateConnectionStatus(transport::ConnectionState state) {
-    Q_UNUSED(state)
+    if (state != transport::ConnectionState::Ready) viewport_->clearSnapshot();
     connectionLabel_->setText(protocolClient_.stateText());
 }
 
@@ -136,7 +146,7 @@ void MainWindow::handleAuthenticationRequired(const QString& message) {
 void MainWindow::handleAuthenticationResult(bool ok, const QString& message, const QString& sessionToken) {
     Q_UNUSED(sessionToken)
     authLabel_->setText(message);
-    if (ok) activateWorld();
+    Q_UNUSED(ok) // Welcome, not authentication alone, makes world navigation ready.
 }
 
 void MainWindow::handleWelcome(const QJsonObject& welcome) {
@@ -145,28 +155,24 @@ void MainWindow::handleWelcome(const QJsonObject& welcome) {
     showStatus(QStringLiteral("World connected."));
     accessibilityAnnouncer_.announce(
         statusBar(),
-        QStringLiteral("World joined. Location: %1. Arrow keys or W A S D move.")
+        QStringLiteral("World joined. Location: %1. Arrow keys move. Shift left or right turns. Shift Escape leaves world controls.")
             .arg(viewport_->snapshot().locationName),
         true,
         true);
 }
 
-void MainWindow::handleLocation(const QString& locationId, const QString& locationName, int x, int y) {
-    auto snapshot = viewport_->snapshot();
-    snapshot.locationId = locationId;
-    snapshot.locationName = locationName;
-    snapshot.playerPosition = QPointF(x, y);
-    viewport_->applySnapshot(snapshot);
-    activateWorld();
+void MainWindow::handleLocation(const QJsonObject& location) {
+    viewport_->applyLocation(location);
 }
 
 void MainWindow::activateWorld() {
-    if (isMinimized()) return;
+    if (isMinimized() || QApplication::activeModalWidget() || protocolClient_.state() != transport::ConnectionState::Ready) return;
     viewport_->setFocus(Qt::OtherFocusReason);
 }
 
 bool MainWindow::event(QEvent* event) {
-    if (event->type() == QEvent::WindowActivate || event->type() == QEvent::Show) {
+    if ((event->type() == QEvent::WindowActivate || event->type() == QEvent::Show)
+        && (!focusWidget() || focusWidget() == viewport_)) {
         QMetaObject::invokeMethod(this, &MainWindow::activateWorld, Qt::QueuedConnection);
     }
     return QMainWindow::event(event);

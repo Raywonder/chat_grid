@@ -196,3 +196,13 @@ then use the normal list keys to browse the full FX ambience library. Press
 Space for the original source filename, duration, seam crossfade, and loop
 points. Press Enter to assign the highlighted loop. Escape returns first to
 the location list and then to the Admin menu.
+# Qt native navigation development milestone
+
+This note describes the unfinished `desktop/qt6` implementation, not a released
+desktop client or a change to the hosted web controls. Native world focus accepts
+unmodified arrow movement, Shift+Left/Right 15-degree turns, C coordinates and Y
+location. A and D retain add-item and pickup/drop semantics; they are not WASD
+movement. Text controls/dialogs keep their own keys. Tab/Shift+Tab routes item
+focus and Shift+Escape leaves world controls. Other mapped commands explicitly
+report unavailable native functionality until their controls are implemented.
+Native media-remote context owns arrows and cannot also move the player.
